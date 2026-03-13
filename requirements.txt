@@ -1,0 +1,37 @@
+# fsdeploy — dépendances Python
+# Installées dans le venv par launch.sh
+#
+# Rôle de chaque lib :
+#   configobj    → config INI partagée deploy/boot, validée par configspec
+#   textual      → TUI async complète (widgets, CSS, thèmes, reactive)
+#   textual-web  → sert textual via WebSocket/navigateur (pilotage distant)
+#   rich         → rendu console coloré, tables, progress bars (inclus dans textual)
+#   psutil       → RAM/CPU/disques sans appels shell
+#   pyudev       → énumération disques/partitions via udev (by-id, modèle, serial)
+#   packaging    → comparaison correcte de versions kernel (6.6.47 < 6.12.0)
+#   structlog    → logs structurés JSON/texte avec contexte (dataset, pool, cmd)
+#   humanize     → tailles/durées lisibles (1.2 GB, il y a 3 min)
+#   watchfiles   → inotify async sur /boot (nouveau kernel → rafraîchir UI)
+#   typer        → sous-commandes CLI sans TUI (fsdeploy detect, fsdeploy preset)
+#   python-ffmpeg→ construction déclarative des pipelines ffmpeg (stream YouTube)
+
+# ── Socle ─────────────────────────────────────────────────────────────────────
+configobj>=5.0.8
+textual-web>=0.5.0   # inclut textual — couvre terminal ET navigateur
+rich>=13.0.0
+
+# ── Système ───────────────────────────────────────────────────────────────────
+psutil>=5.9.0
+pyudev>=0.24.0
+packaging>=23.0
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+structlog>=23.0.0
+
+# ── Utilitaires ───────────────────────────────────────────────────────────────
+humanize>=4.0.0
+watchfiles>=0.21.0
+typer>=0.12.0
+
+# ── Stream ────────────────────────────────────────────────────────────────────
+python-ffmpeg>=2.0.0

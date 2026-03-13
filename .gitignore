@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.env
+*.egg-info/
+
+# Environnement virtuel (créé par launch.sh)
+/opt/fsdeploy/.venv/
+
+# Config locale (contient des clés stream, etc.)
+fsdeploy.conf
+fsdeploy.conf.bak
+
+# Logs
+*.log
+logs/
+
+# Build
+dist/
+build/
+*.sfs
+*.img
+*.zst
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*~
