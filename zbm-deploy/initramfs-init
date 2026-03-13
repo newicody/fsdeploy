@@ -1,0 +1,377 @@
+#!/bin/sh
+# =============================================================================
+# initramfs-init — Init ZBM : squashfs + overlayfs + Python TUI
+#
+# ─── DEUX MODES ──────────────────────────────────────────────────────────────
+#
+#   MODE SYSTÈME (zbm_rootfs défini) :
+#     lower  = rootfs squashfs (ro)
+#     upper  = fast_pool/overlay-<s> (rw, par système, jamais partagé)
+#     merged = OverlayFS → pivot_root → exec /sbin/init
+#     /var /var/log /tmp montés ZFS AVANT pivot_root
+#
+#   MODE INIT-ONLY (zbm_rootfs absent ou "none") :
+#     Aucun rootfs, aucun overlay, aucun pivot_root.
+#     On reste dans l'environnement initramfs.
+#     zbm_exec contrôle ce qu'on lance.
+#     Utile : premier boot, rescue, setup, TUI Python, init custom.
+#
+# ─── CMDLINE — MODE SYSTÈME ──────────────────────────────────────────────────
+#
+#   zbm_system=systeme1
+#   zbm_rootfs=images/rootfs/rootfs-systeme1-gentoo-20250310.sfs
+#   zbm_modules=images/modules/modules-generic-6.12-20250310.sfs
+#   zbm_overlay=fast_pool/overlay-systeme1
+#   (zbm_var/zbm_log/zbm_tmp supprimés — l'overlay upper gère /var et /tmp)
+#
+# ─── CMDLINE — MODE INIT-ONLY ────────────────────────────────────────────────
+#
+#   zbm_system=initial          (ou tout autre nom)
+#   zbm_rootfs=none             (ou absent)
+#   zbm_exec=/mnt/python/launch.sh   → Python TUI  (défaut si python dispo)
+#   zbm_exec=/bin/sh                 → shell de rescue
+#   zbm_exec=/mnt/boot/scripts/foo.sh → script boot personnalisé
+#   zbm_exec=none                    → shell automatique
+#
+#   boot_pool → /mnt/boot, boot_pool/images → /mnt/boot/images,
+#   modules + python squashfs optionnels.
+#   ZFS import effectué sauf si zbm_no_zfs=1.
+#   Aucun dataset /var /tmp monté. Aucun pivot_root.
+#
+# ─── INVARIANTS ──────────────────────────────────────────────────────────────
+#
+#   Chaque système a son propre upper overlay (fast_pool/overlay-<s>).
+#   Aucun partage d'upper entre systèmes.
+#   /var /tmp /run : gérés par l'upper overlay (fast_pool/overlay-<s>).
+#   Aucun dataset ZFS séparé. Seul /home est monté depuis data_pool.
+#
+# =============================================================================
+
+set -e
+
+log()  { echo "[init] $*" > /dev/kmsg 2>/dev/null; echo "[init] $*"; }
+fail() {
+    log "FATAL: $*"
+    echo ""; echo "  ════ ERREUR INITRAMFS — shell de secours ════"
+    exec sh
+}
+get_param() {
+    local KEY="$1" VAL=""
+    for P in $(cat /proc/cmdline); do
+        case "$P" in "${KEY}="*) VAL="${P#*=}"; break;; esac
+    done
+    echo "$VAL"
+}
+latest_glob() { ls ${1} 2>/dev/null | sort | tail -1 || true; }
+mount_zfs_ds() {
+    # Monte un dataset ZFS sur un chemin EXPLICITE.
+    #
+    # RÈGLES ANTI-DOUBLE-MONTAGE :
+    #   1. Jamais "zfs set mountpoint" — propriétés ZFS jamais modifiées
+    #   2. Jamais "zfs mount" — toujours "mount -t zfs <ds> <chemin>" explicite
+    #   3. Avant montage : vérifier /proc/mounts pour 3 cas :
+    #        a) Le MÊME dataset est déjà sur ce chemin → skip OK (idempotent)
+    #        b) UN AUTRE dataset est sur ce chemin    → fail + message clair
+    #        c) Rien sur ce chemin                    → monter normalement
+    #
+    # Grâce à canmount=noauto, "zfs mount -a" n'active jamais ces datasets.
+    # Ce guard couvre le cas "deux systèmes montés par erreur en même temps".
+    local ds="$1" mp="$2"
+    mkdir -p "$mp"
+
+    if mountpoint -q "$mp" 2>/dev/null; then
+        # Identifier quel dataset occupe ce chemin
+        local already
+        already=$(awk -v mp="$mp" '$2 == mp {print $1; exit}' /proc/mounts 2>/dev/null || echo "inconnu")
+        if [ "$already" = "$ds" ]; then
+            log "Déjà monté (même dataset) : $ds → $mp — skip OK"
+            return 0
+        else
+            log "CONFLIT : $mp déjà occupé par $already (demandé : $ds) — abandon"
+            return 1
+        fi
+    fi
+
+    zfs list "$ds" >/dev/null 2>&1 || { log "Dataset absent : $ds"; return 1; }
+    mount -t zfs "$ds" "$mp" \
+        || { log "Impossible de monter $ds → $mp"; return 1; }
+    log "Monté : $ds → $mp"
+}
+
+# ─── 1. FS VIRTUELS ───────────────────────────────────────────────────────────
+log "Montage FS virtuels"
+mount -t proc     proc     /proc     2>/dev/null || true
+mount -t sysfs    sysfs    /sys      2>/dev/null || true
+mount -t devtmpfs devtmpfs /dev      2>/dev/null || true
+mount -t tmpfs    tmpfs    /run      2>/dev/null || true
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts 2>/dev/null || true
+echo 3 > /proc/sys/kernel/printk 2>/dev/null || true
+
+# ─── 2. CMDLINE ───────────────────────────────────────────────────────────────
+ZBM_SYSTEM=$(get_param "zbm_system");  ZBM_SYSTEM="${ZBM_SYSTEM:-initial}"
+ZBM_ROOTFS=$(get_param "zbm_rootfs")
+ZBM_MODULES=$(get_param "zbm_modules")
+ZBM_OVERLAY=$(get_param "zbm_overlay")
+ZBM_EXEC=$(get_param "zbm_exec")
+# NOTE : zbm_var / zbm_log / zbm_tmp supprimés — l'overlay gère /var et /tmp.
+# Le lower (rootfs.sfs) contient déjà ces répertoires. Les écritures vont dans
+# l'upper (fast_pool/overlay-<s>). Aucun dataset ZFS séparé pour /var ou /tmp.
+ZBM_NO_ZFS=$(get_param "zbm_no_zfs")
+
+# Normaliser : "none" = absent
+[ "$ZBM_ROOTFS" = "none" ] && ZBM_ROOTFS=""
+[ -z "$ZBM_OVERLAY" ] && ZBM_OVERLAY="fast_pool/overlay-${ZBM_SYSTEM}"
+# Overlay upper — le seul dataset ZFS de persistance par système.
+# /var /tmp /run sont dans le lower (rootfs.sfs) et redirigés vers l'upper par overlayfs.
+
+if [ -z "$ZBM_ROOTFS" ]; then
+    log "Mode     : INIT-ONLY (pas de rootfs, pas d'overlay, pas de pivot)"
+    log "Système  : $ZBM_SYSTEM"
+    log "Exec     : ${ZBM_EXEC:-(auto : python TUI ou shell)}"
+else
+    log "Mode     : SYSTÈME (rootfs + overlay + pivot_root)"
+    log "Système  : $ZBM_SYSTEM"
+    log "Rootfs   : $(basename "$ZBM_ROOTFS")"
+    log "Overlay  : $ZBM_OVERLAY"
+    log "Overlay  : $ZBM_OVERLAY (upper → fast_pool)"
+fi
+log "Modules  : ${ZBM_MODULES:-(aucun)}"
+
+# ─── 3. MODULES KERNEL ────────────────────────────────────────────────────────
+modprobe overlay  2>/dev/null || log "overlay : builtin"
+modprobe squashfs 2>/dev/null || log "squashfs : builtin"
+modprobe loop     2>/dev/null || log "loop : builtin"
+modprobe i915     2>/dev/null || log "i915 : non chargé"
+[ "$ZBM_NO_ZFS" != "1" ] && { modprobe zfs 2>/dev/null || fail "Module ZFS introuvable"; }
+
+# ─── 4. IMPORT ZFS ────────────────────────────────────────────────────────────
+if [ "$ZBM_NO_ZFS" != "1" ]; then
+    log "Import des pools ZFS"
+    WAIT=0
+    until ls /dev/disk/by-id/ >/dev/null 2>&1 || [ "$WAIT" -ge 15 ]; do
+        sleep 1; WAIT=$((WAIT + 1))
+    done
+    if ! zpool import -a -N 2>/dev/null; then
+        zpool import -f -a -N 2>/dev/null || fail "Impossible d'importer les pools ZFS"
+    fi
+    zpool list boot_pool >/dev/null 2>&1 || fail "boot_pool introuvable"
+fi
+
+# ─── 5. BOOT_POOL ─────────────────────────────────────────────────────────────
+if [ "$ZBM_NO_ZFS" != "1" ]; then
+    log "Montage boot_pool → /mnt/boot"
+    mkdir -p /mnt/boot
+    if mountpoint -q /mnt/boot 2>/dev/null; then
+        log "boot_pool déjà monté (skip)"
+    else
+        mount -t zfs boot_pool /mnt/boot \
+            || fail "Impossible de monter boot_pool"
+    fi
+    # boot_pool/images est un dataset enfant ZFS — monté séparément.
+    # zpool import -N ne monte pas les enfants automatiquement.
+    if zfs list boot_pool/images >/dev/null 2>&1; then
+        if ! mountpoint -q /mnt/boot/images 2>/dev/null; then
+            mkdir -p /mnt/boot/images
+            zfs mount boot_pool/images 2>/dev/null \
+                || log "boot_pool/images : zfs mount échoué (non bloquant)"
+        fi
+    fi
+fi
+
+# ─── 5b. RÉSOLUTION DES CHEMINS RELATIFS (boot_pool = /mnt/boot) ─────────────
+# Les presets stockent des chemins relatifs (ex: images/rootfs/rootfs-s1-gentoo-20250305.sfs)
+# pour être indépendants du point de montage live vs système réel.
+resolve_boot_path() {
+    local p="$1"
+    [ -z "$p" ] && echo "" && return
+    # Déjà absolu et existant → utiliser tel quel
+    [ -f "$p" ] && echo "$p" && return
+    # Relatif → préfixer avec /mnt/boot
+    local resolved="/mnt/boot/$p"
+    [ -f "$resolved" ] && echo "$resolved" && return
+    # Essayer sans leading slash
+    resolved="/mnt/boot/${p#/}"
+    [ -f "$resolved" ] && echo "$resolved" && return
+    # Retourner le chemin absolu même si absent (fail() géré plus tard)
+    echo "/mnt/boot/${p#/}"
+}
+[ -n "$ZBM_ROOTFS" ]  && ZBM_ROOTFS=$(resolve_boot_path "$ZBM_ROOTFS")
+[ -n "$ZBM_MODULES" ] && ZBM_MODULES=$(resolve_boot_path "$ZBM_MODULES")
+
+# ─── 6. MODULES SQUASHFS ──────────────────────────────────────────────────────
+KVER_MOD=""
+if [ -n "$ZBM_MODULES" ] && [ -f "$ZBM_MODULES" ]; then
+    log "Modules : $(basename "$ZBM_MODULES") → /mnt/modloop"
+    mkdir -p /mnt/modloop
+    mount -t squashfs -o loop,ro "$ZBM_MODULES" /mnt/modloop \
+        || log "Modules non montés (non bloquant)"
+    KVER_MOD=$(ls /mnt/modloop/lib/modules/ 2>/dev/null | head -1 || true)
+    [ -n "$KVER_MOD" ] && log "Modules kver : $KVER_MOD"
+fi
+
+# ─── 7. PYTHON SQUASHFS ───────────────────────────────────────────────────────
+PYTHON_SFS=$(latest_glob "/mnt/boot/images/startup/python-*.sfs")
+if [ -n "$PYTHON_SFS" ] && [ -f "$PYTHON_SFS" ]; then
+    log "Python : $(basename "$PYTHON_SFS") → /mnt/python"
+    mkdir -p /mnt/python
+    mount -t squashfs -o loop,ro "$PYTHON_SFS" /mnt/python \
+        || log "Python non monté (non bloquant)"
+fi
+
+# ─── 8. MODE INIT-ONLY ────────────────────────────────────────────────────────
+#
+#   Pas de rootfs → pas d'overlay → pas de pivot_root.
+#   On reste dans l'initramfs. boot_pool est monté sur /mnt/boot.
+#   zbm_exec contrôle exactement ce qu'on lance.
+#
+if [ -z "$ZBM_ROOTFS" ]; then
+    log "Init-only : environnement initramfs pur"
+    echo "$ZBM_SYSTEM" > /run/zbm-current-system 2>/dev/null || true
+    export TERM=linux COLORTERM=truecolor ZBM_SYSTEM="$ZBM_SYSTEM"
+    export ZBM_BOOT=/mnt/boot ZBM_PYTHON=/mnt/python
+
+    # zbm_exec explicitement spécifié
+    if [ -n "$ZBM_EXEC" ] && [ "$ZBM_EXEC" != "none" ]; then
+        if [ -f "$ZBM_EXEC" ]; then
+            log "Exec explicite : $ZBM_EXEC"
+            chmod +x "$ZBM_EXEC" 2>/dev/null || true
+            exec "$ZBM_EXEC" || { log "Exec échoué : $ZBM_EXEC"; exec sh; }
+        else
+            log "zbm_exec introuvable : $ZBM_EXEC — shell"
+            exec sh
+        fi
+    fi
+
+    # Auto : Python TUI si disponible
+    if [ -f "/mnt/python/launch.sh" ]; then
+        log "Auto : Python TUI (launch.sh)"
+        exec sh -c "/mnt/python/launch.sh" || exec sh
+    fi
+
+    # Auto : python3 direct si launch.sh absent
+    if command -v python3 >/dev/null 2>&1; then
+        PY_MAIN=$(ls /mnt/python/*.py 2>/dev/null | head -1 || true)
+        if [ -n "$PY_MAIN" ]; then
+            log "Auto : python3 $PY_MAIN"
+            exec python3 "$PY_MAIN" || exec sh
+        fi
+    fi
+
+    # Fallback : shell
+    log "Init-only : shell (python TUI non disponible)"
+    exec sh
+fi
+
+# ─── 9. FAST_POOL (mode système uniquement) ───────────────────────────────────
+zpool list fast_pool >/dev/null 2>&1 || fail "fast_pool introuvable"
+
+# ─── 10. ROOTFS SQUASHFS → LOWER ──────────────────────────────────────────────
+# Sécurité : trap de cleanup sur montage partiel
+# Si une étape échoue après ce point, démonter proprement avant de tomber en shell
+_overlay_cleanup() {
+    log "=== Cleanup montages overlay sur erreur ==="
+    umount -l /mnt/merged  2>/dev/null || true
+    umount -l /mnt/fast    2>/dev/null || true
+    umount -l /mnt/lower   2>/dev/null || true
+    umount -l /mnt/modloop 2>/dev/null || true
+}
+trap '_overlay_cleanup; exec sh' EXIT
+
+[ -f "$ZBM_ROOTFS" ] || fail "Rootfs introuvable : $ZBM_ROOTFS (chemin résolu: $ZBM_ROOTFS)"
+log "Rootfs (lower, ro) : $(basename "$ZBM_ROOTFS")"
+mkdir -p /mnt/lower
+mount -t squashfs -o loop,ro "$ZBM_ROOTFS" /mnt/lower \
+    || fail "Impossible de monter le rootfs en squashfs"
+
+# Vérifier l'intégrité minimale du rootfs avant de continuer
+[ -d "/mnt/lower/etc" ] || fail "Rootfs invalide : /etc absent dans le squashfs"
+[ -d "/mnt/lower/sbin" ] || [ -d "/mnt/lower/usr/sbin" ] \
+    || fail "Rootfs invalide : /sbin ou /usr/sbin absent" 
+
+# ─── 11. UPPER OVERLAY PAR SYSTÈME ────────────────────────────────────────────
+# Sécurité : vérifier que le dataset overlay n'est pas déjà utilisé COMME UPPER
+# par un overlayfs actif (risque de corruption si deux systèmes partagent le même upper)
+_check_overlay_in_use() {
+    local ds="$1"
+    # Chercher si /mnt/fast (ce dataset) apparaît dans une option upperdir d'un overlay actif
+    if grep -q "upperdir=/mnt/fast" /proc/mounts 2>/dev/null; then
+        log "ALERTE : $ds déjà utilisé comme upper overlay — abandon pour éviter corruption"
+        return 1
+    fi
+    return 0
+}
+_check_overlay_in_use "$ZBM_OVERLAY" || fail "Overlay $ZBM_OVERLAY déjà en usage — reboot requis"
+
+log "Upper overlay (per-system) : $ZBM_OVERLAY → /mnt/fast"
+mkdir -p /mnt/fast
+mount_zfs_ds "$ZBM_OVERLAY" "/mnt/fast" \
+    || fail "Impossible de monter $ZBM_OVERLAY"
+mkdir -p /mnt/fast/upper /mnt/fast/.work
+
+# Vérifier l'espace disque disponible dans l'upper (avertissement si < 512MB)
+FAST_KB=$(df -k /mnt/fast 2>/dev/null | awk 'NR==2{print $4}' || echo 0)
+[ "$FAST_KB" -lt 524288 ] && log "⚠️  Espace upper overlay faible : ${FAST_KB}KB disponibles" || true
+
+# ─── 12. OVERLAYFS → MERGED ───────────────────────────────────────────────────
+log "OverlayFS → /mnt/merged"
+mkdir -p /mnt/merged
+mount -t overlay overlay \
+    -o "lowerdir=/mnt/lower,upperdir=/mnt/fast/upper,workdir=/mnt/fast/.work" \
+    /mnt/merged \
+    || fail "Impossible de monter l'OverlayFS"
+
+# ─── 13. /var /tmp /run — gérés par l'overlay, pas par des datasets ZFS ──────
+#
+# ARCHITECTURE OVERLAY :
+#   lower  = rootfs.sfs  (ro) — contient déjà /var /tmp /home /etc ...
+#   upper  = fast_pool/overlay-<s>/upper  (rw, persistant par système)
+#   merged = overlayfs → toute écriture va dans upper
+#
+# /var/tmp/run  → écrits dans upper  (fast_pool/overlay-<s>)
+# /var/log      → écrit dans upper  (persistant entre les boots)
+# Aucun dataset ZFS séparé pour /var, /var/log ou /tmp.
+# Pour vider les écritures d'un système : zfs rollback fast_pool/overlay-<s>
+#
+# Seul /home est monté depuis data_pool pour partager les données entre systèmes.
+
+# ─── 14. HOME ─────────────────────────────────────────────────────────────────
+if zfs list data_pool/home >/dev/null 2>&1; then
+    mount_zfs_ds "data_pool/home" "/mnt/merged/home" || log "/home non monté"
+fi
+
+# ─── 15. BIND MOUNTS ──────────────────────────────────────────────────────────
+mkdir -p /mnt/merged/mnt/boot /mnt/merged/mnt/python
+mount --bind /mnt/boot /mnt/merged/mnt/boot
+mountpoint -q /mnt/python 2>/dev/null \
+    && mount --bind /mnt/python /mnt/merged/mnt/python
+
+if mountpoint -q /mnt/modloop 2>/dev/null && [ -n "$KVER_MOD" ]; then
+    mkdir -p "/mnt/merged/lib/modules/$KVER_MOD"
+    mount --bind "/mnt/modloop/lib/modules/$KVER_MOD" \
+                 "/mnt/merged/lib/modules/$KVER_MOD" \
+        && log "Modules liés : /lib/modules/$KVER_MOD"
+fi
+
+# ─── 16. FS VIRTUELS → MERGED ─────────────────────────────────────────────────
+mkdir -p /mnt/merged/proc /mnt/merged/sys /mnt/merged/dev /mnt/merged/run
+mount --move /proc /mnt/merged/proc 2>/dev/null || mount -t proc proc /mnt/merged/proc
+mount --move /sys  /mnt/merged/sys  2>/dev/null || mount -t sysfs sysfs /mnt/merged/sys
+mount --move /dev  /mnt/merged/dev  2>/dev/null || mount -t devtmpfs devtmpfs /mnt/merged/dev
+
+# ─── 17. PIVOT_ROOT ───────────────────────────────────────────────────────────
+log "Pivot root → $ZBM_SYSTEM"
+echo "$ZBM_SYSTEM" > /run/zbm-current-system 2>/dev/null || true
+mkdir -p /mnt/merged/.old_root
+pivot_root /mnt/merged /mnt/merged/.old_root || fail "pivot_root échoué"
+# pivot_root réussi : désactiver le cleanup trap (les montages sont dans le nouveau root)
+trap - EXIT
+umount -l /.old_root 2>/dev/null || true
+rmdir /.old_root 2>/dev/null || true
+
+# ─── 18. EXEC INIT ────────────────────────────────────────────────────────────
+log "Démarrage init ($ZBM_SYSTEM)"
+exec /sbin/init "$@" \
+    || exec /bin/init "$@" \
+    || exec /bin/sh \
+    || fail "Aucun init trouvé"

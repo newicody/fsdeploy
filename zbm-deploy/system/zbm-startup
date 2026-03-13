@@ -1,0 +1,315 @@
+#!/sbin/openrc-run
+# =============================================================================
+# zbm-startup — Service OpenRC pour le preset "préparé"
+# S'exécute après pivot_root, dans le système fusionné (overlayfs)
+#
+# Séquence :
+#   1. Réseau DHCP sur l'interface Intel I219-V (e1000e)
+#   2. Montage de python.sfs depuis /mnt/boot
+#   3. Lecture de la config preset (/boot/presets/<système>.json)
+#   4. Lancement ffmpeg stream YouTube si stream_key configurée
+#      → délai configurable (défaut 30s) avec annulation possible
+#   5. Lancement de la TUI Textual sur TTY1
+#
+# Emplacement dans le rootfs Gentoo :
+#   /etc/init.d/zbm-startup
+#
+# Activation :
+#   rc-update add zbm-startup default
+# =============================================================================
+
+description="ZBM Startup — Réseau, stream YouTube, interface Python"
+
+# Dépendances : doit tourner après le montage ZFS et avant getty
+depend() {
+    need localmount
+    after net zfs-mount
+    before getty
+    use logger
+}
+
+# Fichiers de configuration et état
+ZBM_RUN="/run/zbm"
+ZBM_CURRENT_SYS="/run/zbm-current-system"
+ZBM_STREAM_PID="/run/zbm-stream.pid"
+ZBM_TUI_PID="/run/zbm-tui.pid"
+ZBM_NET_DONE="/run/zbm-net-done"
+ZBM_LOG="/var/log/zbm-startup.log"
+
+_log() { echo "[$(date '+%H:%M:%S')] $*" >> "$ZBM_LOG"; einfo "$*"; }
+_warn() { echo "[$(date '+%H:%M:%S')] WARN: $*" >> "$ZBM_LOG"; ewarn "$*"; }
+_err()  { echo "[$(date '+%H:%M:%S')] ERR:  $*" >> "$ZBM_LOG"; eerror "$*"; }
+
+# =============================================================================
+# LECTURE DU PRESET
+# =============================================================================
+_read_preset() {
+    local key="$1" system="${2:-}"
+    # Lire le système actif si non fourni
+    [[ -z "$system" ]] && system=$(cat "$ZBM_CURRENT_SYS" 2>/dev/null || echo "systeme1")
+    local preset="/boot/presets/${system}.json"
+    [[ -f "$preset" ]] || return 1
+    python3 -c "
+import json,sys
+try:
+    d=json.load(open('$preset'))
+    print(d.get('$key',''))
+except:
+    pass
+" 2>/dev/null
+}
+
+# =============================================================================
+# ÉTAPE 1 : RÉSEAU DHCP
+# =============================================================================
+_start_network() {
+    _log "Réseau : démarrage DHCP"
+
+    # Trouver l'interface Ethernet (Intel I219-V = pilote e1000e)
+    IFACE=""
+
+    # Méthode 1 : depuis le preset
+    IFACE_CFG=$(_read_preset "network_iface")
+    if [[ "$IFACE_CFG" != "auto" ]] && [[ -n "$IFACE_CFG" ]]; then
+        IFACE="$IFACE_CFG"
+    fi
+
+    # Méthode 2 : première interface e1000e montée
+    if [[ -z "$IFACE" ]]; then
+        for iface in /sys/class/net/*/device/driver; do
+            [[ -e "$iface" ]] || continue
+            DRV=$(basename "$(readlink -f "$iface")")
+            if [[ "$DRV" == "e1000e" ]]; then
+                IFACE=$(basename "$(dirname "$(dirname "$iface")")")
+                break
+            fi
+        done
+    fi
+
+    # Méthode 3 : première interface non-lo
+    if [[ -z "$IFACE" ]]; then
+        IFACE=$(ip link show | awk -F': ' '/^[0-9]+: [^l]/{print $2}' | \
+                grep -v '^lo' | head -1)
+    fi
+
+    if [[ -z "$IFACE" ]]; then
+        _warn "Aucune interface réseau trouvée — stream désactivé"
+        return 1
+    fi
+
+    _log "Interface : $IFACE"
+
+    # Activer l'interface
+    ip link set "$IFACE" up
+
+    # DHCP avec timeout
+    if dhclient -v -timeout 15 "$IFACE" >> "$ZBM_LOG" 2>&1; then
+        IP=$(ip addr show "$IFACE" | awk '/inet /{print $2}' | head -1)
+        _log "Réseau OK : $IFACE  $IP"
+        touch "$ZBM_NET_DONE"
+        echo "$IFACE" > "/run/zbm-net-iface"
+        return 0
+    else
+        _warn "DHCP échoué sur $IFACE — stream désactivé"
+        return 1
+    fi
+}
+
+# =============================================================================
+# ÉTAPE 2 : MONTAGE PYTHON.SFS
+# =============================================================================
+_mount_python() {
+    local python_sfs; python_sfs=$(ls /boot/images/startup/python-*.sfs 2>/dev/null | sort | tail -1 || true)
+
+    if mountpoint -q /mnt/python 2>/dev/null; then
+        _log "python.sfs déjà monté"
+        return 0
+    fi
+
+    if [[ ! -f "$python_sfs" ]]; then
+        _warn "Aucun python-*.sfs dans /boot/images/startup/"
+        return 1
+    fi
+
+    mkdir -p /mnt/python
+    mount -t squashfs -o loop,ro "$python_sfs" /mnt/python
+    _log "$(basename "$python_sfs") monté → /mnt/python"
+}
+
+# =============================================================================
+# ÉTAPE 3 : STREAM YOUTUBE (x264 soft, i5-11400)
+# =============================================================================
+_start_stream() {
+    [[ -f "$ZBM_NET_DONE" ]] || { _warn "Réseau absent — stream ignoré"; return 1; }
+
+    SYSTEM=$(cat "$ZBM_CURRENT_SYS" 2>/dev/null || echo "systeme1")
+    STREAM_KEY=$(_read_preset "stream_key" "$SYSTEM")
+    [[ -n "$STREAM_KEY" ]] || { _log "Pas de clé stream — stream ignoré"; return 0; }
+
+    DELAY=$(_read_preset "stream_delay_sec" "$SYSTEM")
+    DELAY="${DELAY:-30}"
+    RES=$(_read_preset "stream_resolution" "$SYSTEM")
+    RES="${RES:-1920x1080}"
+    FPS=$(_read_preset "stream_fps" "$SYSTEM")
+    FPS="${FPS:-30}"
+    BITRATE=$(_read_preset "stream_bitrate" "$SYSTEM")
+    BITRATE="${BITRATE:-4500k}"
+
+    _log "Stream : démarrage dans ${DELAY}s (résolution ${RES} ${FPS}fps ${BITRATE})"
+    _log "  Appuyez sur Ctrl+C dans la TUI pour annuler"
+
+    # Écrire un fichier de compte à rebours pour que la TUI puisse l'afficher
+    echo "$DELAY" > "/run/zbm-stream-countdown"
+    echo "pending" > "/run/zbm-stream-state"
+
+    # Compte à rebours dans un sous-processus
+    (
+        i="$DELAY"
+        while [[ $i -gt 0 ]]; do
+            echo "$i" > "/run/zbm-stream-countdown"
+            # Vérifier si l'utilisateur a annulé depuis la TUI
+            if [[ "$(cat /run/zbm-stream-state 2>/dev/null)" == "cancelled" ]]; then
+                _log "Stream annulé par l'utilisateur"
+                rm -f "/run/zbm-stream-countdown"
+                exit 0
+            fi
+            sleep 1
+            i=$((i - 1))
+        done
+
+        # Vérifier une dernière fois l'annulation
+        if [[ "$(cat /run/zbm-stream-state 2>/dev/null)" == "cancelled" ]]; then
+            _log "Stream annulé par l'utilisateur"
+            rm -f "/run/zbm-stream-countdown"
+            exit 0
+        fi
+
+        echo "running" > "/run/zbm-stream-state"
+        rm -f "/run/zbm-stream-countdown"
+
+        _log "Stream démarré → rtmp://a.rtmp.youtube.com/live2/****"
+
+        W=$(echo "$RES" | cut -dx -f1)
+        H=$(echo "$RES" | cut -dx -f2)
+
+        ffmpeg -y \
+            -f fbdev  -framerate "$FPS" -video_size "${W}x${H}" -i /dev/fb0 \
+            -f alsa   -i hw:0,0 \
+            -c:v libx264 \
+                -preset veryfast \
+                -tune zerolatency \
+                -b:v "$BITRATE" \
+                -maxrate "$BITRATE" \
+                -bufsize "$(echo "$BITRATE" | sed 's/k//')k" \
+                -pix_fmt yuv420p \
+                -g "$((FPS * 2))" \
+                -keyint_min "$FPS" \
+            -c:a aac -b:a 128k -ar 44100 \
+            -f flv "rtmp://a.rtmp.youtube.com/live2/${STREAM_KEY}" \
+            >> "$ZBM_LOG" 2>&1
+
+        RC=$?
+        echo "stopped" > "/run/zbm-stream-state"
+        [[ $RC -ne 0 ]] && _warn "Stream arrêté (code $RC)"
+    ) &
+
+    echo $! > "$ZBM_STREAM_PID"
+    _log "Stream PID : $(cat "$ZBM_STREAM_PID")"
+}
+
+# =============================================================================
+# ÉTAPE 4 : TUI PYTHON SUR TTY1
+# =============================================================================
+_start_tui() {
+    local launcher="/mnt/python/launch.sh"
+    local venv_python="/mnt/python/venv/bin/python3"
+    local interface="/mnt/python/etc/zfsbootmenu/python_interface.py"
+
+    # Vérifier la disponibilité
+    if [[ ! -f "$launcher" ]] && [[ ! -f "$venv_python" ]]; then
+        _warn "Python TUI non disponible (python.sfs manquant ?)"
+        return 1
+    fi
+
+    # Variables d'environnement pour Textual sur framebuffer
+    export TERM="linux"
+    export COLORTERM="truecolor"
+
+    _log "Lancement TUI sur TTY1"
+
+    # Lancer sur TTY1 — openvt garantit un terminal propre
+    if command -v openvt >/dev/null; then
+        openvt -c 1 -f -s -- \
+            env TERM=linux COLORTERM=truecolor \
+            "$venv_python" "$interface" \
+            </dev/tty1 >/dev/tty1 2>/dev/tty1 &
+        echo $! > "$ZBM_TUI_PID"
+    else
+        # Fallback direct sur tty1
+        "$venv_python" "$interface" \
+            </dev/tty1 >/dev/tty1 2>/dev/tty1 &
+        echo $! > "$ZBM_TUI_PID"
+    fi
+
+    _log "TUI PID : $(cat "$ZBM_TUI_PID")"
+}
+
+# =============================================================================
+# START / STOP
+# =============================================================================
+start() {
+    mkdir -p "$ZBM_RUN"
+    checkpath -f -m 0640 -o root:root "$ZBM_LOG"
+
+    _log "=== zbm-startup démarrage ==="
+    SYSTEM=$(cat "$ZBM_CURRENT_SYS" 2>/dev/null || echo "systeme1")
+    TYPE=$(_read_preset "type" "$SYSTEM")
+    _log "Système : $SYSTEM  (type: ${TYPE:-?})"
+
+    # Toujours monter python.sfs
+    _mount_python
+
+    # Si type != "prepared" → pas de stream ni de TUI gérés ici
+    if [[ "$TYPE" != "prepared" ]]; then
+        _log "Type normal — stream et TUI non démarrés par zbm-startup"
+        return 0
+    fi
+
+    # Séquence complète preset préparé
+    _start_network
+    _start_stream
+    _start_tui
+
+    _log "=== zbm-startup prêt ==="
+    return 0
+}
+
+stop() {
+    _log "=== zbm-startup arrêt ==="
+
+    # Arrêter le stream
+    if [[ -f "$ZBM_STREAM_PID" ]]; then
+        SPID=$(cat "$ZBM_STREAM_PID")
+        kill -TERM "$SPID" 2>/dev/null || true
+        rm -f "$ZBM_STREAM_PID"
+        echo "stopped" > "/run/zbm-stream-state"
+        _log "Stream arrêté (PID $SPID)"
+    fi
+
+    # Arrêter la TUI
+    if [[ -f "$ZBM_TUI_PID" ]]; then
+        TPID=$(cat "$ZBM_TUI_PID")
+        kill -TERM "$TPID" 2>/dev/null || true
+        rm -f "$ZBM_TUI_PID"
+        _log "TUI arrêtée (PID $TPID)"
+    fi
+
+    # Libérer le bail DHCP
+    if [[ -f "/run/zbm-net-iface" ]]; then
+        IFACE=$(cat "/run/zbm-net-iface")
+        dhclient -r "$IFACE" 2>/dev/null || true
+    fi
+
+    rm -f "$ZBM_NET_DONE" "/run/zbm-stream-state" "/run/zbm-stream-countdown"
+    _log "=== zbm-startup arrêté ==="
+}
