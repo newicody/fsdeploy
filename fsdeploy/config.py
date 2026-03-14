@@ -29,6 +29,7 @@ Usage minimal :
 
 from __future__ import annotations
 
+import grp
 import os
 import shutil
 import threading
@@ -50,15 +51,37 @@ except ImportError as exc:
 # CHEMINS PAR DÉFAUT
 # =============================================================================
 
-# Pendant le déploiement depuis Debian live, boot_pool est monté quelque part.
-# Une fois booté, /boot est le mount classique.
-_DEFAULT_SEARCH = [
-    Path("/boot/fsdeploy/fsdeploy.conf"),
-    Path("/mnt/zbm/boot/fsdeploy/fsdeploy.conf"),
-    Path("/mnt/boot/fsdeploy/fsdeploy.conf"),
-    Path("/etc/fsdeploy/fsdeploy.conf"),
-    Path("/tmp/fsdeploy/fsdeploy.conf"),      # fallback tests / live sans ZFS
-]
+def _build_default_search() -> list[Path]:
+    """
+    Construit la liste de chemins de recherche pour fsdeploy.conf.
+
+    Priorité :
+      1. $FSDEPLOY_INSTALL_DIR/fsdeploy.conf  (posé par launch.sh dans .env)
+      2. /boot/fsdeploy/fsdeploy.conf          (dans boot_pool, persistant)
+      3. /mnt/zbm/boot/fsdeploy/fsdeploy.conf  (boot_pool monté sous /mnt/zbm)
+      4. /mnt/boot/fsdeploy/fsdeploy.conf      (boot_pool monté sous /mnt/boot)
+      5. /etc/fsdeploy/fsdeploy.conf           (système installé)
+      6. /tmp/fsdeploy/fsdeploy.conf           (fallback tests / live sans ZFS)
+    """
+    candidates: list[Path] = []
+
+    # Variable posée par launch.sh via le fichier .env sourcé par le wrapper
+    install_dir = os.environ.get("FSDEPLOY_INSTALL_DIR", "").strip()
+    if install_dir:
+        candidates.append(Path(install_dir) / "fsdeploy.conf")
+
+    candidates += [
+        Path("/boot/fsdeploy/fsdeploy.conf"),
+        Path("/mnt/zbm/boot/fsdeploy/fsdeploy.conf"),
+        Path("/mnt/boot/fsdeploy/fsdeploy.conf"),
+        Path("/etc/fsdeploy/fsdeploy.conf"),
+        Path("/tmp/fsdeploy/fsdeploy.conf"),
+    ]
+
+    return candidates
+
+
+_DEFAULT_SEARCH: list[Path] = _build_default_search()
 
 
 # =============================================================================
@@ -94,42 +117,47 @@ disks           = list(default=list())
 [detection]
 # État global de la détection (none | partial | complete)
 status          = option(none, partial, complete, default=none)
-# JSON sérialisé du rapport de détection complet (stocké ici pour persistance)
-report_json     = string(default="")
-# Timestamp de la dernière détection
-detected_at     = string(default="")
+# Rapport JSON de la dernière détection (chemin fichier)
+report_path     = string(default="")
+# Timestamp ISO de la dernière détection
+last_run        = string(default="")
 
-# ── Montages configurés ──────────────────────────────────────────────────────
+# ── Montages ─────────────────────────────────────────────────────────────────
 [mounts]
-# Montages validés par l'utilisateur : dataset → point de montage
-# Exemple : fast_pool/rootfs-gentoo = /mnt/rootfs
-# (section libre — pas de clés fixes)
+# Point de montage racine des datasets pendant le déploiement
+deploy_root     = string(default="/mnt/deploy")
+# Montages supplémentaires (liste de "dataset:point_de_montage")
+extra           = list(default=list())
 
-# ── Kernel actif ────────────────────────────────────────────────────────────
+# ── Noyau ────────────────────────────────────────────────────────────────────
 [kernel]
-# Chemin relatif à boot_mount
+# Noyau actif (symlink vmlinuz → ce fichier)
 active          = string(default="")
+# Répertoire source des noyaux trouvés
+source_dir      = string(default="")
+# Version noyau actif
 version         = string(default="")
-# Source utilisée pour ce kernel (found | compiled | external)
-source          = option(found, compiled, external, default=found)
-modules_path    = string(default="")
-modules_source  = option(found, compiled, external, default=found)
 
 # ── Initramfs ────────────────────────────────────────────────────────────────
 [initramfs]
+# Type : zbm | minimal | stream
+type            = option(zbm, minimal, stream, default=zbm)
+# Chemin de l'initramfs actif
 active          = string(default="")
-# Type : zbm | minimal | stream | custom
-type            = option(zbm, minimal, stream, custom, default=zbm)
-# Paramètres dracut
-dracut_drivers  = list(default=list("zfs","squashfs","overlay","e1000e","loop"))
-dracut_modules  = list(default=list("kernel-modules","base"))
-dracut_omit     = list(default=list("nfs","iscsi","multipath","systemd"))
-compress        = option(zstd, xz, gzip, lz4, default=zstd)
+# Options dracut supplémentaires
+dracut_opts     = string(default="")
+# Modules à inclure (liste)
+modules         = list(default=list())
 
 # ── ZFSBootMenu ──────────────────────────────────────────────────────────────
 [zbm]
-efi_path        = string(default="EFI/ZBM/vmlinuz.EFI")
-cmdline         = string(default="quiet loglevel=3 zbm.autosize=0")
+# Version ZBM installée
+version         = string(default="")
+# Chemin de l'EFI ZBM installé
+efi_path        = string(default="")
+# Options de la cmdline ZBM
+cmdline         = string(default="")
+# Timeout ZBM (secondes)
 timeout         = integer(min=0, max=60, default=3)
 # Dataset racine que ZBM doit présenter
 bootfs          = string(default="")
@@ -165,6 +193,52 @@ level           = option(debug, info, warning, error, default=info)
 dir             = string(default="")
 max_size_mb     = integer(min=1, max=500, default=50)
 """.strip()
+
+
+# =============================================================================
+# HELPERS INTERNES
+# =============================================================================
+
+def _secure_config_file(path: Path) -> None:
+    """
+    Applique sur le fichier de config :
+      - chmod 640  (propriétaire rw, groupe r, autres rien)
+      - chown :fsdeploy  (groupe fsdeploy si disponible, sinon groupe courant)
+
+    Le fichier peut contenir des clés sensibles (youtube_key, etc.).
+    Silencieux si le groupe fsdeploy est absent ou si les droits manquent.
+    """
+    try:
+        path.chmod(0o640)
+    except OSError:
+        pass
+
+    try:
+        gid = grp.getgrnam("fsdeploy").gr_gid
+        os.chown(path, os.getuid(), gid)
+    except (KeyError, PermissionError, OSError):
+        # Groupe fsdeploy absent ou chown impossible → pas bloquant
+        pass
+
+
+def _detect_caller() -> str:
+    """Identifie le module appelant pour la métadonnée last_modified_by."""
+    import inspect
+    frame = inspect.currentframe()
+    try:
+        # Remonter la pile jusqu'à trouver un appelant hors de config.py
+        for _ in range(10):
+            if frame is None:
+                break
+            frame = frame.f_back
+            if frame is None:
+                break
+            module = frame.f_globals.get("__name__", "")
+            if module and module != __name__:
+                return module
+    finally:
+        del frame
+    return "unknown"
 
 
 # =============================================================================
@@ -209,8 +283,15 @@ class FsDeployConfig:
         Retourne une instance en cherchant le fichier dans les emplacements
         par défaut.  Crée le fichier dans le premier emplacement accessible
         si aucun n'existe et create=True.
+
+        L'ordre de recherche tient compte de $FSDEPLOY_INSTALL_DIR posé par
+        launch.sh dans le fichier .env sourcé par le wrapper global.
         """
-        for p in _DEFAULT_SEARCH:
+        # Reconstruire la liste à chaque appel pour honorer les variables
+        # d'environnement éventuellement chargées après l'import du module.
+        search = _build_default_search()
+
+        for p in search:
             if p.exists():
                 return cls(p, create=False)
 
@@ -220,7 +301,7 @@ class FsDeployConfig:
             )
 
         # Créer dans le premier emplacement dont le répertoire parent est accessible
-        for p in _DEFAULT_SEARCH:
+        for p in search:
             try:
                 p.parent.mkdir(parents=True, exist_ok=True)
                 return cls(p, create=True)
@@ -257,6 +338,8 @@ class FsDeployConfig:
             self._apply_defaults()
             self._set_meta("created")
             self._cfg.write()
+            # Permissions sécurisées dès la création (youtube_key, etc.)
+            _secure_config_file(self.path)
         else:
             self._cfg = ConfigObj(
                 str(self.path),
@@ -365,6 +448,7 @@ class FsDeployConfig:
         """
         Sauvegarde sur disque si dirty (ou force=True).
         Crée une sauvegarde .bak avant d'écraser.
+        Réapplique les permissions sécurisées après écriture.
         Retourne True si l'écriture a eu lieu.
         """
         if not self._dirty and not force:
@@ -381,6 +465,7 @@ class FsDeployConfig:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._cfg.filename = str(self.path)
             self._cfg.write()
+            _secure_config_file(self.path)
             self._dirty = False
             return True
 
@@ -482,20 +567,3 @@ class FsDeployConfig:
     @stream_enabled.setter
     def stream_enabled(self, value: bool) -> None:
         self.set("stream.enabled", value)
-
-
-# =============================================================================
-# HELPERS INTERNES
-# =============================================================================
-
-def _detect_caller() -> str:
-    """Identifie le module appelant pour la métadonnée last_modified_by."""
-    import traceback
-    stack = traceback.extract_stack()
-    for frame in reversed(stack[:-3]):
-        module = frame.filename
-        if "fsdeploy" in module and "config.py" not in module:
-            # Extraire juste le nom du fichier sans extension
-            name = Path(module).stem
-            return f"{name}:{frame.lineno}"
-    return "unknown"

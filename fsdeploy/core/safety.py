@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import fcntl
 import os
+import subprocess
 import threading
 import time
 from contextlib import contextmanager
@@ -265,7 +266,8 @@ class OperationNode:
     locks:      list[str]        = field(default_factory=list)
     # Si True, l'opération est exclusive : bloque toutes les autres
     exclusive:  bool             = False
-    # Si True, l'opération ne peut être lancée que si on est root
+    # Si True, l'opération ne peut être lancée que si on dispose des droits root
+    # (soit euid==0, soit sudo NOPASSWD disponible via _has_privilege())
     root_only:  bool             = False
     # Description humaine
     description: str             = ""
@@ -328,7 +330,7 @@ class DependencyGraph:
         """
         node = self._nodes.get(name)
         if node is None:
-            return True, []   # opération non enregistrée → pas de contrainte
+            return True, []
 
         missing = [
             dep for dep in node.requires
@@ -338,40 +340,37 @@ class DependencyGraph:
 
     def execution_order(self) -> list[str]:
         """
-        Retourne l'ordre d'exécution topologique de toutes les opérations
-        (tri topologique de Kahn).
+        Retourne un ordre d'exécution valide (tri topologique de Kahn).
         """
         in_degree = {n: 0 for n in self._nodes}
         for node in self._nodes.values():
             for dep in node.requires:
                 if dep in in_degree:
-                    in_degree[dep] = in_degree.get(dep, 0)
                     in_degree[node.name] = in_degree.get(node.name, 0) + 1
 
-        queue = sorted(
-            [n for n, d in in_degree.items() if d == 0],
-            key=lambda n: self._nodes[n].priority.value,
-        )
+        queue = [n for n, d in in_degree.items() if d == 0]
         order: list[str] = []
+
         while queue:
-            n = queue.pop(0)
-            order.append(n)
-            for candidate in self._nodes:
-                node = self._nodes[candidate]
-                if n in node.requires:
-                    in_degree[candidate] -= 1
-                    if in_degree[candidate] == 0:
-                        queue.append(candidate)
-                        queue.sort(key=lambda x: self._nodes[x].priority.value)
+            # Trier par priorité pour avoir un ordre déterministe
+            queue.sort(key=lambda n: self._nodes[n].priority.value)
+            name = queue.pop(0)
+            order.append(name)
+            node = self._nodes[name]
+            for dep in node.requires:
+                if dep in in_degree:
+                    in_degree[dep] -= 1
+                    if in_degree[dep] == 0:
+                        queue.append(dep)
+
         return order
 
     def mark_done(self, name: str) -> None:
         if name in self._nodes:
             self._nodes[name].run_count += 1
-            self._nodes[name].last_run = time.time()
+            self._nodes[name].last_run = time.monotonic()
 
     def reset(self, name: str | None = None) -> None:
-        """Remet à zéro les compteurs (pour rejouer depuis le début)."""
         targets = [name] if name else list(self._nodes)
         for n in targets:
             if n in self._nodes:
@@ -390,6 +389,60 @@ class DependencyGraph:
             }
             for n, node in self._nodes.items()
         ]
+
+
+# =============================================================================
+# VÉRIFICATION DES DROITS PRIVILÉGIÉS
+# =============================================================================
+
+# Cache de session : le sudoers ne change pas en cours d'exécution.
+_PRIVILEGE_CACHE: bool | None = None
+
+
+def _has_privilege() -> bool:
+    """
+    Retourne True si le processus peut effectuer des opérations root, c'est-à-dire :
+      - euid == 0  (root direct), OU
+      - sudo -n true réussit  (NOPASSWD configuré par launch.sh)
+
+    fsdeploy tourne en utilisateur normal avec sudo ciblé. Cette fonction
+    remplace le simple `os.geteuid() != 0` dans SafetyManager._check_all,
+    afin de ne pas bloquer les opérations root_only pour un utilisateur
+    qui dispose du sudoers NOPASSWD posé par launch.sh.
+
+    Le résultat est mis en cache pour toute la durée du processus.
+    """
+    global _PRIVILEGE_CACHE
+
+    if _PRIVILEGE_CACHE is not None:
+        return _PRIVILEGE_CACHE
+
+    # Root direct → trivial
+    if os.geteuid() == 0:
+        _PRIVILEGE_CACHE = True
+        return True
+
+    # Tenter sudo -n true (non-interactif, échoue immédiatement si MdP requis)
+    try:
+        result = subprocess.run(
+            ["sudo", "-n", "true"],
+            capture_output=True,
+            timeout=3,
+        )
+        _PRIVILEGE_CACHE = (result.returncode == 0)
+    except (OSError, subprocess.TimeoutExpired):
+        _PRIVILEGE_CACHE = False
+
+    return _PRIVILEGE_CACHE
+
+
+def invalidate_privilege_cache() -> None:
+    """
+    Remet à zéro le cache de _has_privilege().
+    À appeler si le sudoers a été modifié en cours de session (rare).
+    """
+    global _PRIVILEGE_CACHE
+    _PRIVILEGE_CACHE = None
 
 
 # =============================================================================
@@ -464,8 +517,8 @@ class SafetyManager:
     def run(self, name: str, *, bypass: bool = False) -> Iterator[None]:
         """
         Context manager qui :
-          1. Vérifie les dépendances
-          2. Vérifie les droits root si requis
+          1. Vérifie les droits suffisants (root ou sudo NOPASSWD)
+          2. Vérifie les dépendances d'ordre
           3. Vérifie les conflits de priorité
           4. Pose les verrous fichiers et opération
           5. Marque l'opération comme terminée à la sortie (si pas d'exception)
@@ -526,10 +579,12 @@ class SafetyManager:
         if node is None:
             return  # opération non enregistrée → pas de contrainte
 
-        # 1. Root uniquement
-        if node.root_only and os.geteuid() != 0:
+        # 1. Droits suffisants : root direct OU sudo NOPASSWD (configuré par launch.sh)
+        if node.root_only and not _has_privilege():
             raise SafetyError(
-                f"L'opération '{name}' nécessite les droits root."
+                f"L'opération '{name}' nécessite les droits root ou sudo (NOPASSWD).\n"
+                f"Vérifiez que l'utilisateur appartient au groupe fsdeploy et que\n"
+                f"launch.sh a correctement configuré /etc/sudoers.d/10-fsdeploy."
             )
 
         # 2. Dépendances d'ordre
@@ -563,11 +618,12 @@ class SafetyManager:
     def status(self) -> dict:
         """Retourne l'état complet du safety manager."""
         return {
-            "bypass":      self.bypass,
-            "active_ops":  list(self._active_ops),
+            "bypass":       self.bypass,
+            "has_privilege": _has_privilege(),
+            "active_ops":   list(self._active_ops),
             "active_locks": OperationLock.active_locks(),
-            "graph":       self._graph.summary(),
-            "order":       self._graph.execution_order(),
+            "graph":        self._graph.summary(),
+            "order":        self._graph.execution_order(),
         }
 
     def mark_done(self, name: str) -> None:
@@ -634,19 +690,18 @@ def safe_operation(
 
     def decorator(fn: Callable) -> Callable:
         def wrapper(*args, **kwargs):
-            # Bypass individuel via kwarg ou manager global
             local_bypass = kwargs.pop("_bypass", bypass) or manager.bypass
             with manager.run(name, bypass=local_bypass):
                 return fn(*args, **kwargs)
-        wrapper.__name__    = fn.__name__
-        wrapper.__doc__     = fn.__doc__
-        wrapper._safe_name  = name
+        wrapper.__name__   = fn.__name__
+        wrapper.__doc__    = fn.__doc__
+        wrapper._safe_name = name
         return wrapper
     return decorator
 
 
 # =============================================================================
-# INSTANCE GLOBALE PAR DÉFAUT (optionnelle)
+# INSTANCE GLOBALE PAR DÉFAUT
 # Pré-enregistre l'ordre standard du workflow fsdeploy.
 # =============================================================================
 
