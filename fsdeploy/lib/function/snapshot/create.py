@@ -1,0 +1,2 @@
+class SnapshotCreateTask:
+    pass

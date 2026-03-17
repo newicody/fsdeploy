@@ -1,0 +1,2 @@
+class PoolStatusTask:
+    pass

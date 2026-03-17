@@ -1,0 +1,2 @@
+class CoreScheduler:
+    pass

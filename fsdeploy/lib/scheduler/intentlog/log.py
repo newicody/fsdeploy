@@ -1,0 +1,2 @@
+class IntentLog:
+    pass

@@ -1,0 +1,2 @@
+class RootfsUpdateTask:
+    pass

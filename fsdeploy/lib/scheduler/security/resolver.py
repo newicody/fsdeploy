@@ -1,0 +1,2 @@
+class SecurityResolver:
+    pass

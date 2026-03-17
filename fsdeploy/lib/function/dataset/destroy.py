@@ -1,0 +1,2 @@
+class DatasetDestroyTask:
+    pass

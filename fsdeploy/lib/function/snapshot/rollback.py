@@ -1,0 +1,2 @@
+class SnapshotRollbackTask:
+    pass
