@@ -1,5 +1,5 @@
 from queue import Queue
-from scheduler.runtime.state import RuntimeState
+from scheduler.model.runtime import RuntimeState
 
 class Runtime:
 

@@ -4,25 +4,32 @@ Executor
 Responsable de l'exécution des tâches.
 
 Fonctions :
+  - lancer les tâches (sync / thread)
+  - gérer le cycle before_run → run → after_run
+  - tracker le résultat via RuntimeState
+  - gérer les erreurs
 
-- résoudre les règles de sécurité (via resolver)
-- vérifier les locks (via runtime state)
-- lancer les tâches (sync / thread / async)
-- gérer les erreurs
-- gérer le cancel / reprise
-
-C'est le moteur d'exécution du scheduler.
+L'Executor ne gère PAS :
+  - la sécurité        → Resolver
+  - les locks          → RuntimeState
+  - les ressources     → RuntimeState
 """
+
+
 class Executor:
 
     def __init__(self, runtime):
         self.runtime = runtime
 
-    # -------------------------
+    # ═════════════════════════════════════════════════════════════════
     # ENTRY POINT
-    # -------------------------
-    def execute(self, task):
+    # ═════════════════════════════════════════════════════════════════
 
+    def execute(self, task):
+        """
+        Point d'entrée principal.
+        Dispatch vers le mode d'exécution approprié.
+        """
         if task is None:
             return None
 
@@ -30,7 +37,7 @@ class Executor:
         if hasattr(task, "set_runtime"):
             task.set_runtime(self.runtime)
 
-        # Choix du mode d’exécution
+        # Choix du mode d'exécution
         executor_type = getattr(task, "executor", "default")
 
         if executor_type == "default":
@@ -42,16 +49,16 @@ class Executor:
         else:
             raise ValueError(f"Unknown executor type: {executor_type}")
 
-    # -------------------------
-    # DEFAULT EXECUTION
-    # -------------------------
+    # ═════════════════════════════════════════════════════════════════
+    # MODES D'EXÉCUTION
+    # ═════════════════════════════════════════════════════════════════
+
     def _execute_default(self, task):
+        """Exécution synchrone directe."""
         return self._run_task(task)
 
-    # -------------------------
-    # THREADED EXECUTION
-    # -------------------------
     def _execute_threaded(self, task):
+        """Exécution dans un thread dédié."""
         import threading
 
         result = {}
@@ -65,11 +72,21 @@ class Executor:
 
         return result.get("value")
 
-    # -------------------------
+    # ═════════════════════════════════════════════════════════════════
     # CORE TASK EXECUTION
-    # -------------------------
-    def _run_task(self, task):
+    # ═════════════════════════════════════════════════════════════════
 
+    def _run_task(self, task):
+        """
+        Exécute le cycle complet d'une task :
+          1. start tracking
+          2. before_run hook
+          3. run (exécution réelle)
+          4. after_run hook
+          5. success tracking
+
+        En cas d'erreur → fail tracking + re-raise.
+        """
         # START tracking
         self.runtime.state.start(task)
 
@@ -91,7 +108,6 @@ class Executor:
             return result
 
         except Exception as e:
-
             # FAILURE
             self.runtime.state.fail(task, e)
 
@@ -100,57 +116,3 @@ class Executor:
                 self.runtime.monitor.log(f"Task failed: {task} -> {e}")
 
             raise
-
-    def _resolve(self, intent):
-        """
-        Résout les règles de sécurité.
-        """
-        pass
-
-    def _can_run(self, resources):
-        """
-        Vérifie si les ressources sont disponibles.
-        """
-        pass
-
-    def _lock(self, locks):
-        """
-        Applique les verrous.
-        """
-        pass
-
-    def _unlock(self, locks):
-        """
-        Libère les verrous.
-        """
-        pass
-
-    def _run_task(self, intent):
-        """
-        Lance réellement la tâche.
-
-        Peut utiliser :
-        - direct (sync)
-        - thread
-        - asyncio
-        """
-        pass
-
-    def _handle_error(self, intent, error):
-        """
-        Gestion des erreurs d'exécution.
-        """
-        pass
-
-    def cancel(self, intent_id):
-        """
-        Annule une tâche en cours.
-        """
-        pass
-
-
-    def resume(self, intent):
-        """
-        Reprend une tâche.
-        """
-        pass
