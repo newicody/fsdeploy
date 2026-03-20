@@ -1,19 +1,14 @@
 """
-Executor
+fsdeploy.scheduler.core.executor
+=================================
+Exécution des tâches.
 
-Responsable de l'exécution des tâches.
-
-Fonctions :
-  - lancer les tâches (sync / thread)
-  - gérer le cycle before_run → run → after_run
-  - tracker le résultat via RuntimeState
-  - gérer les erreurs
-
-L'Executor ne gère PAS :
-  - la sécurité        → Resolver
-  - les locks          → RuntimeState
-  - les ressources     → RuntimeState
+L'Executor ne gère PAS la sécurité, les locks ou les ressources.
+Il exécute le cycle : before_run → run → after_run avec tracking d'état.
 """
+
+import threading
+from typing import Any, Optional
 
 
 class Executor:
@@ -25,27 +20,22 @@ class Executor:
     # ENTRY POINT
     # ═════════════════════════════════════════════════════════════════
 
-    def execute(self, task):
+    def execute(self, task) -> Any:
         """
-        Point d'entrée principal.
-        Dispatch vers le mode d'exécution approprié.
+        Point d'entrée. Dispatch vers le mode d'exécution approprié.
         """
         if task is None:
             return None
 
-        # Attacher runtime si nécessaire
         if hasattr(task, "set_runtime"):
             task.set_runtime(self.runtime)
 
-        # Choix du mode d'exécution
         executor_type = getattr(task, "executor", "default")
 
         if executor_type == "default":
             return self._execute_default(task)
-
         elif executor_type == "threaded":
             return self._execute_threaded(task)
-
         else:
             raise ValueError(f"Unknown executor type: {executor_type}")
 
@@ -53,32 +43,36 @@ class Executor:
     # MODES D'EXÉCUTION
     # ═════════════════════════════════════════════════════════════════
 
-    def _execute_default(self, task):
+    def _execute_default(self, task) -> Any:
         """Exécution synchrone directe."""
         return self._run_task(task)
 
-    def _execute_threaded(self, task):
+    def _execute_threaded(self, task) -> Any:
         """Exécution dans un thread dédié."""
-        import threading
-
-        result = {}
+        result_holder: dict[str, Any] = {}
+        error_holder: list[Exception] = []
 
         def target():
-            result["value"] = self._run_task(task)
+            try:
+                result_holder["value"] = self._run_task(task)
+            except Exception as e:
+                error_holder.append(e)
 
-        thread = threading.Thread(target=target)
+        thread = threading.Thread(target=target, daemon=True)
         thread.start()
         thread.join()
 
-        return result.get("value")
+        if error_holder:
+            raise error_holder[0]
+        return result_holder.get("value")
 
     # ═════════════════════════════════════════════════════════════════
     # CORE TASK EXECUTION
     # ═════════════════════════════════════════════════════════════════
 
-    def _run_task(self, task):
+    def _run_task(self, task) -> Any:
         """
-        Exécute le cycle complet d'une task :
+        Cycle complet :
           1. start tracking
           2. before_run hook
           3. run (exécution réelle)
@@ -87,32 +81,24 @@ class Executor:
 
         En cas d'erreur → fail tracking + re-raise.
         """
-        # START tracking
         self.runtime.state.start(task)
 
         try:
-            # BEFORE HOOK
             if hasattr(task, "before_run"):
                 task.before_run()
 
-            # EXECUTION
             result = task.run()
 
-            # AFTER HOOK
             if hasattr(task, "after_run"):
                 task.after_run()
 
-            # SUCCESS
             self.runtime.state.success(task, result)
-
             return result
 
         except Exception as e:
-            # FAILURE
             self.runtime.state.fail(task, e)
 
-            # Logging si dispo
-            if hasattr(self.runtime, "monitor"):
-                self.runtime.monitor.log(f"Task failed: {task} -> {e}")
+            if hasattr(self.runtime, "monitor") and self.runtime.monitor:
+                self.runtime.monitor.log_error(task, e)
 
             raise

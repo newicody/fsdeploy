@@ -1,66 +1,89 @@
 """
-Security Decorator
+fsdeploy.scheduler.security.decorator
+======================================
+Décorateur DSL pour annoter les Tasks avec des métadonnées de sécurité.
 
-Permet de lier les classes (tasks) à une hiérarchie de configuration.
+Usage :
+    security = SecurityDecorator()
 
-Exemples :
+    @security.dataset.snapshot
+    class SnapshotCreateTask(Task):
+        ...
 
-@security.dataset.snapshot
-@security.dataset.create(entire=True)
+    @security.kernel.install(require_root=True)
+    class KernelInstallTask(Task):
+        ...
 
-Le décorateur ne contient PAS la logique de sécurité.
-Il expose uniquement :
-
-- un chemin hiérarchique (path)
-- des options locales
-
-Le scheduler combinera ensuite :
-
-decorator metadata + config → règles effectives
+Le décorateur NE CONTIENT PAS la logique de sécurité.
+Il expose : un chemin hiérarchique (path) + des options locales.
+Le SecurityResolver combine ensuite : decorator metadata + config → règles effectives.
 """
+
+from typing import Any, Callable
+
+
+class SecurityNode:
+    """
+    Nœud dans la hiérarchie du décorateur.
+    Chaque accès d'attribut crée un sous-nœud.
+    L'appel terminal décore la classe.
+    """
+
+    def __init__(self, path: list[str] | None = None):
+        self.path = path or []
+
+    def __getattr__(self, name: str) -> "SecurityNode":
+        """Étend le chemin : dataset → snapshot → create."""
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return SecurityNode(self.path + [name])
+
+    def __call__(self, target=None, **options):
+        """
+        Deux usages :
+
+        1. @security.dataset.snapshot        (target = la classe)
+        2. @security.dataset.snapshot(opt=v)  (target = None, retourne un wrapper)
+        """
+        if target is not None and callable(target):
+            # Usage sans parenthèses : @security.dataset.snapshot
+            return self._apply(target, options)
+
+        # Usage avec options : @security.dataset.snapshot(require_root=True)
+        def wrapper(cls):
+            return self._apply(cls, options)
+        return wrapper
+
+    def _apply(self, cls, options: dict) -> type:
+        """Injecte les métadonnées de sécurité dans la classe."""
+        cls._security_path = ".".join(self.path)
+        cls._security_options = options
+        return cls
+
+    def __repr__(self) -> str:
+        return f"SecurityNode({'.'.join(self.path)})"
+
 
 class SecurityDecorator:
     """
     Point d'entrée du décorateur.
+
+    Usage :
+        security = SecurityDecorator()
+
+        @security.dataset.snapshot
+        class MyTask: ...
     """
 
-    def __getattr__(self, name):
-        """
-        Permet de construire dynamiquement la hiérarchie.
-        """
-        pass
-
+    def __getattr__(self, name: str) -> SecurityNode:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return SecurityNode([name])
 
     def __call__(self, **options):
-        """
-        Permet l'utilisation directe :
-        @security(...)
-        """
-        pass
-
-class SecurityNode:
-    """
-    Représente un nœud dans la hiérarchie du décorateur.
-    """
-
-    def __init__(self, path):
-
-        # chemin hiérarchique (liste)
-        self.path = path
+        """Usage direct : @security(require_root=True)."""
+        return SecurityNode([]).__call__(**options)
 
 
-    def __getattr__(self, name):
-        """
-        Permet d'étendre le chemin :
-        dataset → snapshot → create
-        """
-        pass
-
-
-    def __call__(self, **options):
-        """
-        Applique le décorateur à une classe.
-        """
-        pass
-
-
+# Singleton global
+security = SecurityDecorator()
