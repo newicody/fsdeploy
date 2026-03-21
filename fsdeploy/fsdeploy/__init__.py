@@ -11,7 +11,7 @@ Le code métier vit dans lib/ — ce package gère le bootstrap
 
 __version__ = "0.1.0"
 __author__ = "newicody"
-__license__ = "MIT"
+__license__ = "BSD-2-Clause"
 
 import os
 import sys

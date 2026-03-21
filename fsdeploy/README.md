@@ -5,7 +5,7 @@
 **Système de déploiement ZFS/ZFSBootMenu depuis Debian Live Trixie**
 
 [![Development Status](https://img.shields.io/badge/status-alpha%20%2F%20development-orange?style=for-the-badge)](https://github.com/newicody/fsdeploy)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-BSD--2--Clause-blue.svg?style=for-the-badge)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg?style=for-the-badge)](https://www.python.org/downloads/)
 [![ZFS 2.2+](https://img.shields.io/badge/ZFS-2.2+-green.svg?style=for-the-badge)](https://openzfs.org)
 
