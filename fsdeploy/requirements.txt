@@ -1,0 +1,36 @@
+# =============================================================================
+# fsdeploy — requirements.txt
+# =============================================================================
+# pip install -r requirements.txt
+#
+# Organisé par rôle. Les versions minimales sont testées sur Debian Trixie.
+# =============================================================================
+
+# ── TUI + rendu terminal ─────────────────────────────────────────────────────
+textual-web>=0.5.0          # TUI async + serveur WebSocket navigateur (inclut textual)
+rich>=13.0.0                # Rendu console coloré hors TUI, logs bootstrap
+
+# ── Configuration ────────────────────────────────────────────────────────────
+configobj>=5.0.8            # INI hiérarchique + validation, partagé deploy/initramfs/boot
+
+# ── CLI ──────────────────────────────────────────────────────────────────────
+typer>=0.12.0               # Sous-commandes CLI sans TUI (fsdeploy detect --pool tank)
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+structlog>=23.0.0           # Logs structurés JSON/texte avec contexte par opération
+
+# ── Système / hardware ──────────────────────────────────────────────────────
+psutil>=5.9.0               # RAM, CPU, disques, processus sans appels shell
+pyudev>=0.24.0              # Énumération disques/partitions via udev (modèle, serial, by-id)
+
+# ── Versions kernel ─────────────────────────────────────────────────────────
+packaging>=23.0             # Comparaison sémantique de versions kernel (6.6.47 < 6.12.0)
+
+# ── Affichage humain ────────────────────────────────────────────────────────
+humanize>=4.0.0             # Tailles et durées lisibles (1.2 GB, il y a 3 min)
+
+# ── Surveillance fichiers ───────────────────────────────────────────────────
+watchfiles>=0.21.0          # inotify async sur /boot (nouveau kernel → rafraîchir UI)
+
+# ── Stream YouTube ──────────────────────────────────────────────────────────
+python-ffmpeg>=2.0.0        # Construction déclarative des pipelines ffmpeg (RTMP)

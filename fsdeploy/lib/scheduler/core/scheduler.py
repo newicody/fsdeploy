@@ -6,13 +6,17 @@ Boucle principale du scheduler.
 Cycle :
   1. _process_events()  : EventQueue → IntentQueue (via handlers ou event.to_intents())
   2. _process_intents() : Intent → resolve → Tasks → check locks → execute ou wait
-  3. _process_waiting()  : retry des tasks en attente quand les locks se libèrent
+  3. _process_waiting() : retry des tasks en attente quand les locks se libèrent
 
 Le Scheduler tourne en boucle infinie (processus racine).
 La TUI est un enfant optionnel et jetable.
+
+Threading :
+  - Les tasks "default" sont exécutées inline (bloquent le cycle).
+  - Les tasks "threaded" sont soumises au ThreadPoolExecutor de l'Executor
+    et NE BLOQUENT PAS le cycle. L'Executor gère state + locks via callback.
 """
 
-import time
 import signal
 import threading
 from typing import Optional
@@ -88,6 +92,12 @@ class Scheduler:
             if event is None:
                 continue
 
+            # Les événements task.completed/task.failed servent uniquement
+            # à réveiller _process_waiting au prochain cycle — pas besoin
+            # de les convertir en intents.
+            if event.name in ("task.completed", "task.failed"):
+                continue
+
             intents = self._event_to_intents(event)
 
             for intent in intents:
@@ -147,26 +157,39 @@ class Scheduler:
                 self.runtime.fail(intent, e)
 
     def _schedule_task(self, task, intent) -> None:
-        """Résout une task et l'exécute ou la met en attente."""
+        """
+        Résout une task et l'exécute ou la met en attente.
+
+        Le Scheduler ne gère PAS les locks — il les passe à l'Executor
+        qui est responsable de :
+          - state.start(task)
+          - _run_lifecycle(task)
+          - state.success(task) / state.fail(task)
+          - state.release_locks(locks)
+        """
         context = getattr(intent, "context", {})
 
         result = self.resolver.resolve(task, context=context)
-
         locks = result.get("locks", [])
 
         if self.runtime.can_run(locks):
-            task.set_runtime(self.runtime)
-            self.runtime.add_running(task)
+            # Acquérir les locks AVANT de passer à l'executor
+            self.runtime.state.acquire_locks(locks)
 
+            # Injecter le runtime
+            task.set_runtime(self.runtime)
+
+            # Déléguer entièrement à l'executor
+            # Pour "default" : synchrone, retourne après fin
+            # Pour "threaded" : retourne immédiatement
             try:
-                self.executor.execute(task)
+                self.executor.execute(task, locks=locks)
             except Exception:
-                pass  # déjà tracké par executor via state.fail()
-            finally:
-                # Libérer les locks après exécution
+                # Sécurité : si execute() elle-même échoue (pas la task),
+                # on libère les locks manuellement
                 self.runtime.state.release_locks(locks)
         else:
-            # Stocker les locks nécessaires pour le retry
+            # Pas de locks disponibles — mise en attente
             task._pending_locks = locks
             self.runtime.add_waiting(task)
 
@@ -175,23 +198,34 @@ class Scheduler:
     # ═════════════════════════════════════════════════════════════════
 
     def _process_waiting(self) -> None:
+        """
+        Retry des tasks en attente.
+
+        Appelé à chaque cycle. Les tasks threaded qui terminent émettent
+        un événement task.completed qui garantit un cycle de _process_waiting
+        même si aucun autre événement n'arrive.
+        """
         for task in list(self.runtime.waiting_queue):
             try:
                 locks = getattr(task, "_pending_locks", [])
 
                 if self.runtime.can_run(locks):
                     self.runtime.remove_waiting(task)
-                    task.set_runtime(self.runtime)
-                    self.runtime.add_running(task)
 
+                    # Acquérir les locks
+                    self.runtime.state.acquire_locks(locks)
+
+                    # Injecter le runtime
+                    task.set_runtime(self.runtime)
+
+                    # Déléguer à l'executor
                     try:
-                        self.executor.execute(task)
+                        self.executor.execute(task, locks=locks)
                     except Exception:
-                        pass
-                    finally:
                         self.runtime.state.release_locks(locks)
 
             except Exception as e:
+                self.runtime.remove_waiting(task)
                 self.runtime.fail(task, e)
 
     # ═════════════════════════════════════════════════════════════════
@@ -222,3 +256,16 @@ class Scheduler:
 
     def on_error(self, hook) -> None:
         self._on_error.append(hook)
+
+    # ═════════════════════════════════════════════════════════════════
+    # INTROSPECTION
+    # ═════════════════════════════════════════════════════════════════
+
+    def status(self) -> dict:
+        """Résumé de l'état du scheduler."""
+        return {
+            "running": self._running,
+            "state": self.runtime.summary(),
+            "executor_pending": self.executor.pending_count,
+            "executor_pending_ids": self.executor.pending_ids,
+        }
