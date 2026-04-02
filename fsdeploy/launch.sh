@@ -529,22 +529,42 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 step "7/9 — Dépôt Git"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 7. DÉPÔT GIT (Version robuste)
+# ─────────────────────────────────────────────────────────────────────────────
+step "7/9 — Dépôt Git"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Cas 1 : On est déjà dans le dossier de dév
 if [[ $DEV_MODE -eq 1 && -f "${SCRIPT_DIR}/fsdeploy/__init__.py" ]]; then
     INSTALL_DIR="$SCRIPT_DIR"
-    info "Mode DEV — ${INSTALL_DIR}"
+    info "Mode DEV — Utilisation du dossier courant : ${INSTALL_DIR}"
 else
+    # Cas 2 : Le dépôt existe déjà, on met à jour (pull)
     if [[ -d "${INSTALL_DIR}/.git" ]]; then
-        as_user git -C "$INSTALL_DIR" pull --quiet origin "$REPO_BRANCH"
-        ok "Dépôt mis à jour → ${INSTALL_DIR}"
+        as_user git -C "$INSTALL_DIR" fetch --quiet origin
+        as_user git -C "$INSTALL_DIR" reset --hard "origin/${REPO_BRANCH}"
+        ok "Dépôt mis à jour via reset --hard"
+    
+    # Cas 3 : Le dossier existe mais n'est pas un dépôt Git (le problème que tu as vu)
     else
-        as_user git clone --quiet --branch "$REPO_BRANCH" "$REPO_URL" "$INSTALL_DIR"
-        ok "Dépôt cloné → ${INSTALL_DIR}"
+        info "Initialisation du dépôt dans un dossier existant..."
+        as_user mkdir -p "$INSTALL_DIR"
+        as_user git -C "$INSTALL_DIR" init --quiet
+        as_user git -C "$INSTALL_DIR" remote add origin "$REPO_URL" 2>/dev/null || true
+        as_user git -C "$INSTALL_DIR" fetch --quiet origin
+        
+        # On force l'alignement sur la branche distante, même s'il y a des fichiers locaux
+        as_user git -C "$INSTALL_DIR" checkout -f "$REPO_BRANCH"
+        as_user git -C "$INSTALL_DIR" branch --set-upstream-to="origin/${REPO_BRANCH}" "$REPO_BRANCH" 2>/dev/null || true
+        ok "Dépôt initialisé et synchronisé dans ${INSTALL_DIR}"
     fi
-    srun chown -R "${REAL_USER}:${FSDEPLOY_GROUP}" "$INSTALL_DIR"
-    srun chmod -R 2775 "$INSTALL_DIR"
 fi
+
+# Ré-appliquer les permissions après le clone/fetch
+srun chown -R "${REAL_USER}:${FSDEPLOY_GROUP}" "$INSTALL_DIR"
+srun chmod -R 2775 "$INSTALL_DIR"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. ENVIRONNEMENT VIRTUEL PYTHON + FICHIER .env
