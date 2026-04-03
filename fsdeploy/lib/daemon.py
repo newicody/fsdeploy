@@ -15,7 +15,7 @@ Connecte tout :
   - Scheduler (non-bloquant, ThreadPoolExecutor)
   - Bus (Timer, Inotify, Udev, Socket)
   - Intents (tous importes au boot pour @register_intent)
-  - TUI Textual (processus enfant avec restart auto)
+  - TUI Textual (main thread pour signal handlers)
 
 Usage :
   python3 -m fsdeploy                  # TUI interactive
@@ -56,7 +56,7 @@ class FsDeployDaemon:
       - Demarrer le scheduler (non-bloquant)
       - Demarrer les sources d'evenements (bus)
       - Enregistrer les handlers d'intents
-      - Demarrer la TUI (optionnel, processus enfant)
+      - Demarrer la TUI (main thread — requis par Textual)
       - Gerer le restart de la TUI avec backoff
       - Arret propre sur SIGTERM/SIGINT
     """
@@ -108,7 +108,6 @@ class FsDeployDaemon:
 
         # ── Bus sources ───────────────────────────────────────────
         self._sources: list = []
-        self._tui_process: Optional[subprocess.Popen] = None
         self._tui_backoff = 1
         self._tui_max_backoff = self.config.get("tui_max_backoff", 60)
         self._running = False
@@ -168,9 +167,11 @@ class FsDeployDaemon:
         if self.config.get("bus_udev", True):
             self._sources.append(UdevSource(eq))
 
-        # Socket
+        # Socket — chemin user-writable si /run echoue
         if self.config.get("bus_socket", True):
-            socket_path = self.config.get("socket_path", "/run/fsdeploy.sock")
+            socket_path = self.config.get("socket_path", "")
+            if not socket_path:
+                socket_path = _resolve_socket_path()
             self._sources.append(SocketSource(eq, socket_path=socket_path))
 
     def _setup_scheduler_hooks(self) -> None:
@@ -200,65 +201,73 @@ class FsDeployDaemon:
         self.scheduler.on_cycle_end(on_cycle_end)
 
     # ═══════════════════════════════════════════════════════════════
-    # TUI
+    # SCHEDULER (background thread)
     # ═══════════════════════════════════════════════════════════════
 
-    def _start_tui(self) -> None:
-        """Demarre la TUI Textual dans un processus enfant."""
+    def _run_scheduler_background(self) -> None:
+        """
+        Execute le scheduler dans un thread background.
+
+        Le scheduler tourne en boucle jusqu'a self._running == False.
+        Cela libere le main thread pour Textual (qui a besoin des
+        signal handlers POSIX — SIGTSTP, SIGWINCH, etc.).
+        """
         try:
-            from ui.app import FsDeployApp
-
-            configobj = self.config.get("configobj")
-            mode = "deploy"
-            if configobj:
-                mode = configobj.get("env.mode", "deploy")
-
-            # La TUI tourne dans le meme processus (thread Textual)
-            # car elle a besoin d'acceder au runtime et au store
-            self._tui_thread = threading.Thread(
-                target=self._run_tui,
-                args=(configobj, mode),
-                daemon=True,
-            )
-            self._tui_thread.start()
-
-        except ImportError:
-            # Textual pas installe — mode daemon
-            pass
-
-    def _run_tui(self, configobj, mode: str) -> None:
-        """Execute la TUI dans un thread dedie."""
-        try:
-            from ui.app import FsDeployApp
-
-            app = FsDeployApp(
-                runtime=self.runtime,
-                store=self.store,
-                config=configobj,
-                mode=mode,
-            )
-            app.run()
+            self.scheduler.run()
         except Exception:
             pass
 
-    def _monitor_tui(self) -> None:
-        """Surveille le thread TUI et le redemarre si necessaire."""
+    # ═══════════════════════════════════════════════════════════════
+    # TUI (main thread)
+    # ═══════════════════════════════════════════════════════════════
+
+    def _run_tui_main(self) -> None:
+        """
+        Execute la TUI Textual dans le main thread.
+
+        Textual requiert le main thread pour :
+          - signal.signal(SIGTSTP, ...) dans LinuxDriver
+          - signal.signal(SIGWINCH, ...) pour le resize terminal
+          - Boucle asyncio principale
+
+        Si la TUI crash, on la redemarre avec backoff exponentiel.
+        Le scheduler continue dans son thread background.
+        """
+        configobj = self.config.get("configobj")
+        mode = "deploy"
+        if configobj:
+            mode = configobj.get("env.mode", "deploy")
+
         while self._running:
-            if hasattr(self, "_tui_thread") and self._tui_thread is not None:
-                if not self._tui_thread.is_alive():
-                    auto_restart = self.config.get("tui_auto_restart", True)
-                    if auto_restart and self._running:
-                        time.sleep(self._tui_backoff)
-                        self._tui_backoff = min(
-                            self._tui_backoff * 2,
-                            self._tui_max_backoff,
-                        )
-                        self._start_tui()
-                    else:
-                        break
-                else:
-                    self._tui_backoff = 1
-            time.sleep(2)
+            try:
+                from ui.app import FsDeployApp
+
+                app = FsDeployApp(
+                    runtime=self.runtime,
+                    store=self.store,
+                    config=configobj,
+                    mode=mode,
+                )
+                app.run()
+
+                # app.run() retourne normalement = quit propre
+                break
+
+            except ImportError:
+                # Textual pas installe — bascule en mode daemon
+                break
+
+            except Exception:
+                # TUI crash — restart avec backoff
+                auto_restart = self.config.get("tui_auto_restart", True)
+                if not auto_restart or not self._running:
+                    break
+                time.sleep(self._tui_backoff)
+                self._tui_backoff = min(
+                    self._tui_backoff * 2,
+                    self._tui_max_backoff,
+                )
+                continue
 
     # ═══════════════════════════════════════════════════════════════
     # MAIN
@@ -269,8 +278,8 @@ class FsDeployDaemon:
         Point d'entree principal.
 
         Modes :
-          tui    : scheduler + TUI
-          daemon : scheduler seul (service)
+          tui    : scheduler (thread) + TUI (main thread)
+          daemon : scheduler seul (main thread, bloquant)
           stream : scheduler + stream YouTube
           bare   : scheduler seul, pas de TUI
         """
@@ -304,26 +313,54 @@ class FsDeployDaemon:
                 },
             ))
 
-        # 6. TUI
-        tui_monitor = None
-        tui_enabled = self.config.get("tui_enabled", True)
-        if mode == "tui" and tui_enabled:
-            self._start_tui()
-            tui_monitor = threading.Thread(
-                target=self._monitor_tui, daemon=True)
-            tui_monitor.start()
-
-        # 7. Log demarrage
+        # 6. Log demarrage
         self.store.log_event("daemon.started", source="daemon",
                              mode=mode, pid=str(os.getpid()))
 
-        # 8. Boucle principale du scheduler (bloquante)
+        # 7. Scheduler dans un thread background (toujours)
+        sched_thread = threading.Thread(
+            target=self._run_scheduler_background,
+            name="fsdeploy-scheduler",
+            daemon=True,
+        )
+        sched_thread.start()
+
+        # 8. TUI ou boucle d'attente dans le main thread
         try:
-            self.scheduler.run()
+            tui_enabled = self.config.get("tui_enabled", True)
+            if mode == "tui" and tui_enabled:
+                # TUI dans le main thread (requis par Textual)
+                self._run_tui_main()
+            else:
+                # Pas de TUI — attendre dans le main thread
+                self._wait_main(sched_thread)
         except KeyboardInterrupt:
             pass
         finally:
             self._shutdown()
+
+    def _wait_main(self, sched_thread: threading.Thread) -> None:
+        """
+        Boucle d'attente pour les modes sans TUI (daemon, bare, stream).
+        Le main thread attend que le scheduler s'arrete ou qu'un signal arrive.
+        """
+        # Installer les signal handlers dans le main thread
+        original_sigterm = signal.getsignal(signal.SIGTERM)
+        original_sigint = signal.getsignal(signal.SIGINT)
+
+        def _handle_stop(signum, frame):
+            self._running = False
+            self.scheduler.stop()
+
+        signal.signal(signal.SIGTERM, _handle_stop)
+        signal.signal(signal.SIGINT, _handle_stop)
+
+        try:
+            while self._running and sched_thread.is_alive():
+                sched_thread.join(timeout=1.0)
+        finally:
+            signal.signal(signal.SIGTERM, original_sigterm)
+            signal.signal(signal.SIGINT, original_sigint)
 
     def _shutdown(self) -> None:
         """Arret propre de tous les composants."""
@@ -348,3 +385,30 @@ class FsDeployDaemon:
             pass
 
         self.store.log_event("daemon.stopped", source="daemon")
+
+
+# ═══════════════════════════════════════════════════════════════════
+# HELPERS
+# ═══════════════════════════════════════════════════════════════════
+
+def _resolve_socket_path() -> str:
+    """
+    Determine le meilleur chemin pour le socket Unix.
+
+    Priorite :
+      1. /run/fsdeploy.sock   (si writable — root ou sudoers)
+      2. $XDG_RUNTIME_DIR/fsdeploy.sock  (user session — systemd)
+      3. /tmp/fsdeploy-<uid>.sock  (fallback universel)
+    """
+    # /run si accessible
+    run_path = Path("/run/fsdeploy.sock")
+    if run_path.parent.exists() and os.access(str(run_path.parent), os.W_OK):
+        return str(run_path)
+
+    # XDG_RUNTIME_DIR (ex: /run/user/1000)
+    xdg = os.environ.get("XDG_RUNTIME_DIR", "")
+    if xdg and Path(xdg).is_dir():
+        return str(Path(xdg) / "fsdeploy.sock")
+
+    # Fallback /tmp avec uid pour eviter les collisions
+    return f"/tmp/fsdeploy-{os.getuid()}.sock"
