@@ -8,8 +8,8 @@ Cycle :
   2. _process_intents() : Intent → resolve → Tasks → check locks → execute ou wait
   3. _process_waiting() : retry des tasks en attente quand les locks se libèrent
 
-Le Scheduler tourne en boucle infinie (processus racine).
-La TUI est un enfant optionnel et jetable.
+Le Scheduler peut tourner dans le main thread (mode daemon/bare)
+ou dans un thread background (mode TUI — Textual prend le main thread).
 
 Threading :
   - Les tasks "default" sont exécutées inline (bloquent le cycle).
@@ -22,9 +22,14 @@ import threading
 from typing import Optional
 
 
+def _is_main_thread() -> bool:
+    """Retourne True si on est dans le thread principal."""
+    return threading.current_thread() is threading.main_thread()
+
+
 class Scheduler:
     """
-    Processus racine de fsdeploy.
+    Boucle principale du scheduler fsdeploy.
     """
 
     def __init__(self, resolver, executor, runtime):
@@ -45,13 +50,21 @@ class Scheduler:
     # ═════════════════════════════════════════════════════════════════
 
     def run(self) -> None:
-        """Boucle principale. Bloquante."""
+        """
+        Boucle principale. Bloquante.
+
+        Les signal handlers ne sont installés QUE si le scheduler
+        tourne dans le main thread. En mode TUI, le scheduler tourne
+        dans un thread background et les signaux sont gérés par
+        le daemon (main thread → Textual → SIGTSTP/SIGWINCH).
+        """
         self._running = True
         self._stop_event.clear()
 
-        # Signaux
-        signal.signal(signal.SIGTERM, self._handle_signal)
-        signal.signal(signal.SIGINT, self._handle_signal)
+        # Signaux — uniquement dans le main thread
+        if _is_main_thread():
+            signal.signal(signal.SIGTERM, self._handle_signal)
+            signal.signal(signal.SIGINT, self._handle_signal)
 
         while self._running and not self._stop_event.is_set():
             try:
