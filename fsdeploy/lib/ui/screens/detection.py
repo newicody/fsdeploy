@@ -3,16 +3,22 @@ fsdeploy.ui.screens.detection
 ===============================
 Ecran de detection — 100% bus events.
 
+Compatible : Textual >=8.2.1 / Rich >=14.3.3
+
 ZERO import de lib/. ZERO subprocess. Toutes les operations :
 
-  bridge.emit("pool.status")                    → pools detectes
-  bridge.emit("dataset.list", pool="boot_pool") → datasets listes
-  bridge.emit("detection.probe_datasets", datasets=[...]) → roles detectes
-  bridge.emit("detection.partitions")           → partitions detectees
-  bridge.emit("pool.import", pool="fast_pool")  → import pool
+  bridge.emit("pool.status")                    -> pools detectes
+  bridge.emit("dataset.list", pool="boot_pool") -> datasets listes
+  bridge.emit("detection.probe_datasets", datasets=[...]) -> roles detectes
+  bridge.emit("detection.partitions")           -> partitions detectees
+  bridge.emit("pool.import", pool="fast_pool")  -> import pool
 
 Les resultats arrivent via les callbacks enregistres sur chaque emit.
 Le scheduler gere : locks, security, logging, HuffmanStore.
+
+Changement Textual 8.x :
+  - DataTable : RowSelected n'est emis qu'au 2eme clic
+  - Utiliser on_data_table_row_highlighted pour selection au 1er clic
 """
 
 import json
@@ -72,7 +78,7 @@ class DetectionScreen(Screen):
         # Etat accumule
         self._pools: list[dict] = []
         self._datasets: list[dict] = []
-        self._probes: dict[str, dict] = {}   # dataset_name → {role, confidence, ...}
+        self._probes: dict[str, dict] = {}   # dataset_name -> {role, confidence, ...}
         self._partitions: list[dict] = []
 
         # Tickets en cours pour le suivi multi-phases
@@ -137,6 +143,10 @@ class DetectionScreen(Screen):
             self.action_validate()
         elif bid == "btn-import":
             self._import_pools()
+
+    # ── Textual 8.x : RowHighlighted au lieu de RowSelected ────────
+    # DataTable n'emet RowSelected qu'au 2eme clic dans Textual 8.x.
+    # On n'a pas de selection specifique ici, mais le pattern est pret.
 
     # ═══════════════════════════════════════════════════════════════
     # PHASE 1 : pools + partitions
@@ -280,12 +290,12 @@ class DetectionScreen(Screen):
         self.bridge.emit("detection.probe_datasets",
                          datasets=ds_list,
                          callback=self._on_probes_done)
-        self._safe_log(f"  -> detection.probe_datasets ({len(ds_list)} datasets)")
+        self._safe_log(
+            f"  -> detection.probe_datasets ({len(ds_list)} datasets)")
 
     def _on_probes_done(self, ticket) -> None:
         """Callback : probes terminees."""
         if ticket.status == "completed":
-            # Le resultat peut etre un dict par dataset ou une liste
             result = ticket.result
             if isinstance(result, dict) and "dataset" in result:
                 self._probes[result["dataset"]] = result
@@ -330,14 +340,18 @@ class DetectionScreen(Screen):
         self._refresh_tables()
         self.query_one("#btn-scan", Button).disabled = False
 
-        n_unknown = sum(1 for ds in self._datasets
-                        if self._probes.get(ds.get("name", ""), {})
-                            .get("role", "unknown") == "unknown")
+        n_unknown = sum(
+            1 for ds in self._datasets
+            if self._probes.get(ds.get("name", ""), {})
+                .get("role", "unknown") == "unknown"
+        )
         status = "complete" if self._pools and n_unknown == 0 else "partial"
         icon = CHECK if status == "complete" else WARN
-        self._set_status(f"{icon} {status} — {len(self._pools)} pools, "
-                         f"{len(self._datasets)} datasets, "
-                         f"{len(self._partitions)} partitions")
+        self._set_status(
+            f"{icon} {status} — {len(self._pools)} pools, "
+            f"{len(self._datasets)} datasets, "
+            f"{len(self._partitions)} partitions"
+        )
         self.query_one("#btn-validate", Button).disabled = (not self._pools)
         self._log("=== Detection terminee ===")
 
@@ -464,8 +478,10 @@ class DetectionScreen(Screen):
 
         report = {
             "pools": self._pools,
-            "datasets": [{**ds, **self._probes.get(ds.get("name", ""), {})}
-                         for ds in self._datasets],
+            "datasets": [
+                {**ds, **self._probes.get(ds.get("name", ""), {})}
+                for ds in self._datasets
+            ],
             "partitions": self._partitions,
         }
         cfg.set("detection.report_json", json.dumps(report))
@@ -492,6 +508,18 @@ class DetectionScreen(Screen):
         except Exception:
             self._log(msg)
 
+    def _progress(self, value: int) -> None:
+        try:
+            self.query_one("#progress-bar", ProgressBar).update(progress=value)
+        except Exception:
+            pass
+
+    def _safe_progress(self, value: int) -> None:
+        try:
+            self.app.call_from_thread(self._progress, value)
+        except Exception:
+            self._progress(value)
+
     def _set_status(self, text: str) -> None:
         try:
             self.query_one("#detection-status", Static).update(
@@ -499,20 +527,7 @@ class DetectionScreen(Screen):
         except Exception:
             pass
 
-    def _progress(self, val: int) -> None:
-        try:
-            self.query_one("#progress-bar", ProgressBar).update(progress=val)
-        except Exception:
-            pass
-
-    def _safe_progress(self, val: int) -> None:
-        try:
-            self.app.call_from_thread(self._progress, val)
-        except Exception:
-            self._progress(val)
-
     def _safe_call(self, fn) -> None:
-        """Appelle fn dans le thread Textual."""
         try:
             self.app.call_from_thread(fn)
         except Exception:

@@ -1,6 +1,15 @@
 """
-fsdeploy.ui.screens.snapshots — Gestion snapshots ZFS, 100% bus events.
+fsdeploy.ui.screens.snapshots
+================================
+Gestion des snapshots ZFS — 100% bus events.
+
+Compatible : Textual >=8.2.1 / Rich >=14.3.3
+
+Changement Textual 8.x :
+  - on_data_table_row_selected → on_data_table_row_highlighted
+    (RowSelected n'est emis qu'au 2eme clic en 8.x)
 """
+
 import os
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -9,7 +18,10 @@ from textual.screen import Screen
 from textual.widgets import Button, DataTable, Input, Label, Log, Static
 
 IS_FB = os.environ.get("TERM") == "linux"
-CHECK, CROSS, WARN, ARROW = ("[OK]","[!!]","[??]","->") if IS_FB else ("✅","❌","⚠️","→")
+CHECK, CROSS, WARN, ARROW = (
+    ("[OK]", "[!!]", "[??]", "->") if IS_FB
+    else ("✅", "❌", "⚠️", "→")
+)
 
 
 class SnapshotsScreen(Screen):
@@ -30,19 +42,28 @@ class SnapshotsScreen(Screen):
     #action-buttons { height: 3; padding: 0 2; layout: horizontal; }
     #action-buttons Button { margin: 0 1; }
     """
+
     def __init__(self, **kw):
-        super().__init__(**kw); self.name = "snapshots"; self._snaps = []; self._sel = -1
+        super().__init__(**kw)
+        self.name = "snapshots"
+        self._snaps: list[dict] = []
+        self._sel: int = -1
+
     @property
-    def bridge(self): return getattr(self.app, "bridge", None)
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
 
     def compose(self) -> ComposeResult:
         yield Static("Snapshots ZFS", id="snap-header")
         yield Static("Statut : chargement...", id="snap-status")
         with Vertical(id="snap-table-section"):
-            yield Label("Snapshots"); yield DataTable(id="snap-table")
+            yield Label("Snapshots")
+            yield DataTable(id="snap-table")
         with Horizontal(id="create-row"):
-            yield Label("Dataset :"); yield Input(id="input-dataset", placeholder="pool/dataset")
-            yield Label("Nom :"); yield Input(id="input-snap-name", placeholder="(auto)")
+            yield Label("Dataset :")
+            yield Input(id="input-dataset", placeholder="pool/dataset")
+            yield Label("Nom :")
+            yield Input(id="input-snap-name", placeholder="(auto)")
             yield Button("Creer", variant="primary", id="btn-create")
         yield Log(id="command-log", highlight=True, auto_scroll=True)
         with Horizontal(id="action-buttons"):
@@ -51,11 +72,13 @@ class SnapshotsScreen(Screen):
 
     def on_mount(self):
         dt = self.query_one("#snap-table", DataTable)
-        dt.add_columns("Snapshot", "Utilise", "Creation"); dt.cursor_type = "row"
+        dt.add_columns("Snapshot", "Utilise", "Creation")
+        dt.cursor_type = "row"
         self._refresh()
 
     def _refresh(self):
-        if not self.bridge: return
+        if not self.bridge:
+            return
         self.bridge.emit("snapshot.list", callback=self._on_list)
 
     def _on_list(self, t):
@@ -65,46 +88,84 @@ class SnapshotsScreen(Screen):
             self._safe(lambda: self._status(f"{CHECK} {len(self._snaps)} snapshots"))
 
     def _refresh_table(self):
-        dt = self.query_one("#snap-table", DataTable); dt.clear()
+        dt = self.query_one("#snap-table", DataTable)
+        dt.clear()
         for s in self._snaps:
-            dt.add_row(s.get("name","?"), s.get("used","?"), s.get("creation","?"))
+            dt.add_row(
+                s.get("name", "?"),
+                s.get("used", "?"),
+                s.get("creation", "?"),
+            )
 
-    def on_data_table_row_selected(self, e): self._sel = e.cursor_row
+    # Textual 8.x : RowHighlighted au lieu de RowSelected
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if event.cursor_row is not None:
+            self._sel = event.cursor_row
+
     def on_button_pressed(self, e):
         bid = e.button.id or ""
-        if bid == "btn-refresh": self._refresh()
-        elif bid == "btn-create": self.action_create_snapshot()
-        elif bid == "btn-rollback": self._rollback()
+        if bid == "btn-refresh":
+            self._refresh()
+        elif bid == "btn-create":
+            self.action_create_snapshot()
+        elif bid == "btn-rollback":
+            self._rollback()
 
     def action_create_snapshot(self):
-        if not self.bridge: return
+        if not self.bridge:
+            return
         ds = self.query_one("#input-dataset", Input).value.strip()
         name = self.query_one("#input-snap-name", Input).value.strip()
-        if not ds: self.notify("Dataset requis.", severity="warning"); return
-        self.bridge.emit("snapshot.create", dataset=ds, name=name,
-                         callback=lambda t: self._safe(self._refresh) if t.status=="completed"
-                         else self._slog(f"{CROSS} {t.error}"))
+        if not ds:
+            self.notify("Dataset requis.", severity="warning")
+            return
+        self.bridge.emit(
+            "snapshot.create", dataset=ds, name=name,
+            callback=lambda t: (
+                self._safe(self._refresh) if t.status == "completed"
+                else self._slog(f"{CROSS} {t.error}")
+            ),
+        )
         self._log(f"-> snapshot.create({ds})")
 
     def _rollback(self):
-        if self._sel < 0 or not self.bridge: return
-        snap = self._snaps[self._sel].get("name","")
-        self.bridge.emit("snapshot.rollback", snapshot=snap, confirmed=True,
-                         callback=lambda t: self._slog(
-                             f"{CHECK} Rollback {snap}" if t.status=="completed"
-                             else f"{CROSS} {t.error}"))
+        if self._sel < 0 or self._sel >= len(self._snaps) or not self.bridge:
+            return
+        snap = self._snaps[self._sel].get("name", "")
+        self.bridge.emit(
+            "snapshot.rollback", snapshot=snap, confirmed=True,
+            callback=lambda t: self._slog(
+                f"{CHECK} Rollback {snap}" if t.status == "completed"
+                else f"{CROSS} {t.error}"
+            ),
+        )
 
-    def action_refresh(self): self._refresh()
-    def update_from_snapshot(self, s): pass
+    def action_refresh(self):
+        self._refresh()
+
+    def update_from_snapshot(self, s):
+        pass
+
     def _log(self, m):
-        try: self.query_one("#command-log", Log).write_line(m)
-        except: pass
+        try:
+            self.query_one("#command-log", Log).write_line(m)
+        except Exception:
+            pass
+
     def _slog(self, m):
-        try: self.app.call_from_thread(self._log, m)
-        except: self._log(m)
+        try:
+            self.app.call_from_thread(self._log, m)
+        except Exception:
+            self._log(m)
+
     def _status(self, t):
-        try: self.query_one("#snap-status", Static).update(f"Statut : {t}")
-        except: pass
+        try:
+            self.query_one("#snap-status", Static).update(f"Statut : {t}")
+        except Exception:
+            pass
+
     def _safe(self, fn):
-        try: self.app.call_from_thread(fn)
-        except: fn()
+        try:
+            self.app.call_from_thread(fn)
+        except Exception:
+            fn()
