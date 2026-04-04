@@ -3,18 +3,9 @@ fsdeploy.intents.detection_intent
 ===================================
 Intents pour toutes les operations declenchees par la TUI via le bus.
 
-La TUI emet des events avec des noms simples :
-  "pool.status", "pool.import",
-  "dataset.list", "detection.probe_datasets", "detection.partitions",
-  "mount.request", "mount.umount", "mount.verify",
-  "snapshot.create", "stream.start", etc.
-
 Chaque event est converti en Intent par @register_intent.
 L'Intent produit des Tasks qui s'executent dans le scheduler
 avec locks, security, et logging.
-
-Nouveau : DatasetProbeTask et PartitionDetectTask pour la detection
-par inspection de contenu (aucun nom code en dur).
 """
 
 from typing import Any
@@ -57,15 +48,30 @@ ROLE_PATTERNS = [
 
 
 # ═══════════════════════════════════════════════════════════════════
-# TASKS DE DETECTION
+# TASKS
 # ═══════════════════════════════════════════════════════════════════
 
 @security.detect.probe
+class PoolImportAllTask(Task):
+    """Importe tous les pools avec -af -N avant detection."""
+
+    def run(self) -> dict[str, Any]:
+        r_import = self.run_cmd(
+            "zpool import -af -N -o cachefile=none",
+            sudo=True, check=False,
+        )
+        r_list = self.run_cmd("zpool list -H -o name", sudo=True, check=False)
+        pools = [p.strip() for p in r_list.stdout.splitlines() if p.strip()]
+        return {
+            "imported_pools": pools,
+            "import_output": r_import.stdout,
+            "import_errors": r_import.stderr if not r_import.success else "",
+        }
+
+
+@security.detect.probe
 class DatasetProbeTask(Task):
-    """
-    Inspecte le contenu d'un dataset pour determiner son role.
-    Monte temporairement, glob contre ROLE_PATTERNS, demonte.
-    """
+    """Inspecte le contenu d'un dataset pour determiner son role."""
 
     def required_locks(self):
         ds = self.params.get("dataset", "")
@@ -176,7 +182,6 @@ class MountVerifyTask(Task):
             return {"dataset": dataset, "verified": False,
                     "error": "dataset and mountpoint required"}
 
-        # Verifier dans /proc/mounts
         try:
             mounts = Path("/proc/mounts").read_text()
             for line in mounts.splitlines():
@@ -189,7 +194,6 @@ class MountVerifyTask(Task):
         except OSError:
             pass
 
-        # Fallback : zfs get mountpoint
         r = self.run_cmd(f"zfs get -H -o value mountpoint {dataset}",
                          check=False)
         if r.success:
@@ -200,8 +204,7 @@ class MountVerifyTask(Task):
                 return {"dataset": dataset, "mountpoint": mp,
                         "expected": mountpoint, "verified": verified}
 
-        return {"dataset": dataset, "verified": False,
-                "error": "not mounted"}
+        return {"dataset": dataset, "verified": False, "error": "not mounted"}
 
 
 @security.mount.umount(require_root=True)
@@ -216,32 +219,34 @@ class UmountDatasetTask(Task):
     def run(self) -> dict[str, Any]:
         dataset = self.params.get("dataset", "")
         mountpoint = self.params.get("mountpoint", "")
-
         target = mountpoint or dataset
         if not target:
             raise ValueError("dataset or mountpoint required")
-
         self.run_cmd(f"umount {target}", sudo=True, check=False)
         return {"dataset": dataset, "mountpoint": mountpoint,
                 "unmounted": True}
 
 
 # ═══════════════════════════════════════════════════════════════════
-# INTENTS — chacun mappe un event du bus a des Tasks
+# INTENTS
 # ═══════════════════════════════════════════════════════════════════
+
+@register_intent("pool.import_all")
+class PoolImportAllIntent(Intent):
+    """Event: pool.import_all → PoolImportAllTask"""
+    def build_tasks(self):
+        return [PoolImportAllTask(
+            id="import_all", params={}, context=self.context)]
 
 @register_intent("pool.status")
 class PoolStatusIntent(Intent):
-    """Event: pool.status → PoolStatusTask"""
     def build_tasks(self):
         from function.pool.status import PoolStatusTask
         return [PoolStatusTask(
             id="pool_status", params=self.params, context=self.context)]
 
-
 @register_intent("pool.import")
 class PoolImportIntent(Intent):
-    """Event: pool.import → PoolImportTask"""
     def build_tasks(self):
         from function.pool.status import PoolImportTask
         pool = self.params.get("pool", "")
@@ -252,28 +257,22 @@ class PoolImportIntent(Intent):
             params={"pool": pool, "force": True, "no_mount": True},
             context=self.context)]
 
-
 @register_intent("dataset.list")
 class DatasetListIntent(Intent):
-    """Event: dataset.list → DatasetListTask"""
     def build_tasks(self):
         from function.dataset.mount import DatasetListTask
         return [DatasetListTask(
             id=f"list_{self.params.get('pool', 'all')}",
             params=self.params, context=self.context)]
 
-
 @register_intent("detection.partitions")
 class PartitionDetectIntent(Intent):
-    """Event: detection.partitions → PartitionDetectTask"""
     def build_tasks(self):
         return [PartitionDetectTask(
             id="detect_partitions", params={}, context=self.context)]
 
-
 @register_intent("detection.probe_datasets")
 class DetectionProbeIntent(Intent):
-    """Event: detection.probe_datasets → N × DatasetProbeTask"""
     def build_tasks(self):
         datasets = self.params.get("datasets", [])
         return [
@@ -286,21 +285,16 @@ class DetectionProbeIntent(Intent):
             for ds in datasets
         ]
 
-
 @register_intent("detection.start")
 class DetectionFullIntent(Intent):
-    """
-    Event: detection.start → sequence complete.
-    Cree les tasks pour la phase 1 (pools + partitions).
-    La TUI enchaine les phases 2 et 3 via des events supplementaires.
-    """
+    """Import + pools + partitions. TUI enchaine phases 2 et 3."""
     def build_tasks(self):
         from function.pool.status import PoolStatusTask
         tasks = [
+            PoolImportAllTask(id="import_all", params={}, context=self.context),
             PoolStatusTask(id="detect_pools", params={}, context=self.context),
             PartitionDetectTask(id="detect_parts", params={}, context=self.context),
         ]
-        # Si des pools sont specifies, lister aussi les datasets
         pools = self.params.get("pools", [])
         if pools:
             from function.dataset.mount import DatasetListTask
@@ -310,10 +304,8 @@ class DetectionFullIntent(Intent):
                     context=self.context))
         return tasks
 
-
 @register_intent("mount.request")
 class MountRequestIntent(Intent):
-    """Event: mount.request → DatasetMountTask"""
     def build_tasks(self):
         from function.dataset.mount import DatasetMountTask
         ds = self.params.get("dataset", "")
@@ -325,10 +317,8 @@ class MountRequestIntent(Intent):
             params={"dataset": ds, "mountpoint": mp},
             context=self.context)]
 
-
 @register_intent("mount.umount")
 class UmountRequestIntent(Intent):
-    """Event: mount.umount → UmountDatasetTask"""
     def build_tasks(self):
         ds = self.params.get("dataset", "")
         mp = self.params.get("mountpoint", "")
@@ -337,10 +327,8 @@ class UmountRequestIntent(Intent):
             params={"dataset": ds, "mountpoint": mp},
             context=self.context)]
 
-
 @register_intent("mount.verify")
 class VerifyMountIntent(Intent):
-    """Event: mount.verify → MountVerifyTask"""
     def build_tasks(self):
         return [MountVerifyTask(
             id=f"verify_{self.params.get('dataset', '').replace('/', '_')}",
