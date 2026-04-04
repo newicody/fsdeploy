@@ -301,7 +301,7 @@ step "2/9 — Paquets système"
 
 srun env DEBIAN_FRONTEND=noninteractive \
     apt-get install -y --no-install-recommends \
-        linux-headers-amd64 \
+        linux-headers-$(uname -r) \
         zfsutils-linux \
         zfs-dkms \
         squashfs-tools \
