@@ -119,7 +119,8 @@ class FsDeployDaemon:
     def _register_all_intents(self) -> None:
         """
         Importe tous les fichiers d'intents pour que les
-        @register_intent s'enregistrent dans INTENT_REGISTRY.
+        @register_intent s'enregistrent dans INTENT_REGISTRY,
+        puis cable chaque entree comme handler dans IntentQueue.
 
         Doit etre appele AVANT le premier cycle du scheduler.
         """
@@ -135,6 +136,32 @@ class FsDeployDaemon:
                 __import__(mod_name)
             except ImportError:
                 pass  # module pas encore cree — pas bloquant
+
+        # ── Câblage INTENT_REGISTRY → IntentQueue._handlers ──────
+        # @register_intent remplit INTENT_REGISTRY[event_name] = IntentClass
+        # Le scheduler cherche dans IntentQueue._handlers[event_name]
+        # Sans ce câblage, les events de la TUI sont avalés silencieusement.
+        from scheduler.core.registry import INTENT_REGISTRY
+
+        for event_name, intent_cls in INTENT_REGISTRY.items():
+            def _make_handler(cls):
+                """Closure pour capturer cls correctement."""
+                def handler(event):
+                    ctx = {"event": event}
+                    # Propager _bridge_ticket pour que bridge.poll()
+                    # puisse matcher le ticket dans task.context
+                    bt = event.params.get("_bridge_ticket")
+                    if bt:
+                        ctx["_bridge_ticket"] = bt
+                    return [cls(
+                        params=dict(event.params),
+                        context=ctx,
+                    )]
+                return handler
+
+            self.runtime.intent_queue.register_handler(
+                event_name, _make_handler(intent_cls),
+            )
 
     def _setup_bus(self) -> None:
         """Configure les sources d'evenements."""
