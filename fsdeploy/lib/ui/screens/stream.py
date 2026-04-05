@@ -11,7 +11,6 @@ from textual.widgets import Button, Input, Label, Log, Static, Switch
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK, CROSS, WARN = ("[OK]","[!!]","[??]") if IS_FB else ("✅","❌","⚠️")
 
-
 class StreamScreen(Screen):
     BINDINGS = [
         Binding("s", "start_stream", "Demarrer", show=True),
@@ -33,7 +32,7 @@ class StreamScreen(Screen):
     #action-buttons Button { margin: 0 1; }
     """
     def __init__(self, **kw):
-        super().__init__(**kw); self.name = "stream"; self._running = False; self._pid = ""
+        super().__init__(**kw); self._running = False; self._pid = ""
     @property
     def bridge(self): return getattr(self.app, "bridge", None)
 

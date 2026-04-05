@@ -34,7 +34,6 @@ from textual.widgets import (
     Rule,
 )
 
-
 # ── Détection framebuffer ─────────────────────────────────────────────────────
 
 IS_FB = os.environ.get("TERM") == "linux"
@@ -46,7 +45,6 @@ CROSS  = "[!!]" if IS_FB else "❌"
 WARN   = "[??]" if IS_FB else "⚠️"
 ARROW  = "->" if IS_FB else "→"
 BOX_H  = "=" if IS_FB else "═"
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # WIDGETS INTERNES
@@ -79,7 +77,6 @@ class InfoRow(Horizontal):
         yield Label(self._key, classes="info-key")
         yield Label(self._value, classes="info-val")
 
-
 class ActionCard(Button):
     """Bouton d'action dans la grille du mode booted."""
 
@@ -96,7 +93,6 @@ class ActionCard(Button):
         display_label = f"{label}\n[{shortcut}]" if shortcut else label
         super().__init__(display_label, **kwargs)
         self.screen_name = screen_name
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # WELCOME SCREEN
@@ -187,8 +183,7 @@ class WelcomeScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = "welcome"
-        self._env_info: dict[str, Any] = {}
+self._env_info: dict[str, Any] = {}
         self._pools: list[dict] = []
         self._snapshot: dict[str, Any] = {}
 

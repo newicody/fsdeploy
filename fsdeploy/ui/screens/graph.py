@@ -29,7 +29,6 @@ from textual.widgets import (
 from textual.timer import Timer
 from textual.reactive import reactive
 
-
 IS_FB = os.environ.get("TERM") == "linux"
 
 # Icônes avec fallback ASCII
@@ -41,7 +40,6 @@ ICONS = {
     "paused": "⏸️" if not IS_FB else "[=]",
     "arrow": "→" if not IS_FB else "->",
 }
-
 
 # ─── Widgets ──────────────────────────────────────────────────────────────────
 
@@ -80,7 +78,6 @@ class PipelineStages(Static):
         self.intent_count = intents
         self.task_count = tasks
         self.completed_count = completed
-
 
 class TaskDetail(Static):
     """Affiche les détails de la tâche active."""
@@ -130,7 +127,6 @@ class TaskDetail(Static):
 
         return "\n".join(lines)
 
-
 class TaskHistory(ScrollableContainer):
     """Historique scrollable des tâches."""
 
@@ -174,7 +170,6 @@ class TaskHistory(ScrollableContainer):
             dur_str = f"{duration:.1f}s" if status == "completed" else status
 
             table.add_row(icon, display, dur_str)
-
 
 # ─── Screen principal ─────────────────────────────────────────────────────────
 
@@ -233,8 +228,7 @@ class GraphViewScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = "graph"
-        self._timer: Optional[Timer] = None
+self._timer: Optional[Timer] = None
         self._last_state: dict = {}
         self._tick_count: int = 0
 
@@ -398,7 +392,6 @@ class GraphViewScreen(Screen):
         history = self.query_one("#task-history", TaskHistory)
         history.update_history([])
         self.notify("History cleared", timeout=1)
-
 
 # ─── Export ───────────────────────────────────────────────────────────────────
 

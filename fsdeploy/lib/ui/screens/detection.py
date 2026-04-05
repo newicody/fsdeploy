@@ -34,13 +34,11 @@ from textual.widgets import (
     Button, DataTable, Label, Log, ProgressBar, Rule, Static,
 )
 
-
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK = "[OK]" if IS_FB else "✅"
 CROSS = "[!!]" if IS_FB else "❌"
 WARN  = "[??]" if IS_FB else "⚠️"
 ARROW = "->" if IS_FB else "→"
-
 
 class DetectionScreen(Screen):
 
@@ -72,8 +70,7 @@ class DetectionScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = "detection"
-        self._scanning = False
+self._scanning = False
 
         # Etat accumule
         self._pools: list[dict] = []

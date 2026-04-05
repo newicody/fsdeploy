@@ -38,7 +38,7 @@ class PresetsScreen(Screen):
     #action-buttons Button { margin: 0 1; }
     """
     def __init__(self, **kw):
-        super().__init__(**kw); self.name="presets"; self._presets=[]; self._selected_idx=-1
+        super().__init__(**kw); self._presets=[]; self._selected_idx=-1
     @property
     def bridge(self): return getattr(self.app,"bridge",None)
 

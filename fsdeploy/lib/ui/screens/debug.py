@@ -11,7 +11,6 @@ from textual.widgets import Button, Input, Label, Log, Static
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK, CROSS = ("[OK]","[!!]") if IS_FB else ("✅","❌")
 
-
 class DebugScreen(Screen):
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Retour", show=False),
@@ -28,7 +27,7 @@ class DebugScreen(Screen):
     #action-buttons Button { margin: 0 1; }
     """
     def __init__(self, **kw):
-        super().__init__(**kw); self.name = "debug"
+        super().__init__(**kw)
 
     @property
     def bridge(self): return getattr(self.app, "bridge", None)

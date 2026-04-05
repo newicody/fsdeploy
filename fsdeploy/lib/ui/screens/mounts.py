@@ -42,7 +42,7 @@ class MountsScreen(Screen):
     #action-buttons Button { margin: 0 1; }
     """
     def __init__(self, **kw):
-        super().__init__(**kw); self.name="mounts"; self._entries=[]; self._selected_idx=-1; self._pending={}
+        super().__init__(**kw); self._entries=[]; self._selected_idx=-1; self._pending={}
     @property
     def bridge(self): return getattr(self.app,"bridge",None)
 

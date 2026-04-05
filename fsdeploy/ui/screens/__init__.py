@@ -79,7 +79,6 @@ try:
 except ImportError:
     GraphViewScreen = None
 
-
 __all__ = [
     "WelcomeScreen",
     "DetectionScreen",

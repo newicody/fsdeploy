@@ -33,7 +33,6 @@ from textual.widgets import (
     Select, Static, Switch,
 )
 
-
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK = "[OK]" if IS_FB else "✅"
 CROSS = "[!!]" if IS_FB else "❌"
@@ -59,7 +58,6 @@ COMPRESS_OPTIONS = [
     ("gzip", "Gzip (compatible)"),
     ("lz4", "LZ4 (tres rapide)"),
 ]
-
 
 class InitramfsScreen(Screen):
 
@@ -97,8 +95,7 @@ class InitramfsScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = "initramfs"
-        self._images: list[dict] = []
+self._images: list[dict] = []
         self._boot_path: str = "/boot"
         self._kernel_version: str = ""
         self._building: bool = False

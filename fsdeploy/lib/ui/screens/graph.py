@@ -99,7 +99,7 @@ class GraphViewScreen(Screen):
     #controls { height: 2; padding: 0 2; color: $text-muted; }
     """
     def __init__(self, **kw):
-        super().__init__(**kw); self.name = "graph"
+        super().__init__(**kw)
         self._paused = False; self._offset = 0
         self._anim_timer = None; self._data_timer = None
 

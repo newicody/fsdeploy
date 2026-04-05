@@ -14,7 +14,6 @@ from textual.widgets import Button, DataTable, Label, Log, Static
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK, CROSS, WARN, ARROW = ("[OK]","[!!]","[??]","->") if IS_FB else ("✅","❌","⚠️","→")
 
-
 class CoherenceScreen(Screen):
 
     BINDINGS = [
@@ -39,8 +38,7 @@ class CoherenceScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.name = "coherence"
-        self._checks: list[dict] = []
+self._checks: list[dict] = []
         self._passed: bool = False
 
     @property

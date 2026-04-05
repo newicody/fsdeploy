@@ -15,7 +15,6 @@ SECTIONS = ["env","pool","partition","detection","mounts","kernel","initramfs",
             "overlay","zbm","presets","stream","network","snapshots","security",
             "scheduler","tui","log","integrity","meta"]
 
-
 class ConfigScreen(Screen):
     BINDINGS = [
         Binding("s", "save_config", "Sauvegarder", show=True),
@@ -39,7 +38,7 @@ class ConfigScreen(Screen):
     #action-buttons Button { margin: 0 1; }
     """
     def __init__(self, **kw):
-        super().__init__(**kw); self.name = "config"
+        super().__init__(**kw)
         self._section = "env"; self._keys: list[tuple[str,str]] = []; self._sel = -1
 
     def compose(self) -> ComposeResult:

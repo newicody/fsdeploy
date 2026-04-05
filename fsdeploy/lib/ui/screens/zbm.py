@@ -11,7 +11,6 @@ from textual.widgets import Button, Input, Label, Log, Static
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK, CROSS, WARN, ARROW = ("[OK]","[!!]","[??]","->") if IS_FB else ("✅","❌","⚠️","→")
 
-
 class ZBMScreen(Screen):
     BINDINGS = [
         Binding("r", "refresh_status", "Statut", show=True),
@@ -33,7 +32,7 @@ class ZBMScreen(Screen):
     #action-buttons Button { margin: 0 1; }
     """
     def __init__(self, **kw):
-        super().__init__(**kw); self.name = "zbm"
+        super().__init__(**kw)
         self._installed = False; self._efi_entry = False
 
     @property
