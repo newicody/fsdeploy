@@ -1,11 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 fsdeploy.intents.detection_intent
 ===================================
-Intents pour toutes les operations declenchees par la TUI via le bus.
+Intents pour la detection, le montage et le demontage.
 
 Chaque event est converti en Intent par @register_intent.
-L'Intent produit des Tasks qui s'executent dans le scheduler
-avec locks, security, et logging.
+L'Intent produit des Tasks qui s'executent dans le scheduler.
 """
 
 from typing import Any
@@ -18,9 +18,9 @@ from scheduler.core.registry import register_intent
 from scheduler.security.decorator import security
 
 
-# ═══════════════════════════════════════════════════════════════════
-# TABLE DE MOTIFS — detection du role par contenu
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
+# TABLE DE MOTIFS
+# ===================================================================
 
 ROLE_PATTERNS = [
     {"role": "boot",       "globs": ["vmlinuz*", "bzImage*", "initramfs*",
@@ -47,25 +47,59 @@ ROLE_PATTERNS = [
 ]
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
 # TASKS
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
 
 @security.detect.probe
 class PoolImportAllTask(Task):
-    """Importe tous les pools avec -af -N avant detection."""
+    """
+    Importe les pools disponibles AVANT la detection.
+
+    IMPORTANT : ne pas utiliser 'zpool import -af' aveugle car si les
+    pools sont deja importes, la commande peut bloquer ou echouer.
+    On liste d'abord les pools importables, puis on importe seulement
+    ceux qui ne le sont pas encore.
+    """
 
     def run(self) -> dict[str, Any]:
-        r_import = self.run_cmd(
-            "zpool import -af -N -o cachefile=none",
-            sudo=True, check=False,
-        )
-        r_list = self.run_cmd("zpool list -H -o name", sudo=True, check=False)
-        pools = [p.strip() for p in r_list.stdout.splitlines() if p.strip()]
+        # 1. Lister les pools DEJA importes
+        r_existing = self.run_cmd(
+            "zpool list -H -o name", sudo=True, check=False)
+        already = set()
+        if r_existing.success:
+            already = {p.strip() for p in r_existing.stdout.splitlines()
+                       if p.strip()}
+
+        # 2. Lister les pools IMPORTABLES (pas encore importes)
+        r_avail = self.run_cmd("zpool import", sudo=True, check=False)
+        importable = []
+        for line in r_avail.stdout.splitlines():
+            line = line.strip()
+            if line.startswith("pool:"):
+                name = line.split(":", 1)[1].strip()
+                if name not in already:
+                    importable.append(name)
+
+        # 3. Importer un par un (pas -a qui bloque si conflit)
+        imported = []
+        for pool in importable:
+            r = self.run_cmd(
+                f"zpool import -f -N -o cachefile=none {pool}",
+                sudo=True, check=False, timeout=30)
+            if r.success:
+                imported.append(pool)
+
+        # 4. Liste finale
+        r_final = self.run_cmd(
+            "zpool list -H -o name", sudo=True, check=False)
+        all_pools = [p.strip() for p in r_final.stdout.splitlines()
+                     if p.strip()]
+
         return {
-            "imported_pools": pools,
-            "import_output": r_import.stdout,
-            "import_errors": r_import.stderr if not r_import.success else "",
+            "imported_pools": all_pools,
+            "newly_imported": imported,
+            "already_imported": list(already),
         }
 
 
@@ -76,8 +110,7 @@ class DatasetProbeTask(Task):
     def required_locks(self):
         ds = self.params.get("dataset", "")
         pool = ds.split("/")[0] if "/" in ds else ds
-        return [Lock(f"pool.{pool}.probe", owner_id=str(self.id),
-                     exclusive=False)]
+        return [Lock(f"pool.{pool}", owner_id=str(self.id))]
 
     def run(self) -> dict[str, Any]:
         import tempfile
@@ -85,102 +118,122 @@ class DatasetProbeTask(Task):
 
         dataset = self.params.get("dataset", "")
         mountpoint = self.params.get("mountpoint", "")
-        already_mounted = self.params.get("mounted", False)
+        is_mounted = self.params.get("mounted", False)
 
         if not dataset:
-            raise ValueError("dataset required")
+            return {"dataset": "", "role": "unknown", "confidence": 0}
 
-        probe_path = None
-        temp_mount = None
-
-        if (already_mounted and mountpoint and mountpoint not in ("-", "none")
-                and Path(mountpoint).is_dir()):
-            probe_path = Path(mountpoint)
+        # Si deja monte, scanner directement
+        if is_mounted and mountpoint and mountpoint not in ("-", "none"):
+            scan_path = Path(mountpoint)
         else:
-            temp_mount = tempfile.mkdtemp(prefix="fsdeploy-probe-")
-            self.run_cmd(f"mount -t zfs {dataset} {temp_mount}",
-                         sudo=True, check=False)
-            try:
-                if any(Path(temp_mount).iterdir()):
-                    probe_path = Path(temp_mount)
-            except PermissionError:
-                pass
+            # Montage temporaire
+            scan_path = Path(tempfile.mkdtemp(prefix="fsdeploy-probe-"))
+            r = self.run_cmd(
+                f"mount -t zfs {dataset} {scan_path}",
+                sudo=True, check=False, timeout=30)
+            if not r.success:
+                try:
+                    scan_path.rmdir()
+                except OSError:
+                    pass
+                return {"dataset": dataset, "role": "unknown",
+                        "confidence": 0, "error": r.stderr}
 
-        if probe_path is None:
-            self._cleanup(temp_mount)
-            return {"dataset": dataset, "role": "empty",
-                    "confidence": 0.0, "details": "vide ou non montable"}
-
-        best = {"role": "data", "score": 0.0, "details": "", "prio": -1}
         try:
-            for pat in ROLE_PATTERNS:
-                matches = [g for g in pat["globs"]
-                           if list(probe_path.glob(g))[:20]]
-                if len(matches) >= pat["min"]:
-                    score = min(len(matches) / max(len(pat["globs"]), 1), 1.0)
-                    if (pat["prio"] > best["prio"] or
-                            (pat["prio"] == best["prio"]
-                             and score > best["score"])):
-                        best = {"role": pat["role"], "score": score,
-                                "details": ", ".join(matches[:5]),
-                                "prio": pat["prio"]}
-        except Exception as e:
-            best["details"] = str(e)
+            role, confidence, details = self._scan(scan_path)
+            return {"dataset": dataset, "role": role,
+                    "confidence": confidence, "details": details}
+        finally:
+            if not is_mounted:
+                self.run_cmd(f"umount {scan_path}",
+                             sudo=True, check=False)
+                try:
+                    scan_path.rmdir()
+                except OSError:
+                    pass
 
-        self._cleanup(temp_mount)
-        return {"dataset": dataset, "role": best["role"],
-                "confidence": best["score"], "details": best["details"]}
+    def _scan(self, path):
+        """Scan le contenu et retourne (role, confidence, details)."""
+        from pathlib import Path
 
-    def _cleanup(self, temp_mount):
-        if temp_mount:
-            self.run_cmd(f"umount {temp_mount}", sudo=True, check=False)
-            import os
-            try:
-                os.rmdir(temp_mount)
-            except OSError:
-                pass
+        best_role = "data"
+        best_score = 0
+        best_prio = -1
+        details = {}
+
+        for pattern in ROLE_PATTERNS:
+            matches = 0
+            matched_globs = []
+            for g in pattern["globs"]:
+                found = list(path.glob(g))
+                if found:
+                    matches += 1
+                    matched_globs.append(g)
+
+            if matches >= pattern["min"]:
+                score = matches / len(pattern["globs"])
+                prio = pattern["prio"]
+                if prio > best_prio or (prio == best_prio and score > best_score):
+                    best_role = pattern["role"]
+                    best_score = score
+                    best_prio = prio
+                    details = {"matched": matched_globs, "count": matches}
+
+        return best_role, best_score, details
 
 
-@security.detect.partitions
+@security.detect.probe
 class PartitionDetectTask(Task):
-    """Detecte les partitions via lsblk."""
+    """Detecte les partitions du systeme."""
 
-    def run(self) -> list[dict[str, str]]:
-        r = self.run_cmd("lsblk -ln -o NAME,FSTYPE,LABEL,UUID,SIZE,TYPE",
-                         check=False)
+    def run(self) -> list[dict]:
+        r = self.run_cmd("lsblk -J -o NAME,FSTYPE,LABEL,UUID,SIZE,MOUNTPOINT",
+                         sudo=True, check=False)
+        if not r.success:
+            return []
+
+        import json
         partitions = []
-        for line in r.stdout.strip().splitlines():
-            p = line.split(None, 5)
-            if len(p) < 6 or p[5] != "part":
-                continue
-            role = ""
-            if p[1] in ("vfat", "fat32"):
-                role = "efi"
-            elif p[1] == "swap":
-                role = "swap"
-            elif p[2] and "boot" in p[2].lower():
-                role = "boot"
-            elif "zfs" in p[1].lower():
-                role = "zfs"
-            partitions.append({"device": f"/dev/{p[0]}", "fstype": p[1] or "-",
-                               "label": p[2] or "-", "uuid": p[3] or "-",
-                               "size": p[4], "role": role})
+        try:
+            data = json.loads(r.stdout)
+            for dev in data.get("blockdevices", []):
+                self._extract_partitions(dev, partitions)
+        except (json.JSONDecodeError, KeyError):
+            pass
+
         return partitions
+
+    def _extract_partitions(self, dev, result):
+        name = dev.get("name", "")
+        fstype = dev.get("fstype")
+        if fstype and fstype not in ("", "zfs_member"):
+            role = "unknown"
+            if fstype in ("vfat", "fat32"):
+                role = "efi"
+            elif fstype == "swap":
+                role = "swap"
+            result.append({
+                "device": f"/dev/{name}",
+                "fstype": fstype or "",
+                "label": dev.get("label", "") or "",
+                "uuid": dev.get("uuid", "") or "",
+                "size": dev.get("size", "") or "",
+                "mountpoint": dev.get("mountpoint", "") or "",
+                "role": role,
+            })
+        for child in dev.get("children", []):
+            self._extract_partitions(child, result)
 
 
 @security.mount.verify
 class MountVerifyTask(Task):
-    """Verifie qu'un dataset est bien monte au bon endroit."""
+    """Verifie qu'un dataset est monte au bon endroit."""
 
     def run(self) -> dict[str, Any]:
-        from pathlib import Path
-
         dataset = self.params.get("dataset", "")
         mountpoint = self.params.get("mountpoint", "")
-
-        if not dataset or not mountpoint:
-            return {"dataset": dataset, "verified": False,
-                    "error": "dataset and mountpoint required"}
+        from pathlib import Path
 
         try:
             mounts = Path("/proc/mounts").read_text()
@@ -188,26 +241,15 @@ class MountVerifyTask(Task):
                 parts = line.split()
                 if len(parts) >= 2 and parts[0] == dataset:
                     actual = parts[1]
-                    verified = actual == mountpoint
-                    return {"dataset": dataset, "mountpoint": actual,
-                            "expected": mountpoint, "verified": verified}
+                    return {"dataset": dataset, "verified": actual == mountpoint,
+                            "actual": actual, "expected": mountpoint}
         except OSError:
             pass
-
-        r = self.run_cmd(f"zfs get -H -o value mountpoint {dataset}",
-                         check=False)
-        if r.success:
-            mp = r.stdout.strip()
-            if mp and mp not in ("-", "none"):
-                r2 = self.run_cmd(f"mountpoint -q {mp}", check=False)
-                verified = r2.success and mp == mountpoint
-                return {"dataset": dataset, "mountpoint": mp,
-                        "expected": mountpoint, "verified": verified}
 
         return {"dataset": dataset, "verified": False, "error": "not mounted"}
 
 
-@security.mount.umount(require_root=True)
+@security.mount.umount
 class UmountDatasetTask(Task):
     """Demonte un dataset."""
 
@@ -227,13 +269,12 @@ class UmountDatasetTask(Task):
                 "unmounted": True}
 
 
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
 # INTENTS
-# ═══════════════════════════════════════════════════════════════════
+# ===================================================================
 
 @register_intent("pool.import_all")
 class PoolImportAllIntent(Intent):
-    """Event: pool.import_all → PoolImportAllTask"""
     def build_tasks(self):
         return [PoolImportAllTask(
             id="import_all", params={}, context=self.context)]
@@ -287,7 +328,7 @@ class DetectionProbeIntent(Intent):
 
 @register_intent("detection.start")
 class DetectionFullIntent(Intent):
-    """Import + pools + partitions. TUI enchaine phases 2 et 3."""
+    """Import + pools + partitions."""
     def build_tasks(self):
         from function.pool.status import PoolStatusTask
         tasks = [
