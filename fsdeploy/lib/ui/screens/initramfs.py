@@ -95,7 +95,7 @@ class InitramfsScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-self._images: list[dict] = []
+        self._images: list[dict] = []
         self._boot_path: str = "/boot"
         self._kernel_version: str = ""
         self._building: bool = False
