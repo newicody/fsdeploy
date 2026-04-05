@@ -38,7 +38,7 @@ class CoherenceScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-self._checks: list[dict] = []
+        self._checks: list[dict] = []
         self._passed: bool = False
 
     @property
