@@ -1,441 +1,389 @@
 """
 fsdeploy.daemon
 ================
-Processus racine de fsdeploy.
+Processus racine — orchestre le scheduler, les bus et la TUI.
 
-Architecture :
-  - Le daemon/scheduler est le processus racine
-  - La TUI Textual est un enfant optionnel et jetable
-  - Si Textual crash, le scheduler continue
-  - Mode bare = rien lance (scheduler seul)
+Hierarchie :
+  daemon (racine)
+  ├── scheduler (thread background daemon)
+  │   └── ThreadPoolExecutor (tasks threaded)
+  └── TUI Textual (main thread — obligatoire pour Textual 8.x)
 
-Connecte tout :
-  - Config (configobj) → parametres de tous les composants
-  - HuffmanStore → BDD compacte du runtime
-  - Scheduler (non-bloquant, ThreadPoolExecutor)
-  - Bus (Timer, Inotify, Udev, Socket)
-  - Intents (tous importes au boot pour @register_intent)
-  - TUI Textual (main thread pour signal handlers)
+Architecture de threads :
+  - TUI Textual DOIT tourner dans le main thread (contrainte Textual 8.x)
+  - Le Scheduler tourne dans un thread background (daemon=True)
+  - Les signal handlers ne sont installes que dans le main thread
+  - Si la TUI crash, le scheduler continue (processus resilient)
 
-Usage :
-  python3 -m fsdeploy                  # TUI interactive
-  python3 -m fsdeploy --daemon         # daemon seul (service)
-  python3 -m fsdeploy --mode stream    # stream YouTube
-  python3 -m fsdeploy --bare           # scheduler sans TUI
+Modes :
+  tui     → scheduler background + TUI main thread (defaut)
+  daemon  → scheduler main thread, pas de TUI
+  bare    → scheduler main thread, pas de TUI, pas de bus
+  stream  → scheduler background + TUI en mode stream
 """
 
 import os
 import sys
-import time
 import signal
 import threading
-import subprocess
+import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from scheduler.core.scheduler import Scheduler
-from scheduler.core.executor import Executor
-from scheduler.core.resolver import Resolver
-from scheduler.core.runtime import Runtime
-from scheduler.security.resolver import SecurityResolver
-from scheduler.runtime.monitor import RuntimeMonitor
-from scheduler.intentlog.log import IntentLog
-from scheduler.intentlog.codec import HuffmanStore
-from scheduler.model.event import CLIEvent
+from log import get_logger
 
-from bus import TimerSource, InotifySource, UdevSource, SocketSource
+log = get_logger("daemon")
+
+
+def _is_main_thread() -> bool:
+    return threading.current_thread() is threading.main_thread()
 
 
 class FsDeployDaemon:
     """
-    Processus racine.
+    Processus racine fsdeploy.
 
-    Responsabilites :
-      - Charger la configuration
-      - Instancier le HuffmanStore
-      - Demarrer le scheduler (non-bloquant)
-      - Demarrer les sources d'evenements (bus)
-      - Enregistrer les handlers d'intents
-      - Demarrer la TUI (main thread — requis par Textual)
-      - Gerer le restart de la TUI avec backoff
-      - Arret propre sur SIGTERM/SIGINT
+    Orchestre :
+      1. Config (dict ou FsDeployConfig)
+      2. HuffmanStore (BDD compacte in-memory)
+      3. Runtime (state + queues)
+      4. Scheduler (boucle event→intent→task)
+      5. Executor (ThreadPoolExecutor)
+      6. Bus sources (Timer, Inotify, Udev, Socket)
+      7. Intent registry (wiring handlers)
+      8. TUI Textual (main thread, optionnel)
     """
 
     def __init__(self, config: dict | None = None):
-        self.config = config or {}
-
-        # ── HuffmanStore ──────────────────────────────────────────
-        self.store = HuffmanStore(
-            rebuild_threshold=self.config.get("store_rebuild_threshold", 256),
-        )
-
-        # ── Runtime ───────────────────────────────────────────────
-        self.runtime = Runtime()
-        self.runtime.dry_run = self.config.get("dry_run", False)
-        self.runtime.verbose = self.config.get("verbose", False)
-        self.runtime.bypass = self.config.get("bypass", False)
-
-        # ── Monitor ───────────────────────────────────────────────
-        self.monitor = RuntimeMonitor()
-
-        # ── IntentLog ─────────────────────────────────────────────
-        log_dir = self.config.get("log_dir", "")
-        if not log_dir:
-            install_dir = os.environ.get("FSDEPLOY_INSTALL_DIR", "/opt/fsdeploy")
-            log_dir = str(Path(install_dir) / "var" / "log" / "fsdeploy")
-        self.intent_log = IntentLog(log_dir=log_dir)
-
-        # ── Security ──────────────────────────────────────────────
-        configobj = self.config.get("configobj")
-        self.security = SecurityResolver(
-            bypass=self.runtime.bypass,
-            config=configobj,
-        )
-
-        # ── Resolver + Executor ───────────────────────────────────
-        max_workers = self.config.get("max_workers", 4)
-        self.resolver = Resolver(security_resolver=self.security)
-        self.executor = Executor(self.runtime, max_workers=max_workers)
-
-        # ── Scheduler ─────────────────────────────────────────────
-        self.scheduler = Scheduler(
-            resolver=self.resolver,
-            executor=self.executor,
-            runtime=self.runtime,
-        )
-        tick = self.config.get("tick_interval", 0.1)
-        self.scheduler._tick_interval = tick
-
-        # ── Bus sources ───────────────────────────────────────────
-        self._sources: list = []
-        self._tui_backoff = 1
-        self._tui_max_backoff = self.config.get("tui_max_backoff", 60)
+        self._config = config or {}
+        self._scheduler = None
+        self._executor = None
+        self._runtime = None
+        self._store = None
+        self._bus_sources = []
+        self._scheduler_thread: Optional[threading.Thread] = None
         self._running = False
 
     # ═══════════════════════════════════════════════════════════════
-    # SETUP
-    # ═══════════════════════════════════════════════════════════════
-
-    def _register_all_intents(self) -> None:
-        """
-        Importe tous les fichiers d'intents pour que les
-        @register_intent s'enregistrent dans INTENT_REGISTRY,
-        puis cable chaque entree comme handler dans IntentQueue.
-
-        Doit etre appele AVANT le premier cycle du scheduler.
-        """
-        intent_modules = [
-            "intents.boot_intent",
-            "intents.detection_intent",
-            "intents.kernel_intent",
-            "intents.system_intent",
-            "intents.test_intent",
-        ]
-        for mod_name in intent_modules:
-            try:
-                __import__(mod_name)
-            except ImportError:
-                pass  # module pas encore cree — pas bloquant
-
-        # ── Câblage INTENT_REGISTRY → IntentQueue._handlers ──────
-        # @register_intent remplit INTENT_REGISTRY[event_name] = IntentClass
-        # Le scheduler cherche dans IntentQueue._handlers[event_name]
-        # Sans ce câblage, les events de la TUI sont avalés silencieusement.
-        from scheduler.core.registry import INTENT_REGISTRY
-
-        for event_name, intent_cls in INTENT_REGISTRY.items():
-            def _make_handler(cls):
-                """Closure pour capturer cls correctement."""
-                def handler(event):
-                    ctx = {"event": event}
-                    # Propager _bridge_ticket pour que bridge.poll()
-                    # puisse matcher le ticket dans task.context
-                    bt = event.params.get("_bridge_ticket")
-                    if bt:
-                        ctx["_bridge_ticket"] = bt
-                    return [cls(
-                        params=dict(event.params),
-                        context=ctx,
-                    )]
-                return handler
-
-            self.runtime.intent_queue.register_handler(
-                event_name, _make_handler(intent_cls),
-            )
-
-    def _setup_bus(self) -> None:
-        """Configure les sources d'evenements."""
-        eq = self.runtime.event_queue
-
-        # Timer jobs
-        timer = TimerSource(eq)
-        timer_jobs = self.config.get("timer_jobs", {})
-        if isinstance(timer_jobs, dict):
-            for job_name, interval in timer_jobs.items():
-                interval = int(interval) if interval else 0
-                if interval > 0:
-                    timer.add_job(job_name, interval)
-        else:
-            # Defauts si pas configure
-            timer.add_job("coherence_check", 3600)
-            timer.add_job("scrub_check", 604800)
-        self._sources.append(timer)
-
-        # Inotify
-        if self.config.get("bus_inotify", True):
-            boot_mount = ""
-            configobj = self.config.get("configobj")
-            if configobj:
-                boot_mount = configobj.get("pool.boot_mount", "")
-            watch_paths = [boot_mount] if boot_mount else ["/boot"]
-            self._sources.append(InotifySource(eq, watch_paths=watch_paths))
-
-        # Udev
-        if self.config.get("bus_udev", True):
-            self._sources.append(UdevSource(eq))
-
-        # Socket — chemin user-writable si /run echoue
-        if self.config.get("bus_socket", True):
-            socket_path = self.config.get("socket_path", "")
-            if not socket_path:
-                socket_path = _resolve_socket_path()
-            self._sources.append(SocketSource(eq, socket_path=socket_path))
-
-    def _setup_scheduler_hooks(self) -> None:
-        """Hooks pour logger dans le HuffmanStore a chaque cycle."""
-
-        def on_cycle_end(sched):
-            # Log les tasks completees dans le store
-            with self.runtime.state._lock:
-                for task_id, entry in list(self.runtime.state.completed.items()):
-                    task = entry.get("task")
-                    if task:
-                        self.store.log_task(
-                            task_id, "completed",
-                            task_class=task.__class__.__name__,
-                            duration=f"{entry.get('duration', 0):.3f}s",
-                        )
-
-                for task_id, entry in list(self.runtime.state.failed.items()):
-                    task = entry.get("task")
-                    if task:
-                        self.store.log_task(
-                            task_id, "failed",
-                            task_class=task.__class__.__name__,
-                            error=str(entry.get("error", "")),
-                        )
-
-        self.scheduler.on_cycle_end(on_cycle_end)
-
-    # ═══════════════════════════════════════════════════════════════
-    # SCHEDULER (background thread)
-    # ═══════════════════════════════════════════════════════════════
-
-    def _run_scheduler_background(self) -> None:
-        """
-        Execute le scheduler dans un thread background.
-
-        Le scheduler tourne en boucle jusqu'a self._running == False.
-        Cela libere le main thread pour Textual (qui a besoin des
-        signal handlers POSIX — SIGTSTP, SIGWINCH, etc.).
-        """
-        try:
-            self.scheduler.run()
-        except Exception:
-            pass
-
-    # ═══════════════════════════════════════════════════════════════
-    # TUI (main thread)
-    # ═══════════════════════════════════════════════════════════════
-
-    def _run_tui_main(self) -> None:
-        """
-        Execute la TUI Textual dans le main thread.
-
-        Textual requiert le main thread pour :
-          - signal.signal(SIGTSTP, ...) dans LinuxDriver
-          - signal.signal(SIGWINCH, ...) pour le resize terminal
-          - Boucle asyncio principale
-
-        Si la TUI crash, on la redemarre avec backoff exponentiel.
-        Le scheduler continue dans son thread background.
-        """
-        configobj = self.config.get("configobj")
-        mode = "deploy"
-        if configobj:
-            mode = configobj.get("env.mode", "deploy")
-
-        while self._running:
-            try:
-                from ui.app import FsDeployApp
-
-                app = FsDeployApp(
-                    runtime=self.runtime,
-                    store=self.store,
-                    config=configobj,
-                    mode=mode,
-                )
-                app.run()
-
-                # app.run() retourne normalement = quit propre
-                break
-
-            except ImportError:
-                # Textual pas installe — bascule en mode daemon
-                break
-
-            except Exception:
-                # TUI crash — restart avec backoff
-                auto_restart = self.config.get("tui_auto_restart", True)
-                if not auto_restart or not self._running:
-                    break
-                time.sleep(self._tui_backoff)
-                self._tui_backoff = min(
-                    self._tui_backoff * 2,
-                    self._tui_max_backoff,
-                )
-                continue
-
-    # ═══════════════════════════════════════════════════════════════
-    # MAIN
+    # LIFECYCLE
     # ═══════════════════════════════════════════════════════════════
 
     def run(self, mode: str = "tui") -> None:
         """
         Point d'entree principal.
 
-        Modes :
-          tui    : scheduler (thread) + TUI (main thread)
-          daemon : scheduler seul (main thread, bloquant)
-          stream : scheduler + stream YouTube
-          bare   : scheduler seul, pas de TUI
+        Args:
+            mode: tui | daemon | bare | stream
         """
-        self._running = True
+        log.info("daemon_start", mode=mode)
 
-        # 1. Enregistrer tous les intents
-        self._register_all_intents()
+        try:
+            self._init_store()
+            self._init_runtime()
+            self._init_executor()
+            self._init_scheduler()
+            self._register_all_intents()
+        except Exception as e:
+            log.error("init_failed", error=str(e))
+            raise
 
-        # 2. Setup bus
-        self._setup_bus()
+        if mode in ("daemon", "bare"):
+            # Pas de TUI — scheduler dans le main thread
+            if mode != "bare":
+                self._start_bus()
+            self._install_signals()
+            log.info("scheduler_main_thread", mode=mode)
+            self._scheduler.run()  # bloquant
+        else:
+            # TUI mode — scheduler en background, TUI en main thread
+            self._start_bus()
+            self._start_scheduler_background()
+            self._run_tui(mode=mode)
 
-        # 3. Hooks scheduler → store
-        self._setup_scheduler_hooks()
+    def stop(self) -> None:
+        """Arret propre de tout."""
+        log.info("daemon_stop")
+        self._running = False
 
-        # 4. Demarrer les sources
-        for source in self._sources:
-            source.start()
+        # Arreter le scheduler
+        if self._scheduler:
+            self._scheduler.stop()
 
-        # 5. Mode stream
-        if mode == "stream":
-            configobj = self.config.get("configobj")
-            stream_key = self.config.get("stream_key", "")
-            if not stream_key and configobj:
-                stream_key = configobj.get("stream.youtube_key", "")
-            self.runtime.event_queue.put(CLIEvent(
-                command="stream_start",
-                args={
-                    "stream_key": stream_key,
-                    "resolution": self.config.get("resolution", "1920x1080"),
-                    "fps": self.config.get("fps", 30),
-                },
-            ))
+        # Arreter les bus
+        for source in self._bus_sources:
+            try:
+                source.stop()
+            except Exception:
+                pass
 
-        # 6. Log demarrage
-        self.store.log_event("daemon.started", source="daemon",
-                             mode=mode, pid=str(os.getpid()))
+        # Attendre le thread scheduler
+        if self._scheduler_thread and self._scheduler_thread.is_alive():
+            self._scheduler_thread.join(timeout=5)
 
-        # 7. Scheduler dans un thread background (toujours)
-        sched_thread = threading.Thread(
-            target=self._run_scheduler_background,
+        # Arreter l'executor
+        if self._executor:
+            try:
+                self._executor.shutdown()
+            except Exception:
+                pass
+
+        log.info("daemon_stopped")
+
+    # ═══════════════════════════════════════════════════════════════
+    # INIT
+    # ═══════════════════════════════════════════════════════════════
+
+    def _init_store(self) -> None:
+        """Initialise le HuffmanStore."""
+        try:
+            from scheduler.intentlog.codec import HuffmanStore
+            self._store = HuffmanStore()
+            log.info("store_ready")
+        except ImportError:
+            log.warning("store_unavailable", reason="intentlog.codec not found")
+            self._store = None
+
+    def _init_runtime(self) -> None:
+        """Initialise le Runtime (state + queues)."""
+        from scheduler.core.runtime import Runtime
+        self._runtime = Runtime()
+        log.info("runtime_ready")
+
+    def _init_executor(self) -> None:
+        """Initialise l'Executor avec ThreadPoolExecutor."""
+        from scheduler.core.executor import Executor
+
+        max_workers = self._config.get("scheduler", {}).get("max_workers", 4)
+        self._executor = Executor(
+            runtime=self._runtime,
+            max_workers=max_workers,
+            store=self._store,
+        )
+        log.info("executor_ready", max_workers=max_workers)
+
+    def _init_scheduler(self) -> None:
+        """Initialise le Scheduler."""
+        from scheduler.core.resolver import Resolver
+        from scheduler.core.scheduler import Scheduler
+
+        resolver = Resolver(self._runtime)
+        tick = self._config.get("scheduler", {}).get("tick_interval", 0.1)
+
+        self._scheduler = Scheduler(
+            resolver=resolver,
+            executor=self._executor,
+            runtime=self._runtime,
+        )
+        self._scheduler._tick_interval = tick
+        log.info("scheduler_ready", tick_interval=tick)
+
+    def _register_all_intents(self) -> None:
+        """
+        Enregistre tous les intent handlers.
+
+        Les modules intents/ utilisent @register_intent qui peuple
+        INTENT_REGISTRY. On doit wirer ce registry dans
+        IntentQueue._handlers pour que le scheduler les trouve.
+        """
+        from scheduler.core.registry import INTENT_REGISTRY
+        from scheduler.queue.intent_queue import IntentQueue
+
+        # Importer tous les modules intents pour forcer l'enregistrement
+        intent_modules = [
+            "intents.detection_intent",
+            "intents.boot_intent",
+            "intents.kernel_intent",
+            "intents.system_intent",
+            "intents.test_intent",
+        ]
+
+        for mod_name in intent_modules:
+            try:
+                __import__(mod_name)
+            except ImportError as e:
+                log.warning("intent_import_failed", module=mod_name, error=str(e))
+
+        # Wirer INTENT_REGISTRY → IntentQueue._handlers
+        intent_queue = self._runtime.intent_queue
+        if hasattr(intent_queue, '_handlers'):
+            for event_name, intent_class in INTENT_REGISTRY.items():
+                intent_queue._handlers[event_name] = intent_class
+            log.info("intents_wired",
+                     count=len(INTENT_REGISTRY),
+                     events=list(INTENT_REGISTRY.keys()))
+        else:
+            log.warning("intent_queue_no_handlers",
+                        msg="IntentQueue has no _handlers attribute")
+
+    # ═══════════════════════════════════════════════════════════════
+    # BUS
+    # ═══════════════════════════════════════════════════════════════
+
+    def _start_bus(self) -> None:
+        """Demarre les sources d'evenements du bus."""
+        from bus import TimerSource, InotifySource, UdevSource, SocketSource
+
+        eq = self._runtime.event_queue
+        sched_cfg = self._config.get("scheduler", {})
+
+        # Timer — toujours actif
+        timer = TimerSource(eq)
+        timer.add_job("coherence_check", 3600)
+        timer.add_job("scrub_check", 604800)
+        timer.start()
+        self._bus_sources.append(timer)
+        log.info("bus_timer_started")
+
+        # Inotify
+        if sched_cfg.get("bus_inotify", True):
+            try:
+                inotify = InotifySource(eq, watch_paths=["/boot"])
+                inotify.start()
+                self._bus_sources.append(inotify)
+                log.info("bus_inotify_started")
+            except Exception as e:
+                log.warning("bus_inotify_failed", error=str(e))
+
+        # Udev
+        if sched_cfg.get("bus_udev", True):
+            try:
+                udev = UdevSource(eq)
+                udev.start()
+                self._bus_sources.append(udev)
+                log.info("bus_udev_started")
+            except Exception as e:
+                log.warning("bus_udev_failed", error=str(e))
+
+        # Socket
+        if sched_cfg.get("bus_socket", True):
+            socket_path = sched_cfg.get("socket_path", "/run/fsdeploy.sock")
+            try:
+                sock = SocketSource(eq, socket_path=socket_path)
+                sock.start()
+                self._bus_sources.append(sock)
+                log.info("bus_socket_started", path=sock.effective_path)
+            except Exception as e:
+                log.warning("bus_socket_failed", error=str(e))
+
+    # ═══════════════════════════════════════════════════════════════
+    # SCHEDULER THREAD
+    # ═══════════════════════════════════════════════════════════════
+
+    def _start_scheduler_background(self) -> None:
+        """Demarre le scheduler dans un thread background daemon."""
+        self._scheduler_thread = threading.Thread(
+            target=self._scheduler.run,
             name="fsdeploy-scheduler",
             daemon=True,
         )
-        sched_thread.start()
+        self._scheduler_thread.start()
+        log.info("scheduler_background_started")
 
-        # 8. TUI ou boucle d'attente dans le main thread
-        try:
-            tui_enabled = self.config.get("tui_enabled", True)
-            if mode == "tui" and tui_enabled:
-                # TUI dans le main thread (requis par Textual)
-                self._run_tui_main()
-            else:
-                # Pas de TUI — attendre dans le main thread
-                self._wait_main(sched_thread)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            self._shutdown()
+    # ═══════════════════════════════════════════════════════════════
+    # TUI
+    # ═══════════════════════════════════════════════════════════════
 
-    def _wait_main(self, sched_thread: threading.Thread) -> None:
+    def _run_tui(self, mode: str = "tui") -> None:
         """
-        Boucle d'attente pour les modes sans TUI (daemon, bare, stream).
-        Le main thread attend que le scheduler s'arrete ou qu'un signal arrive.
+        Lance la TUI Textual dans le main thread.
+
+        Textual 8.x EXIGE le main thread pour les signaux
+        (SIGWINCH, SIGTSTP, etc.) et pour asyncio.
         """
-        # Installer les signal handlers dans le main thread
-        original_sigterm = signal.getsignal(signal.SIGTERM)
-        original_sigint = signal.getsignal(signal.SIGINT)
-
-        def _handle_stop(signum, frame):
-            self._running = False
-            self.scheduler.stop()
-
-        signal.signal(signal.SIGTERM, _handle_stop)
-        signal.signal(signal.SIGINT, _handle_stop)
-
         try:
-            while self._running and sched_thread.is_alive():
-                sched_thread.join(timeout=1.0)
-        finally:
-            signal.signal(signal.SIGTERM, original_sigterm)
-            signal.signal(signal.SIGINT, original_sigint)
+            from ui.app import FsDeployApp
+        except ImportError as e:
+            log.error("tui_import_failed", error=str(e))
+            # Fallback : scheduler en main thread
+            log.info("fallback_scheduler_main")
+            self._install_signals()
+            self._scheduler_thread.join()
+            return
 
-    def _shutdown(self) -> None:
-        """Arret propre de tous les composants."""
-        self._running = False
-        self.scheduler.stop()
+        tui_mode = "stream" if mode == "stream" else "deploy"
+        app_config = None
 
-        # Arreter l'executor (attend les tasks threaded)
-        self.executor.shutdown(wait=True, timeout=30)
-
-        # Arreter les sources
-        for source in self._sources:
-            source.stop()
-
-        # Sauvegarder le store
-        store_path = Path(
-            os.environ.get("FSDEPLOY_INSTALL_DIR", "/opt/fsdeploy")
-        ) / "var" / "lib" / "fsdeploy" / "runtime.hfdb"
+        # Charger le FsDeployConfig si disponible
         try:
-            store_path.parent.mkdir(parents=True, exist_ok=True)
-            self.store.save(store_path)
+            from config import FsDeployConfig
+            app_config = FsDeployConfig.default(create=False)
         except Exception:
             pass
 
-        self.store.log_event("daemon.stopped", source="daemon")
+        log.info("tui_starting", mode=tui_mode)
 
+        tui_cfg = self._config.get("tui", {})
+        auto_restart = tui_cfg.get("auto_restart", True)
+        max_backoff = tui_cfg.get("max_backoff", 60)
+        backoff = 1
 
-# ═══════════════════════════════════════════════════════════════════
-# HELPERS
-# ═══════════════════════════════════════════════════════════════════
+        while True:
+            try:
+                app = FsDeployApp(
+                    runtime=self._runtime,
+                    store=self._store,
+                    config=app_config,
+                    mode=tui_mode,
+                )
+                app.run()
+                # Sortie normale (q pressed)
+                log.info("tui_exited_normally")
+                break
 
-def _resolve_socket_path() -> str:
-    """
-    Determine le meilleur chemin pour le socket Unix.
+            except KeyboardInterrupt:
+                log.info("tui_keyboard_interrupt")
+                break
 
-    Priorite :
-      1. /run/fsdeploy.sock   (si writable — root ou sudoers)
-      2. $XDG_RUNTIME_DIR/fsdeploy.sock  (user session — systemd)
-      3. /tmp/fsdeploy-<uid>.sock  (fallback universel)
-    """
-    # /run si accessible
-    run_path = Path("/run/fsdeploy.sock")
-    if run_path.parent.exists() and os.access(str(run_path.parent), os.W_OK):
-        return str(run_path)
+            except Exception as e:
+                log.error("tui_crashed", error=str(e), backoff=backoff)
 
-    # XDG_RUNTIME_DIR (ex: /run/user/1000)
-    xdg = os.environ.get("XDG_RUNTIME_DIR", "")
-    if xdg and Path(xdg).is_dir():
-        return str(Path(xdg) / "fsdeploy.sock")
+                if not auto_restart:
+                    log.info("tui_no_restart")
+                    break
 
-    # Fallback /tmp avec uid pour eviter les collisions
-    return f"/tmp/fsdeploy-{os.getuid()}.sock"
+                log.info("tui_restart", delay=backoff)
+                time.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
+
+        # Quand la TUI quitte, arreter proprement
+        self.stop()
+
+    # ═══════════════════════════════════════════════════════════════
+    # SIGNAUX
+    # ═══════════════════════════════════════════════════════════════
+
+    def _install_signals(self) -> None:
+        """Installe les signal handlers dans le main thread."""
+        if not _is_main_thread():
+            return
+
+        def _handler(signum, frame):
+            log.info("signal_received", signal=signum)
+            self.stop()
+
+        signal.signal(signal.SIGTERM, _handler)
+        signal.signal(signal.SIGINT, _handler)
+
+    # ═══════════════════════════════════════════════════════════════
+    # INTROSPECTION
+    # ═══════════════════════════════════════════════════════════════
+
+    def get_state_snapshot(self) -> dict:
+        """Snapshot pour GraphView et monitoring externe."""
+        result = {
+            "running": self._running,
+            "bus_sources": len(self._bus_sources),
+        }
+        if self._runtime:
+            try:
+                eq = self._runtime.event_queue
+                iq = self._runtime.intent_queue
+                result["event_count"] = eq.qsize() if hasattr(eq, 'qsize') else 0
+                result["intent_count"] = iq.qsize() if hasattr(iq, 'qsize') else 0
+            except Exception:
+                pass
+        if self._scheduler:
+            result["scheduler_running"] = self._scheduler._running
+        if self._executor:
+            result["executor_pending"] = getattr(self._executor, 'pending_count', 0)
+        return result
