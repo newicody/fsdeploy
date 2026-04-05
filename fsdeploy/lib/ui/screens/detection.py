@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 """
 fsdeploy.ui.screens.detection
 ===============================
-Ecran de detection — 100% bus events.
+Ecran de detection - 100% bus events.
 Compatible : Textual >=8.2.1 / Rich >=14.3.3
-Screen.name est read-only — ne pas assigner dans __init__
+Screen.name est read-only - ne pas assigner dans __init__
 """
 
 import json
@@ -20,10 +21,10 @@ from textual.widgets import (
 )
 
 IS_FB = os.environ.get("TERM") == "linux"
-CHECK = "[OK]" if IS_FB else "✅"
-CROSS = "[!!]" if IS_FB else "❌"
-WARN  = "[??]" if IS_FB else "⚠️"
-ARROW = "->" if IS_FB else "→"
+CHECK = "[OK]" if IS_FB else "2705"
+CROSS = "[!!]" if IS_FB else "274c"
+WARN  = "[??]" if IS_FB else "26a0Fe0f"
+ARROW = "->" if IS_FB else "2192"
 
 
 class DetectionScreen(Screen):
@@ -108,9 +109,9 @@ class DetectionScreen(Screen):
         elif bid == "btn-validate": self.action_validate()
         elif bid == "btn-import": self._import_pools()
 
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
     # PHASE 0 : import automatique AVANT tout
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
 
     def action_run_detection(self) -> None:
         if self._scanning or not self.bridge:
@@ -141,9 +142,9 @@ class DetectionScreen(Screen):
         self._safe_progress(5)
         self._launch_phase1()
 
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
     # PHASE 1 : pools + partitions
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
 
     def _launch_phase1(self) -> None:
         if not self.bridge: return
@@ -185,9 +186,9 @@ class DetectionScreen(Screen):
             self._partitions = ticket.result
             self._safe_log(f"  {CHECK} {len(self._partitions)} partitions")
 
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
     # PHASE 2 : datasets
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
 
     def _launch_dataset_listing(self) -> None:
         if not self.bridge: return
@@ -210,9 +211,9 @@ class DetectionScreen(Screen):
             self._safe_log(f"  Total : {len(self._datasets)} datasets")
             self._safe_progress(50); self._launch_probes()
 
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
     # PHASE 3 : probes
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
 
     def _launch_probes(self) -> None:
         if not self.bridge or not self._datasets:
@@ -249,9 +250,9 @@ class DetectionScreen(Screen):
                         if ds_name not in self._probes: self._probes[ds_name] = result
         except Exception: pass
 
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
     # FIN
-    # ═══════════════════════════════════════════════════════════════
+    # ===============================================================
 
     def _finish_scan(self) -> None:
         self._scanning = False; self._progress(100); self._refresh_tables()
@@ -260,7 +261,7 @@ class DetectionScreen(Screen):
             if self._probes.get(ds.get("name",""), {}).get("role","unknown") == "unknown")
         status = "complete" if self._pools and n_unknown == 0 else "partial"
         icon = CHECK if status == "complete" else WARN
-        self._set_status(f"{icon} {status} — {len(self._pools)} pools, "
+        self._set_status(f"{icon} {status} - {len(self._pools)} pools, "
                          f"{len(self._datasets)} datasets, {len(self._partitions)} partitions")
         self.query_one("#btn-validate", Button).disabled = (not self._pools)
         self._log("=== Detection terminee ===")
