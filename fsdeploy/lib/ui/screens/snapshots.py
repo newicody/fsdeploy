@@ -44,7 +44,7 @@ class SnapshotsScreen(Screen):
 
     def __init__(self, **kw):
         super().__init__(**kw)
-self._snaps: list[dict] = []
+        self._snaps: list[dict] = []
         self._sel: int = -1
 
     @property
