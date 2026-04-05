@@ -157,7 +157,6 @@ class FsDeployDaemon:
         self._executor = Executor(
             runtime=self._runtime,
             max_workers=max_workers,
-            store=self._store,
         )
         log.info("executor_ready", max_workers=max_workers)
 
