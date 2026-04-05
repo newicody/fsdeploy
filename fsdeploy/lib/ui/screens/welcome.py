@@ -183,7 +183,7 @@ class WelcomeScreen(Screen):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-self._env_info: dict[str, Any] = {}
+        self._env_info: dict[str, Any] = {}
         self._pools: list[dict] = []
         self._snapshot: dict[str, Any] = {}
 
