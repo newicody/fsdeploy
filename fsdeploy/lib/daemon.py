@@ -155,11 +155,12 @@ class FsDeployDaemon:
                 log.warning("intent_import_failed", module=mod_name, error=str(e))
 
         intent_queue = self._runtime.intent_queue
-        if hasattr(intent_queue, '_handlers'):
-            for event_name, intent_class in INTENT_REGISTRY.items():
-                intent_queue._handlers[event_name] = intent_class
-            log.info("intents_wired", count=len(INTENT_REGISTRY),
-                     events=list(INTENT_REGISTRY.keys()))
+        for event_name, intent_class in INTENT_REGISTRY.items():
+            def _make_handler(cls):
+                def handler(event):
+                    return [cls(params=event.params, context=event.params)]
+                return handler
+            intent_queue.register_handler(event_name, _make_handler(intent_class))
 
     # ===================================================================
     # BUS
