@@ -128,7 +128,7 @@ class FsDeployDaemon:
         from scheduler.core.resolver import Resolver
         from scheduler.core.scheduler import Scheduler
       
-        from scheduler.security.resolver import SecurityResolver\n        
+        from scheduler.security.resolver import SecurityResolver        
         resolver = Resolver(security_resolver=SecurityResolver())
 
       
