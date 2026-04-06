@@ -127,8 +127,12 @@ class FsDeployDaemon:
     def _init_scheduler(self) -> None:
         from scheduler.core.resolver import Resolver
         from scheduler.core.scheduler import Scheduler
+      
+        from scheduler.security.resolver import SecurityResolver\n        
+        resolver = Resolver(security_resolver=SecurityResolver())
 
-        resolver = Resolver(self._runtime)
+      
+
         tick = self._config.get("scheduler", {}).get("tick_interval", 0.1)
         self._scheduler = Scheduler(
             resolver=resolver,
