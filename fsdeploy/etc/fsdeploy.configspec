@@ -1,0 +1,172 @@
+# =============================================================================
+# fsdeploy.configspec -- Schema de validation configobj
+# =============================================================================
+# Utilise par FsDeployConfig._load() pour valider et remplir les defauts.
+# Chaque cle definit le type, les contraintes et la valeur par defaut.
+#
+# PRINCIPE : ZERO chemin en dur. Toutes les valeurs par defaut sont vides
+# ou generiques. Les chemins concrets sont remplis a la detection ou par
+# l'utilisateur via TUI/CLI.
+# =============================================================================
+
+[env]
+mode             = option(deploy, booted, initramfs, default=deploy)
+verbose          = boolean(default=false)
+debug            = boolean(default=false)
+dry_run          = boolean(default=false)
+quiet            = boolean(default=false)
+bypass           = boolean(default=false)
+created_at       = string(default="")
+last_modified    = string(default="")
+last_modified_by = string(default="")
+fsdeploy_version = string(default="0.1.0")
+
+[pool]
+boot_pool   = string(default="")
+fast_pool   = string(default="")
+data_pool   = string(default="")
+boot_mount  = string(default="")
+
+[partition]
+efi_device  = string(default="")
+efi_mount   = string(default="")
+efi_part_num = string(default="")
+disks       = list(default=list())
+
+[detection]
+status      = option(none, partial, complete, default=none)
+report_json = string(default="")
+detected_at = string(default="")
+
+[mounts]
+
+[kernel]
+    # Kernel actif (nom de fichier relatif a staging_dir, ex: vmlinuz-6.12.0)
+    active         = string(default="")
+    # Version extraite (ex: 6.12.0)
+    version        = string(default="")
+    # Provenance : found (detecte), compiled, external
+    source         = option(found, compiled, external, default=found)
+    # Modules correspondant au kernel actif
+    modules_path   = string(default="")
+    modules_source = option(found, compiled, external, default=found)
+    # -- Provision / Registry --
+    # Repertoire cible ou les kernels choisis sont provisiones (symlink/copie)
+    # Vide = meme repertoire que boot_mount. Ex: /mnt/boot
+    staging_dir    = string(default="")
+    # Methode de provisionnement : symlink (meme pool), copy, bind (mount --bind)
+    install_method = option(symlink, copy, bind, default=symlink)
+    # Datasets dans lesquels chercher les kernels (vide = tous les detectes)
+    search_datasets = list(default=list())
+    # Patterns supplementaires pour trouver des kernels
+    extra_patterns  = list(default=list())
+    # Prefixes kernel reconnus (pour scan)
+    prefixes        = list(default=list("vmlinuz-", "vmlinux-", "bzImage-"))
+    # Prefixes initramfs reconnus
+    initramfs_prefixes = list(default=list("initramfs-", "initrd.img-", "initrd-"))
+
+[initramfs]
+    active         = string(default="")
+    type           = option(zbm, minimal, stream, custom, default=zbm)
+    method         = option(dracut, cpio, default=dracut)
+    dracut_drivers = list(default=list("zfs", "squashfs", "overlay", "e1000e", "loop"))
+    dracut_modules = list(default=list("kernel-modules", "base"))
+    dracut_omit    = list(default=list("nfs", "iscsi", "multipath", "systemd"))
+    compress       = option(zstd, xz, gzip, lz4, default=zstd)
+
+[overlay]
+    dataset    = string(default="")
+    pool       = string(default="")
+    rootfs_sfs = string(default="")
+    python_sfs = string(default="")
+
+[zbm]
+    # -- Chemins EFI (tous relatifs a efi_mount) --
+    efi_path        = string(default="")
+    backup_efi_path = string(default="")
+    # Ligne de commande ZBM
+    cmdline         = string(default="quiet loglevel=3 zbm.autosize=0")
+    timeout         = integer(min=0, max=60, default=3)
+    # Dataset racine prefere par ZBM (zbm.prefer=...)
+    bootfs          = string(default="")
+    # -- Installation --
+    # Methode : prebuilt (telecharge EFI), generate (generate-zbm), manual
+    install_method  = option(prebuilt, generate, manual, default=prebuilt)
+    # URL de telechargement EFI prebuilt
+    prebuilt_url    = string(default="https://get.zfsbootmenu.org/efi")
+    # Chemin config.yaml pour generate-zbm (vide = genere par fsdeploy)
+    config_yaml     = string(default="")
+    # Repertoire images ZBM (Components.ImageDir dans config.yaml)
+    image_dir       = string(default="")
+    # Versions a conserver
+    versions        = integer(min=0, max=10, default=3)
+    # -- Dracut specifique ZBM --
+    dracut_conf_dir = string(default="")
+
+[presets]
+    active = string(default="")
+
+[stream]
+    enabled       = boolean(default=false)
+    youtube_key   = string(default="")
+    resolution    = string(default="1920x1080")
+    fps           = integer(min=1, max=60, default=30)
+    bitrate       = string(default="4500k")
+    audio_bitrate = string(default="128k")
+    start_delay   = integer(min=0, max=300, default=30)
+    input         = string(default="/dev/fb0")
+    stream_module = string(default="")
+
+[network]
+    interface  = string(default="")
+    method     = option(dhcp, static, default=dhcp)
+    ip_address = string(default="")
+    gateway    = string(default="")
+    dns        = string(default="")
+    timeout    = integer(min=1, max=120, default=30)
+
+[snapshots]
+    base_dir       = string(default="")
+    retention_days = integer(min=1, max=365, default=30)
+    compress       = boolean(default=true)
+    auto_datasets  = list(default=list())
+    auto_interval  = integer(min=0, default=0)
+
+[security]
+
+[scheduler]
+    tick_interval = float(min=0.01, max=10.0, default=0.1)
+    max_workers   = integer(min=1, max=32, default=4)
+    bus_udev      = boolean(default=true)
+    bus_inotify   = boolean(default=true)
+    bus_socket    = boolean(default=true)
+    socket_path   = string(default="")
+    [[timer_jobs]]
+    coherence_check = integer(min=0, default=3600)
+    scrub_check     = integer(min=0, default=604800)
+    snapshot_auto   = integer(min=0, default=0)
+
+[tui]
+    enabled      = boolean(default=true)
+    web_port     = integer(min=0, max=65535, default=0)
+    theme        = option(dark, light, default=dark)
+    auto_restart = boolean(default=true)
+    max_backoff  = integer(min=1, max=600, default=60)
+
+[log]
+    level         = option(debug, info, warning, error, default=info)
+    dir           = string(default="")
+    max_size_mb   = integer(min=1, max=500, default=50)
+    format        = option(text, json, default=text)
+    ascii_fallback = boolean(default=true)
+
+[integrity]
+    enabled        = boolean(default=true)
+    algorithm      = option(crc32, sha256, blake2b, auto, default=auto)
+    verify_on_boot = boolean(default=true)
+
+[meta]
+    config_version = integer(default=1)
+    created_at     = string(default="")
+    last_saved     = string(default="")
+    last_saved_by  = string(default="")

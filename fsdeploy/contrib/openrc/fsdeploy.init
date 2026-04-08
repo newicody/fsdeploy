@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+
+name="fsdeploy"
+description="fsdeploy service"
+
+command="/usr/bin/fsdeploy"
+command_args="--daemon"
+command_background=true
+pidfile="/var/run/${RC_SVCNAME}.pid"
+
+depend() {
+    need localmount
+    after bootmisc
+}
