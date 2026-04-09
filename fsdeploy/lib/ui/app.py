@@ -192,7 +192,7 @@ class FsDeployApp(App):
 
         # Bridge TUI -> Scheduler
         if runtime:
-            from ui.bridge import SchedulerBridge
+            from .bridge import SchedulerBridge
             self.bridge = SchedulerBridge(runtime, store)
         else:
             self.bridge = None
@@ -248,6 +248,10 @@ class FsDeployApp(App):
             "intentlog": ("fsdeploy.lib.ui.screens.intentlog", "IntentLogScreen"),
             "metrics": ("fsdeploy.lib.ui.screens.metrics", "MetricsScreen"),
             "modules": ("fsdeploy.lib.ui.screens.module_registry", "ModuleRegistryScreen"),
+            "config_snapshot": ("fsdeploy.lib.ui.screens.config_snapshot", "ConfigSnapshotScreen"),
+            "error_log": ("fsdeploy.lib.ui.screens.error_log", "ErrorLogScreen"),
+            "history": ("fsdeploy.lib.ui.screens.history", "HistoryScreen"),
+            "monitoring": ("fsdeploy.lib.ui.screens.monitoring", "MonitoringScreen"),
         }
 
         for name, (module_path, class_name) in screen_map.items():

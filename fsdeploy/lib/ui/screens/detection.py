@@ -96,7 +96,7 @@ class DetectionScreen(Screen):
         pt.add_columns("Pool", "Etat", "Taille", "Utilise", "Libre")
         pt.cursor_type = "row"
         dt = self.query_one("#datasets-table", DataTable)
-        dt.add_columns("Dataset", "Role", "Confiance", "Utilise", "Dispo", "Details")
+        dt.add_columns("Dataset", "Role", "Pattern", "Confiance", "Utilise", "Dispo", "Details")
         dt.cursor_type = "row"
         pp = self.query_one("#partitions-table", DataTable)
         pp.add_columns("Device", "Type", "Label", "UUID", "Taille", "Role")
@@ -298,9 +298,13 @@ class DetectionScreen(Screen):
         for ds in self._datasets:
             name = ds.get("name","?"); probe = self._probes.get(name, {})
             role = probe.get("role","?"); conf = probe.get("confidence", 0)
+            pattern = probe.get("pattern", probe.get("modules", "-"))
+            if isinstance(pattern, list):
+                pattern = ",".join(pattern)
+            pattern_str = str(pattern)[:30]
             conf_str = f"{conf:.0%}" if conf > 0 else "-"
             details = str(probe.get("details",""))[:40] or "-"
-            dt.add_row(name, role, conf_str, ds.get("used","-"), ds.get("avail","-"), details)
+            dt.add_row(name, role, pattern_str, conf_str, ds.get("used","-"), ds.get("avail","-"), details)
         pp = self.query_one("#partitions-table", DataTable); pp.clear()
         for p in self._partitions:
             uid = p.get("uuid","-")

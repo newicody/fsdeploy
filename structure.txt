@@ -1,0 +1,291 @@
+.
+├── contrib
+│   ├── integration
+│   │   ├── test_alpine.sh
+│   │   ├── test_arch.sh
+│   │   ├── test_debian.sh
+│   │   └── test_ubuntu.sh
+│   ├── sysvinit
+│   │   └── fsdeploy
+│   └── upstart
+│       └── fsdeploy.conf
+├── erreurs.txt
+├── fsdeploy
+│   ├── cli.py
+│   ├── contrib
+│   │   ├── openrc
+│   │   │   ├── fsdeploy.init
+│   │   │   └── fsdeploy.initd
+│   │   ├── systemd
+│   │   │   └── fsdeploy.service
+│   │   ├── sysvinit
+│   │   │   └── fsdeploy.init
+│   │   └── upstart
+│   │       └── fsdeploy.conf
+│   ├── docs
+│   │   ├── ADVANCED_DETECTION.md
+│   │   ├── api-internes.md
+│   │   ├── api_reference.md
+│   │   ├── architecture.md
+│   │   ├── bridge-ui-scheduler.md
+│   │   ├── bridge_ui_scheduler.md
+│   │   ├── DIAGRAMS.md
+│   │   ├── DOCUMENTATION_SUMMARY.md
+│   │   ├── FINAL_RECAP.md
+│   │   ├── fsdeploy_main_status.md
+│   │   ├── GRAPHVIEW.md
+│   │   ├── IMPORT_VS_MOUNT.md
+│   │   ├── INDEX.md
+│   │   ├── manuel.md
+│   │   ├── MOUNTING_STRATEGY.md
+│   │   └── SESSION_FINAL.md
+│   ├── etc
+│   │   ├── fsdeploy
+│   │   │   ├── datasets.generated.cfg
+│   │   │   ├── devices.generated.cfg
+│   │   │   ├── global.cfg
+│   │   │   ├── intent.generated.cfg
+│   │   │   ├── pools.generated.cfg
+│   │   │   └── rules.generated.cfg
+│   │   ├── fsdeploy.conf
+│   │   └── fsdeploy.configspec
+│   ├── fsdeploy
+│   │   ├── __init__.py
+│   │   └── __main__.py
+│   ├── __init__.py
+│   ├── install-fix.sh
+│   ├── launch.sh
+│   ├── lib
+│   │   ├── bus
+│   │   │   ├── event_bus.py
+│   │   │   └── __init__.py
+│   │   ├── config.py
+│   │   ├── daemon.py
+│   │   ├── diagnostic.py
+│   │   ├── function
+│   │   │   ├── boot
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── init.py
+│   │   │   │   └── initramfs.py
+│   │   │   ├── coherence
+│   │   │   │   ├── check.py
+│   │   │   │   └── __init__.py
+│   │   │   ├── config
+│   │   │   │   ├── restore.py
+│   │   │   │   └── snapshot.py
+│   │   │   ├── dataset
+│   │   │   │   ├── create.py
+│   │   │   │   ├── destroy.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── mount.py
+│   │   │   ├── detect
+│   │   │   │   ├── environment.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── role_patterns.py
+│   │   │   ├── init
+│   │   │   │   ├── boot_check.py
+│   │   │   │   ├── check.py
+│   │   │   │   └── install.py
+│   │   │   ├── init_boot_config.py
+│   │   │   ├── init_check.py
+│   │   │   ├── init_config.py
+│   │   │   ├── init_install.py
+│   │   │   ├── __init__.py
+│   │   │   ├── init_upstart_sysv.py
+│   │   │   ├── integration_test.py
+│   │   │   ├── kernel
+│   │   │   │   ├── compile.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── install.py
+│   │   │   │   ├── provision.py
+│   │   │   │   ├── registry.py
+│   │   │   │   └── switch.py
+│   │   │   ├── kernel_mainline_detect.py
+│   │   │   ├── kernel_module_detect.py
+│   │   │   ├── kernel_module_integrate.py
+│   │   │   ├── live
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── setup.py
+│   │   │   ├── module
+│   │   │   │   ├── base.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── install.py
+│   │   │   │   ├── list.py
+│   │   │   │   ├── local.py
+│   │   │   │   ├── registry.py
+│   │   │   │   ├── tasks.py
+│   │   │   │   ├── uninstall.py
+│   │   │   │   └── update.py
+│   │   │   ├── network
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── setup.py
+│   │   │   ├── pool
+│   │   │   │   ├── export.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── status.py
+│   │   │   ├── rootfs
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── mount.py
+│   │   │   │   ├── switch.py
+│   │   │   │   └── update.py
+│   │   │   ├── scheduler
+│   │   │   │   └── verify.py
+│   │   │   ├── security
+│   │   │   │   └── status.py
+│   │   │   ├── service
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── install.py
+│   │   │   ├── snapshot
+│   │   │   │   ├── create.py
+│   │   │   │   ├── destroy.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── rollback.py
+│   │   │   ├── stream
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── youtube.py
+│   │   │   ├── test_task.py
+│   │   │   ├── zbm
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── validate.py
+│   │   │   └── zfsbootmenu_integrate.py
+│   │   ├── __init__.py
+│   │   ├── intents
+│   │   │   ├── boot_intent.py
+│   │   │   ├── config_intent.py
+│   │   │   ├── detection_intent.py
+│   │   │   ├── init_boot_config_intent.py
+│   │   │   ├── init_config_intent.py
+│   │   │   ├── init_intent.py
+│   │   │   ├── __init__.py
+│   │   │   ├── init_upstart_sysv_intent.py
+│   │   │   ├── integration_intent.py
+│   │   │   ├── kernel_intent.py
+│   │   │   ├── kernel_mainline_intent.py
+│   │   │   ├── kernel_module_intent.py
+│   │   │   ├── log_intent.py
+│   │   │   ├── module_intent.py
+│   │   │   ├── system_intent.py
+│   │   │   ├── test_intent.py
+│   │   │   └── zfsbootmenu_intent.py
+│   │   ├── legacy_mount_check.py
+│   │   ├── log.py
+│   │   ├── modules
+│   │   │   ├── check
+│   │   │   │   ├── health.py
+│   │   │   │   └── __init__.py
+│   │   │   ├── __init__.py
+│   │   │   ├── loader.py
+│   │   │   ├── registry.py
+│   │   │   └── scanner
+│   │   │       ├── __init__.py
+│   │   │       └── squashfs.py
+│   │   ├── scheduler
+│   │   │   ├── bridge.py
+│   │   │   ├── core
+│   │   │   │   ├── dispatcher.py
+│   │   │   │   ├── executor.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── registry.py
+│   │   │   │   ├── resolver.py
+│   │   │   │   ├── runtime.py
+│   │   │   │   └── scheduler.py
+│   │   │   ├── decorators.py
+│   │   │   ├── graph
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── resource_graph.py
+│   │   │   │   └── task_graph.py
+│   │   │   ├── __init__.py
+│   │   │   ├── intentlog
+│   │   │   │   ├── codec.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── log.py
+│   │   │   │   └── persistent.py
+│   │   │   ├── metrics.py
+│   │   │   ├── model
+│   │   │   │   ├── event.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── intent.py
+│   │   │   │   ├── lock.py
+│   │   │   │   ├── resource.py
+│   │   │   │   ├── runtime.py
+│   │   │   │   └── task.py
+│   │   │   ├── queue
+│   │   │   │   ├── event_queue.py
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── intent_queue.py
+│   │   │   ├── runtime
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── monitor.py
+│   │   │   │   └── state.py
+│   │   │   └── security
+│   │   │       ├── decorator.py
+│   │   │       ├── __init__.py
+│   │   │       └── resolver.py
+│   │   ├── test_run.py
+│   │   ├── ui
+│   │   │   ├── app.py
+│   │   │   ├── bridge.py
+│   │   │   ├── compat.py
+│   │   │   ├── __init__.py
+│   │   │   └── screens
+│   │   │       ├── coherence.py
+│   │   │       ├── config.py
+│   │   │       ├── config_snapshot.py
+│   │   │       ├── debug.py
+│   │   │       ├── detection.py
+│   │   │       ├── error_log.py
+│   │   │       ├── graph.py
+│   │   │       ├── history.py
+│   │   │       ├── __init__.py
+│   │   │       ├── initramfs.py
+│   │   │       ├── intentlog.py
+│   │   │       ├── kernel.py
+│   │   │       ├── livegraph.py
+│   │   │       ├── metrics.py
+│   │   │       ├── module_registry.py
+│   │   │       ├── monitoring.py
+│   │   │       ├── mounts.py
+│   │   │       ├── presets.py
+│   │   │       ├── security.py
+│   │   │       ├── snapshots.py
+│   │   │       ├── stream.py
+│   │   │       ├── welcome.py
+│   │   │       └── zbm.py
+│   │   └── version.py
+│   ├── LICENSE
+│   ├── __main__.py
+│   ├── pyproject.toml
+│   ├── README.md
+│   ├── requirements.txt
+│   ├── scripts
+│   │   └── test_logs.py
+│   ├── tests
+│   │   └── unit
+│   │       ├── test_intent_queue.py
+│   │       ├── test_runtime.py
+│   │       └── test_scheduler_bridge.py
+│   ├── ui
+│   │   └── screens
+│   │       ├── graph.py
+│   │       └── __init__.py
+│   └── var
+│       └── logs
+│           └── fsdeploy
+│               ├── errors.log
+│               ├── schedule.log
+│               └── user.errors.log
+├── PLAN.md
+├── structure.txt
+├── sys
+└── tests
+    ├── conftest.py
+    ├── __init__.py
+    ├── test_bridge.py
+    ├── test_event_bus.py
+    ├── test_intent.py
+    └── unit
+        ├── __init__.py
+        ├── test_codec.py
+        └── test_intentlog.py
+
+60 directories, 229 files

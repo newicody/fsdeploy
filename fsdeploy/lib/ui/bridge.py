@@ -80,7 +80,12 @@ class SchedulerBridge:
         self._lock = threading.Lock()
         # Déléguer la gestion des tickets au SchedulerBridge global
         from fsdeploy.lib.scheduler.bridge import SchedulerBridge as GlobalBridge
-        self._global_bridge = GlobalBridge.default()
+        try:
+            # Try default() method (legacy)
+            self._global_bridge = GlobalBridge.default()
+        except AttributeError:
+            # Fallback to global_instance()
+            self._global_bridge = GlobalBridge.global_instance()
 
     # ═══════════════════════════════════════════════════════════════
     # EMISSION — la seule methode que la TUI utilise
