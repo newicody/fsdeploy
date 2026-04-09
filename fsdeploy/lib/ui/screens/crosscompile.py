@@ -1,16 +1,15 @@
 """
-Écran Security : gestion de la sécurité et des permissions.
+fsdeploy.ui.screens.crosscompile — Cross‑compilation kernel.
 """
-
 from textual.screen import Screen
 from textual.widgets import Header, Footer, Static, Label, DataTable
 from textual.binding import Binding
 from textual.containers import Vertical
 
 
-class SecurityScreen(Screen):
+class CrossCompileScreen(Screen):
     """
-    Aperçu et configuration des paramètres de sécurité.
+    Cross‑compilation screen for building kernels for other architectures.
     """
 
     BINDINGS = [
@@ -19,10 +18,10 @@ class SecurityScreen(Screen):
     ]
 
     DEFAULT_CSS = """
-    SecurityScreen {
+    CrossCompileScreen {
         layout: vertical;
     }
-    #security-title {
+    #crosscompile-title {
         text-align: center;
         width: 100%;
         padding: 1 0;
@@ -33,17 +32,16 @@ class SecurityScreen(Screen):
 
     def compose(self):
         yield Header()
-        yield Static("Security", id="security-title")
+        yield Static("Cross‑compilation", id="crosscompile-title")
         with Vertical():
-            yield Label("Règles de sécurité et décorateurs.")
+            yield Label("Cross‑compilation kernel.")
             table = DataTable()
-            table.add_columns("Type", "Chemin", "Valeur")
-            table.add_row("règle", "security.dataset.mount", "allow")
-            table.add_row("règle", "security.dataset.snapshot", "deny")
-            table.add_row("décorateur", "@security.kernel.compile", "active")
+            table.add_columns("Architecture", "Toolchain", "Statut")
+            table.add_row("aarch64", "gcc-aarch64-linux-gnu", "disponible")
+            table.add_row("riscv64", "gcc-riscv64-linux-gnu", "manquant")
             yield table
         yield Footer()
 
     def action_refresh(self):
-        """Rafraîchir les informations de sécurité."""
-        self.notify("Mise à jour de la sécurité...", timeout=2)
+        """Refresh cross‑compilation status."""
+        self.notify("Mise à jour des toolchains...", timeout=2)

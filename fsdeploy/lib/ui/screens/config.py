@@ -85,7 +85,7 @@ class ConfigScreen(Screen):
             display_v = v if len(v) < 60 else v[:57] + "..."
             dt.add_row(k, display_v)
 
-    def on_data_table_row_selected(self, e):
+    def on_data_table_row_highlighted(self, e):
         self._sel = e.cursor_row
         if 0 <= self._sel < len(self._keys):
             k, v = self._keys[self._sel]

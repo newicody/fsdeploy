@@ -34,6 +34,12 @@ from textual.widgets import (
     Rule,
 )
 
+# ── Import des écrans additionnels ───────────────────────────────────────────
+from .security import SecurityScreen
+from .graph import GraphScreen
+from .intentlog import IntentLogScreen
+from .metrics import MetricsScreen
+
 # ── Détection framebuffer ─────────────────────────────────────────────────────
 
 IS_FB = os.environ.get("TERM") == "linux"
@@ -159,7 +165,7 @@ class WelcomeScreen(Screen):
 
     #actions-grid {
         layout: grid;
-        grid-size: 3 4;
+        grid-size: 4 4;
         grid-gutter: 1;
         padding: 1 2;
         height: auto;
@@ -249,6 +255,10 @@ class WelcomeScreen(Screen):
                 yield ActionCard("Debug", "debug", "x")
                 yield ActionCard("ZFSBootMenu", "zbm", "z")
                 yield ActionCard("Statut pools", "status", "t")
+                yield ActionCard("Security", "security", "e")
+                yield ActionCard("Graph", "graph", "g")
+                yield ActionCard("IntentLog", "intentlog", "l")
+                yield ActionCard("Metrics", "metrics", "u")
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -444,7 +454,7 @@ class WelcomeScreen(Screen):
         elif button_id == "btn-debug":
             self.app.action_switch_screen("debug")
         elif isinstance(event.button, ActionCard):
-            self.app.action_switch_screen(event.button.screen_name)
+            self._switch_to_screen(event.button.screen_name)
 
     def action_start_workflow(self) -> None:
         """Lance le workflow de déploiement."""
@@ -482,8 +492,28 @@ class WelcomeScreen(Screen):
         )
 
     def _subtitle_text(self) -> str:
-        import fsdeploy
-        return f"v{fsdeploy.__version__} — Deploiement et gestion ZFS/ZFSBootMenu"
+        version = "dev"
+        try:
+            from fsdeploy.lib.version import __version__
+            version = __version__
+        except (ImportError, AttributeError):
+            pass
+        return f"v{version} — Deploiement et gestion ZFS/ZFSBootMenu"
+
+    def _switch_to_screen(self, screen_name: str) -> None:
+        """Passe à l'écran correspondant."""
+        screen_map = {
+            "security": SecurityScreen,
+            "graph": GraphScreen,
+            "intentlog": IntentLogScreen,
+            "metrics": MetricsScreen,
+        }
+        screen_class = screen_map.get(screen_name)
+        if screen_class:
+            self.app.push_screen(screen_class())
+        else:
+            # Fallback sur l'action par défaut de l'app
+            self.app.action_switch_screen(screen_name)
 
     @staticmethod
     def _read_file(path: str) -> str:

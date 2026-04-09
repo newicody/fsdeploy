@@ -268,8 +268,8 @@ class CoherenceScreen(Screen):
     def _safe_call(self, fn):
         try: self.app.call_from_thread(fn)
         except Exception: fn()
-    @on(DataTable.RowSelected)
-    def handle_row_selected(self, event: DataTable.RowSelected) -> None:
+    @on(DataTable.RowHighlighted)
+    def handle_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         try:
             idx = int(event.row_key.value)
             if 0 <= idx < len(self._checks):

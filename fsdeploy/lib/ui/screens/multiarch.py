@@ -1,16 +1,15 @@
 """
-Écran Security : gestion de la sécurité et des permissions.
+fsdeploy.ui.screens.multiarch — Multi‑architecture support.
 """
-
 from textual.screen import Screen
 from textual.widgets import Header, Footer, Static, Label, DataTable
 from textual.binding import Binding
 from textual.containers import Vertical
 
 
-class SecurityScreen(Screen):
+class MultiArchScreen(Screen):
     """
-    Aperçu et configuration des paramètres de sécurité.
+    Multi‑architecture support screen.
     """
 
     BINDINGS = [
@@ -19,10 +18,10 @@ class SecurityScreen(Screen):
     ]
 
     DEFAULT_CSS = """
-    SecurityScreen {
+    MultiArchScreen {
         layout: vertical;
     }
-    #security-title {
+    #multiarch-title {
         text-align: center;
         width: 100%;
         padding: 1 0;
@@ -33,17 +32,16 @@ class SecurityScreen(Screen):
 
     def compose(self):
         yield Header()
-        yield Static("Security", id="security-title")
+        yield Static("Multi‑architecture", id="multiarch-title")
         with Vertical():
-            yield Label("Règles de sécurité et décorateurs.")
+            yield Label("Gestion des architectures multiples.")
             table = DataTable()
-            table.add_columns("Type", "Chemin", "Valeur")
-            table.add_row("règle", "security.dataset.mount", "allow")
-            table.add_row("règle", "security.dataset.snapshot", "deny")
-            table.add_row("décorateur", "@security.kernel.compile", "active")
+            table.add_columns("Architecture", "Kernel", "Initramfs", "Boot")
+            table.add_row("amd64", "6.12.0", "dracut", "UEFI")
+            table.add_row("arm64", "6.10.0", "dracut", "U‑boot")
             yield table
         yield Footer()
 
     def action_refresh(self):
-        """Rafraîchir les informations de sécurité."""
-        self.notify("Mise à jour de la sécurité...", timeout=2)
+        """Refresh multi‑architecture status."""
+        self.notify("Mise à jour des architectures...", timeout=2)

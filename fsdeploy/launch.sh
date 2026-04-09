@@ -229,7 +229,7 @@ ENVEOF
     if [[ "$(id -un)" == "$REAL_USER" ]]; then
         exec "$VENV_DIR/bin/python3" -m fsdeploy "$@"
     else
-        exec sudo -u "$REAL_USER" -g "$FSDEPLOY_GROUP" \
+        exec sudo -u "$REAL_USER" \
              "$VENV_DIR/bin/python3" -m fsdeploy "$@"
     fi
 fi
@@ -273,7 +273,7 @@ EOF
         info "contrib/non-free déjà présent dans sources.list"
     fi
 
-    local bp_file=/etc/apt/sources.list.d/trixie-backports.list
+    bp_file=/etc/apt/sources.list.d/trixie-backports.list
     if ! grep -qR "trixie-backports" /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null; then
         sudo tee "$bp_file" > /dev/null << 'EOF'
 deb http://deb.debian.org/debian trixie-backports main contrib non-free non-free-firmware
@@ -509,6 +509,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # Cas 1 : Mode dev — utiliser le dossier courant
 if [[ $DEV_MODE -eq 1 && -f "${SCRIPT_DIR}/fsdeploy/__init__.py" ]]; then
     INSTALL_DIR="$SCRIPT_DIR"
+    VENV_DIR="${INSTALL_DIR}/.venv"
+    LOG_DIR="${INSTALL_DIR}/logs"
+    ENV_FILE="${INSTALL_DIR}/.env"
     info "Mode DEV — Utilisation du dossier courant : ${INSTALL_DIR}"
 else
     # Cas 2 : Le dépôt existe déjà, on met à jour
@@ -552,7 +555,7 @@ if [[ -f "${INSTALL_DIR}/requirements.txt" ]]; then
 else
     # Fallback : dépendances minimales directement
     as_user "$VENV_DIR/bin/pip" install --quiet \
-        "textual>=8.2.1,<9" \
+        "textual[dev]>=8.2.1,<9" \
         "textual-dev>=1.8.0,<2" \
         "rich>=14.3.3,<15" \
         "configobj>=5.0.8" \
@@ -580,6 +583,20 @@ fi
 _rich_ver=$("$VENV_DIR/bin/python3" -c "import rich; print(rich.__version__)" 2>/dev/null || echo "MISSING")
 if [[ "$_rich_ver" != "MISSING" ]]; then
     ok "Rich $_rich_ver installé"
+fi
+
+# Vérifier que textual serve est disponible
+if as_user "$VENV_DIR/bin/python3" -m textual serve --help &>/dev/null; then
+    ok "textual serve disponible"
+else
+    warn "textual serve manquant — installation de textual[dev]..."
+    as_user "$VENV_DIR/bin/pip" install --quiet "textual[dev]>=8.2.1,<9"
+    # Vérifier à nouveau
+    if as_user "$VENV_DIR/bin/python3" -m textual serve --help &>/dev/null; then
+        ok "textual[dev] installé et textual serve disponible"
+    else
+        err "Échec d'installation de textual serve — CLI web peut ne pas fonctionner"
+    fi
 fi
 
 # Permissions venv
@@ -621,11 +638,18 @@ ok "'fsdeploy' disponible → ${WRAPPER}"
 sudo tee "$SERVE_WRAPPER" > /dev/null << WEBEOF
 #!/usr/bin/env bash
 # fsdeploy web mode — généré par launch.sh
-# Usage : fsdeploy-web [--port 8080]
+# Usage : fsdeploy-web [--port 8080] [--host 0.0.0.0]
 [ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
-PORT="\${1:-8080}"
-if [ "\$1" = "--port" ]; then PORT="\$2"; fi
-exec "${VENV_DIR}/bin/textual" serve "python3 -m fsdeploy" --port "\$PORT"
+PORT="8080"
+HOST="0.0.0.0"
+while [[ \$# -gt 0 ]]; do
+    case \$1 in
+        --port) PORT="\$2"; shift 2 ;;
+        --host) HOST="\$2"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+exec "${VENV_DIR}/bin/textual" serve --host "\$HOST" --port "\$PORT" "python3 -m fsdeploy"
 WEBEOF
 srun chmod 755 "$SERVE_WRAPPER"
 ok "'fsdeploy-web' disponible → ${SERVE_WRAPPER}"
@@ -701,15 +725,13 @@ printf "\n"
 
 if [[ ${#GROUPS_ADDED[@]} -gt 0 ]]; then
     printf "${CY}  ⚠  Nouveaux groupes : %s${CR}\n" "${GROUPS_ADDED[*]}"
-    printf "     Actifs à la prochaine session. Pour démarrer maintenant :\n\n"
-    printf "       ${CB}exec sudo -u ${REAL_USER} -g ${FSDEPLOY_GROUP} ${VENV_DIR}/bin/python3 -m fsdeploy${CR}\n\n"
-    printf "     Ou reconnectez-vous puis lancez : ${CB}fsdeploy${CR}\n\n"
+    printf "     (Pleinement actifs à la prochaine session.)\n\n"
+fi
+
+printf "   Lancement de fsdeploy...\n\n"
+if [[ "$(id -un)" == "$REAL_USER" ]]; then
+    exec "$VENV_DIR/bin/python3" -m fsdeploy "$@"
 else
-    printf "   Lancement de fsdeploy...\n\n"
-    if [[ "$(id -un)" == "$REAL_USER" ]]; then
-        exec "$VENV_DIR/bin/python3" -m fsdeploy "$@"
-    else
-        exec sudo -u "$REAL_USER" -g "$FSDEPLOY_GROUP" \
-             "$VENV_DIR/bin/python3" -m fsdeploy "$@"
-    fi
+    exec sudo -u "$REAL_USER" \
+         "$VENV_DIR/bin/python3" -m fsdeploy "$@"
 fi

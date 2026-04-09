@@ -241,9 +241,12 @@ class FsDeployApp(App):
             "config": ("fsdeploy.lib.ui.screens.config", "ConfigScreen"),
             "debug": ("fsdeploy.lib.ui.screens.debug", "DebugScreen"),
             "zbm": ("fsdeploy.lib.ui.screens.zbm", "ZBMScreen"),
-            "graph": ("fsdeploy.lib.ui.screens.graph", "GraphViewScreen"),
+            "graph": ("fsdeploy.lib.ui.screens.graph", "GraphScreen"),
             "crosscompile": ("fsdeploy.lib.ui.screens.crosscompile", "CrossCompileScreen"),
             "multiarch": ("fsdeploy.lib.ui.screens.multiarch", "MultiArchScreen"),
+            "security": ("fsdeploy.lib.ui.screens.security", "SecurityScreen"),
+            "intentlog": ("fsdeploy.lib.ui.screens.intentlog", "IntentLogScreen"),
+            "metrics": ("fsdeploy.lib.ui.screens.metrics", "MetricsScreen"),
             "modules": ("fsdeploy.lib.ui.screens.module_registry", "ModuleRegistryScreen"),
         }
 
