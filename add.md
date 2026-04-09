@@ -4,6 +4,21 @@
 
 ---
 
+## État des propositions
+
+Les propositions ci-dessous sont classées par priorité et leur état de mise en œuvre.
+
+| ID | Proposition | Priorité | Statut | Fichiers concernés |
+|----|-------------|----------|--------|-------------------|
+| 1 | Écrans TUI : pattern uniforme de câblage | P0 | Proposé | `lib/ui/mixins.py`, écrans |
+| 2 | Dry-run mode global | P0 | Proposé | `lib/daemon.py`, `__main__.py`, tâches |
+| 3 | Health-check au démarrage | P0 | Proposé | `lib/intents/system_intent.py`, `lib/ui/screens/welcome.py` |
+| 4 | Notifications TUI unifiées | P1 | Proposé | `lib/ui/app.py` |
+| 5 | Rollback automatique des montages | P0 | Proposé | `lib/function/mount/manager.py` |
+| 6 | Export/import de configuration de déploiement | P1 | Proposé | `lib/intents/system_intent.py`, `lib/ui/screens/presets.py` |
+| 7 | Mode recovery | P1 | Proposé | `__main__.py` (sous-commande), `lib/intents/system_intent.py` |
+| 8 | Métriques de performance des tâches | P1 | Proposé | MetricsScreen, scheduler |
+
 ## 1. Écrans TUI : pattern uniforme de câblage
 
 **Problème** : Chaque écran réinvente sa connexion au scheduler. Certains ne sont pas connectés du tout.

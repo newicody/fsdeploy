@@ -112,3 +112,26 @@ Principes rappelés
     Fichiers complets : toujours livrer des fichiers entiers, jamais des patches.
     configobj : pas pydantic/dataclasses pour la config.
     Trois contextes : Debian Live / initramfs / système booté — même code, paramètre = mountpoint.
+
+Plan d'exécution immédiat (itération 4)
+
+Basé sur l'analyse et les propositions de add.md, les actions suivantes sont priorisées pour les prochains jours :
+
+P0 - Actions critiques (bloquantes)
+   1. Créer le mixin BridgeScreenMixin (lib/ui/mixins.py) et l'intégrer dans tous les écrans.
+   2. Implémenter le mode --dry-run dans le CLI et les tâches.
+   3. Ajouter l'intent system.healthcheck et le câbler au WelcomeScreen.
+   4. Implémenter le MountManager avec journal et cleanup.
+
+P1 - Actions fonctionnelles
+   1. Notifications TUI unifiées (écoute du bus pour task.failed/finished).
+   2. Export/import de configuration de déploiement (presets étendus).
+   3. Mode recovery (nouvelle sous-commande --recovery).
+   4. Métriques de performance des tâches (affichage dans MetricsScreen).
+
+P2 - Actions de polish
+   1. Documentation utilisateur (manuel.md).
+   2. CI/CD GitHub Actions.
+   3. Hot-swap depuis la TUI.
+
+Ces actions seront suivies dans le fichier next_actions.md avec suivi quotidien.
