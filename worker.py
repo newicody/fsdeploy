@@ -1,4 +1,3 @@
-import os
 import json
 import subprocess
 from pathlib import Path
@@ -7,16 +6,33 @@ from datetime import datetime
 # =========================
 # CONFIG
 # =========================
-BASE_DIR = Path(".fsdeploy")
-
-PLAN_FILE = BASE_DIR / "PLAN.md"
-STATE_FILE = BASE_DIR / "STATE.json"
-
 AIDER_CMD = "aider"
 AIDER_MODEL = "deepseek/deepseek-reasoner"
 
 AUTO_STAGE_ALL = True
 DEFAULT_BRANCH = "dev"
+
+
+# =========================
+# ROOT DETECTION (CRITIQUE)
+# =========================
+def get_git_root():
+    result = subprocess.run(
+        "git rev-parse --show-toplevel",
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError("Pas dans un repo Git")
+
+    return Path(result.stdout.strip())
+
+
+BASE_DIR = get_git_root()
+PLAN_FILE = BASE_DIR / "PLAN.md"
+STATE_FILE = BASE_DIR / "STATE.json"
 
 
 # =========================
@@ -50,34 +66,81 @@ def save_state(state):
 
 
 # =========================
-# SHELL
+# SHELL (STRICT)
 # =========================
-def run(cmd):
+def run(cmd, check=True):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+
     if result.returncode != 0:
         log(result.stderr.strip(), "ERROR")
+        if check:
+            raise RuntimeError(f"Commande échouée: {cmd}")
+
     return result
 
 
 # =========================
-# GIT
+# GIT HELPERS
+# =========================
+def git_has_changes():
+    return bool(run("git status --porcelain").stdout.strip())
+
+
+def git_has_stash():
+    return bool(run("git stash list").stdout.strip())
+
+
+def git_restore_stash():
+    log("♻️ Restauration stash")
+    result = run("git stash pop", check=False)
+
+    if result.returncode != 0:
+        log("⚠️ Conflits après stash pop", "ERROR")
+        input("Résous les conflits puis appuie sur Entrée...")
+
+
+def git_changed_files():
+    result = run("git status --porcelain")
+
+    files = []
+    for line in result.stdout.split("\n"):
+        if line.strip():
+            files.append(line[3:])
+
+    return files
+
+
+def git_diff():
+    return run("git diff").stdout
+
+
+# =========================
+# GIT CORE
 # =========================
 def git_check_auth():
     log("Test auth Git...")
 
-    result = run("git ls-remote")
+    result = run("git ls-remote", check=False)
 
     if result.returncode != 0:
         log("❌ Auth Git échouée", "ERROR")
-        log("➡️ Vérifie SSH ou token", "ERROR")
-        exit()
+        raise RuntimeError("Git auth failed")
 
     log("✅ Auth Git OK")
+
+
+def git_set_upstream(branch):
+    result = run(f"git branch --set-upstream-to=origin/{branch} {branch}", check=False)
+
+    if result.returncode != 0:
+        log("Création upstream")
+        run(f"git push -u origin {branch}")
+
 
 def git_checkout(branch):
     log(f"Checkout branche: {branch}")
 
-    result = run(f"git rev-parse --verify {branch}")
+    result = run(f"git rev-parse --verify {branch}", check=False)
 
     if result.returncode != 0:
         run(f"git checkout -b {branch}")
@@ -86,63 +149,54 @@ def git_checkout(branch):
 
     git_set_upstream(branch)
 
+
 def git_pull(branch):
-    log("Git pull (SAFE MODE)")
+    log("Git pull (SAFE)")
 
-    # stash auto si modifs locales
+    stash_created = False
+
     if git_has_changes():
-        log("⚠️ stash automatique", "WARNING")
+        log("⚠️ stash auto", "WARNING")
         run("git stash push -u -m 'auto-stash'")
+        stash_created = True
 
-    # pull avec branche explicite
-    result = run(f"git pull --no-rebase origin {branch}")
+    result = run(f"git pull --no-rebase origin {branch}", check=False)
 
     if result.returncode != 0:
-        log("❌ Pull échoué", "ERROR")
-        log("⚠️ possible conflit → abort", "ERROR")
-        run("git rebase --abort")
+        log("❌ conflit Git → abort", "ERROR")
+
+        run("git merge --abort", check=False)
+        run("git rebase --abort", check=False)
+
+        raise RuntimeError("Git pull failed")
+
+    if stash_created:
+        git_restore_stash()
+
+
+def git_commit(branch):
+    result = run("git diff --cached --quiet", check=False)
+
+    if result.returncode == 0:
+        log("Rien à commit")
         return False
 
-    # restore stash
-    if git_has_stash():
-        run("git stash pop")
-
+    run(f'git commit -m "auto: {branch} update"')
     return True
 
-
-def git_has_changes():
-    result = run("git status --porcelain")
-    return bool(result.stdout.strip())
-
-
-def git_diff():
-    return run("git diff").stdout
-
-
-def git_changed_files():
-    result = run("git diff --name-only --diff-filter=ACM")
-    return [f for f in result.stdout.split("\n") if f]
 
 def git_push(branch):
     if not git_has_changes():
         log("Aucun changement à commit")
         return
 
-    log("Git add")
     if AUTO_STAGE_ALL:
         run("git add .")
 
-    log("Git commit")
-    run(f'git commit -m "auto: {branch} update"')
+    git_commit(branch)
 
     log("Git push")
     run(f"git push -u origin {branch}")
-
-def git_set_upstream(branch):
-    result = run(f"git branch --set-upstream-to=origin/{branch} {branch}")
-    
-    if result.returncode != 0:
-        run(f"git push -u origin {branch}")
 
 
 # =========================
@@ -169,20 +223,20 @@ Instructions:
 
 
 # =========================
-# DEEPSEEK (AIDER)
+# AIDER
 # =========================
 def run_aider(files, task=None):
     if not files:
-        log("Aucun fichier détecté → fallback manuel", "WARNING")
-        files = input("Fichiers pour aider: ").strip().split()
+        log("Aucun fichier → fallback manuel", "WARNING")
+        files = input("Fichiers pour aider: ").split()
 
     if not files:
-        log("Toujours aucun fichier → abort aider", "ERROR")
+        log("Abort aider", "ERROR")
         return
 
-    log(f"DeepSeek ({AIDER_MODEL}) sur: {files}")
+    log(f"Aider ({AIDER_MODEL}) → {files}")
 
-    prompt = task or "Implémente la tâche demandée proprement."
+    prompt = task or "Implémente la tâche proprement."
 
     cmd = (
         f'{AIDER_CMD} '
@@ -194,44 +248,40 @@ def run_aider(files, task=None):
     result = subprocess.run(cmd, shell=True)
 
     if result.returncode != 0:
-        log("Erreur aider → fallback", "WARNING")
+        log("Fallback aider")
         subprocess.run(f"{AIDER_CMD} {' '.join(files)}", shell=True)
+
 
 # =========================
 # PLAN
 # =========================
 def mark_done(task):
     if not PLAN_FILE.exists():
-        log("PLAN.md introuvable", "ERROR")
+        log("PLAN.md manquant", "ERROR")
         return
 
     content = PLAN_FILE.read_text()
 
     if f"- [ ] {task}" not in content:
-        log("Tâche non trouvée dans PLAN.md", "WARNING")
+        log("Tâche non trouvée", "WARNING")
         return
 
     content = content.replace(f"- [ ] {task}", f"- [x] {task}")
     PLAN_FILE.write_text(content)
 
-    log("Tâche marquée comme faite")
+    log("Tâche complétée")
 
 
 # =========================
 # UTILS
 # =========================
 def ask_continue(msg):
-    val = input(f"{msg} (y/n): ").lower()
-    return val == "y"
+    return input(f"{msg} (y/n): ").lower() == "y"
 
 
 def ensure_project():
-    if not BASE_DIR.exists():
-        log("Dossier project introuvable", "ERROR")
-        exit()
-
     if not PLAN_FILE.exists():
-        log("PLAN.md manquant → création")
+        log("Création PLAN.md")
         PLAN_FILE.write_text("# PLAN\n\n")
 
 
@@ -239,7 +289,6 @@ def ensure_project():
 # PIPELINE
 # =========================
 def run_pipeline(task, branch):
-
     ensure_project()
 
     state = load_state()
@@ -249,73 +298,51 @@ def run_pipeline(task, branch):
     save_state(state)
 
     try:
-        # 0. Git auth + branche
         git_check_auth()
         git_checkout(branch)
+        git_pull(branch)
 
-        # 1. Sync
-        git_pull()
-
-        # 2. Claude
         request_claude(task)
 
-        # 3. Validation humaine
-        log("Vérifie PLAN.md et fichiers générés")
+        log("Vérifie PLAN.md")
 
         if not ask_continue("Continuer ?"):
-            log("Annulé", "WARNING")
             return
 
-        # 4. Auto-détection fichiers
         files = git_changed_files()
-        log(f"Fichiers détectés: {files}")
+        log(f"Fichiers: {files}")
 
-        # 5. DeepSeek
         run_aider(files, task)
 
-        # 6. Diff
-        log("Diff actuel:")
+        log("Diff:")
         print(git_diff())
 
-        if not ask_continue("Valider les modifications ?"):
-            log("Refusé", "WARNING")
+        if not ask_continue("Valider ?"):
             return
 
-        # 7. Plan
         mark_done(task)
-
-        # 8. Git push
         git_push(branch)
 
-        # 9. Retour Claude
-        log("➡️ Informe Claude que c'est terminé", "ACTION")
-        input("Appuie sur Entrée après validation Claude...")
+        log("➡️ Informe Claude")
+        input("Entrée pour continuer...")
 
         state["status"] = "DONE"
         save_state(state)
 
-        log("✅ Pipeline terminé")
+        log("✅ Terminé")
 
     except Exception as e:
         log(f"Erreur: {e}", "ERROR")
         state["status"] = "ERROR"
         save_state(state)
 
-def ensure_git_safe():
-    status = run("git status --porcelain").stdout
-
-    if status:
-        log("⚠️ repo non clean → protection activée", "WARNING")
-        run("git stash push -u -m 'auto-safety'")
 
 # =========================
 # MAIN
 # =========================
 if __name__ == "__main__":
     task = input("🧾 Nouvelle tâche: ").strip()
-    branch = input(f"🌿 Branche (default: {DEFAULT_BRANCH}): ").strip() or DEFAULT_BRANCH
+    branch = input(f"🌿 Branche ({DEFAULT_BRANCH}): ").strip() or DEFAULT_BRANCH
 
-    if not task:
-        print("Tâche vide.")
-    else:
+    if task:
         run_pipeline(task, branch)
