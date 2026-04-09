@@ -7,7 +7,7 @@ from datetime import datetime
 # =========================
 # CONFIG
 # =========================
-BASE_DIR = Path("./project")
+BASE_DIR = Path(".")
 
 PLAN_FILE = BASE_DIR / "PLAN.md"
 STATE_FILE = BASE_DIR / "STATE.json"
