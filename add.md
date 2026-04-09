@@ -145,6 +145,13 @@ Déjà partiellement présent dans le code — à câbler dans MetricsScreen.
 | `lib/ui/mixins.py` | `BridgeScreenMixin` |
 | `lib/function/mount/manager.py` | MountManager avec journal et cleanup |
 
+## Additions log
+
+### 2026-04-10
+- BridgeScreenMixin créé dans `lib/ui/mixins.py`.
+- Statut de l'action « BridgeScreenMixin » marqué comme terminé dans next_actions.md.
+- Sous‑tâche « Intégration dans les écrans » ajoutée (P0, date cible 2026‑04‑11).
+
 ## Résumé des fichiers à modifier
 
 Voir la table dans PLAN.md section "Fichiers à modifier".

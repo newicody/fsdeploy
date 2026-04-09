@@ -8,8 +8,14 @@
 ### 1. BridgeScreenMixin
 - **Fichiers** : `lib/ui/mixins.py`, tous les écrans (`detection.py`, `mounts.py`, etc.)
 - **Description** : Créer un mixin fournissant `emit()` et `_refresh_from_store()` pour uniformiser la connexion au bridge.
-- **Statut** : À faire
+- **Statut** : Terminé
 - **Date cible** : 2026-04-10
+
+#### 1.1 Intégration dans les écrans
+- **Fichiers** : `lib/ui/screens/detection.py`, `lib/ui/screens/mounts.py`, `lib/ui/screens/crosscompile.py`, `lib/ui/screens/multiarch.py`, etc.
+- **Description** : Hériter de BridgeScreenMixin, injecter le bridge via self.set_bridge, remplacer les appels directs au bridge.
+- **Statut** : À faire
+- **Date cible** : 2026‑04‑11
 
 ### 2. Mode dry-run
 - **Fichiers** : `__main__.py` (ajouter l'option), `lib/daemon.py` (propager le flag), toutes les tâches (ajouter `dry_run`).
