@@ -257,20 +257,19 @@ def run_aider(files, task=None):
 # =========================
 def mark_done(task):
     if not PLAN_FILE.exists():
-        log("PLAN.md manquant", "ERROR")
         return
 
     content = PLAN_FILE.read_text()
 
-    if f"- [ ] {task}" not in content:
-        log("Tâche non trouvée", "WARNING")
-        return
+    lines = content.splitlines()
 
-    content = content.replace(f"- [ ] {task}", f"- [x] {task}")
-    PLAN_FILE.write_text(content)
+    new_lines = []
+    for line in lines:
+        if task.lower() in line.lower() and "- [ ]" in line:
+            line = line.replace("- [ ]", "- [x]")
+        new_lines.append(line)
 
-    log("Tâche complétée")
-
+    PLAN_FILE.write_text("\n".join(new_lines))
 
 # =========================
 # UTILS
