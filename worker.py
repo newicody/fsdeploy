@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 from pathlib import Path
 from datetime import datetime
 
@@ -11,6 +12,8 @@ AIDER_MODEL = "deepseek/deepseek-reasoner"
 
 AUTO_STAGE_ALL = True
 DEFAULT_BRANCH = "dev"
+
+INTERACTIVE = True
 
 
 # =========================
@@ -140,12 +143,19 @@ def git_set_upstream(branch):
 def git_checkout(branch):
     log(f"Checkout branche: {branch}")
 
+    # Vérifier si la branche existe localement
     result = run(f"git rev-parse --verify {branch}", check=False)
-
-    if result.returncode != 0:
-        run(f"git checkout -b {branch}")
-    else:
+    if result.returncode == 0:
         run(f"git checkout {branch}")
+    else:
+        # Vérifier si la branche existe sur l'origine
+        result_remote = run(f"git ls-remote --heads origin {branch}", check=False)
+        if result_remote.returncode == 0 and result_remote.stdout.strip():
+            # branche distante existe
+            run(f"git checkout -b {branch} origin/{branch}")
+        else:
+            # créer nouvelle branche locale sans tracking
+            run(f"git checkout -b {branch}")
 
     git_set_upstream(branch)
 
@@ -155,23 +165,24 @@ def git_pull(branch):
 
     stash_created = False
 
-    if git_has_changes():
-        log("⚠️ stash auto", "WARNING")
-        run("git stash push -u -m 'auto-stash'")
-        stash_created = True
+    try:
+        if git_has_changes():
+            log("⚠️ stash auto", "WARNING")
+            run("git stash push -u -m 'auto-stash'")
+            stash_created = True
 
-    result = run(f"git pull --no-rebase origin {branch}", check=False)
+        result = run(f"git pull --no-rebase origin {branch}", check=False)
 
-    if result.returncode != 0:
-        log("❌ conflit Git → abort", "ERROR")
+        if result.returncode != 0:
+            log("❌ conflit Git → abort", "ERROR")
 
-        run("git merge --abort", check=False)
-        run("git rebase --abort", check=False)
+            run("git merge --abort", check=False)
+            run("git rebase --abort", check=False)
 
-        raise RuntimeError("Git pull failed")
-
-    if stash_created:
-        git_restore_stash()
+            raise RuntimeError("Git pull failed")
+    finally:
+        if stash_created:
+            git_restore_stash()
 
 
 def git_commit(branch):
@@ -271,10 +282,24 @@ def mark_done(task):
 
     PLAN_FILE.write_text("\n".join(new_lines))
 
+
+def check_aider_installed():
+    """Vérifie que aider est disponible dans PATH."""
+    result = run(f"which {AIDER_CMD}", check=False)
+    if result.returncode != 0:
+        log(f"⚠️ {AIDER_CMD} non trouvé dans PATH", "WARNING")
+        # Optionnel: proposer d'installer avec pipx
+        return False
+    log(f"✅ {AIDER_CMD} est installé")
+    return True
+
 # =========================
 # UTILS
 # =========================
 def ask_continue(msg):
+    if not INTERACTIVE:
+        log(f"{msg} (auto: yes)")
+        return True
     return input(f"{msg} (y/n): ").lower() == "y"
 
 
@@ -300,6 +325,12 @@ def run_pipeline(task, branch):
         git_check_auth()
         git_checkout(branch)
         git_pull(branch)
+
+        # Vérifier que aider est disponible
+        if not check_aider_installed():
+            log("Continuer sans aider ?", "WARNING")
+            if not ask_continue("Aider non trouvé, continuer ?"):
+                raise RuntimeError("Aider requis")
 
         request_claude(task)
 
@@ -340,6 +371,10 @@ def run_pipeline(task, branch):
 # MAIN
 # =========================
 if __name__ == "__main__":
+    if "--auto" in sys.argv:
+        sys.argv.remove("--auto")
+        INTERACTIVE = False
+
     task = input("🧾 Nouvelle tâche: ").strip()
     branch = input(f"🌿 Branche ({DEFAULT_BRANCH}): ").strip() or DEFAULT_BRANCH
 
