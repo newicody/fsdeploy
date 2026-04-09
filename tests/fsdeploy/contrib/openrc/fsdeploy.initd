@@ -1,0 +1,21 @@
+#!/sbin/openrc-run
+
+command="/usr/bin/fsdeploy"
+command_args="--daemon"
+pidfile="/run/${RC_SVCNAME}.pid"
+
+depend() {
+    need net
+}
+
+start() {
+    ebegin "Starting fsdeploy"
+    start-stop-daemon --start --quiet --exec ${command} -- ${command_args}
+    eend $?
+}
+
+stop() {
+    ebegin "Stopping fsdeploy"
+    start-stop-daemon --stop --quiet --pidfile ${pidfile}
+    eend $?
+}
