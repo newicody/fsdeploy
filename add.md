@@ -1,157 +1,58 @@
-# add.md — Améliorations proposées
+# add.md — Action 1.1 : Corrections écrans
 
-**Date** : 2026-04-09
+**Date** : 2026-04-10
 
 ---
 
-## État des propositions
+## Problème
 
-Les propositions ci-dessous sont classées par priorité et leur état de mise en œuvre.
-
-| ID | Proposition | Priorité | Statut | Fichiers concernés |
-|----|-------------|----------|--------|-------------------|
-| 1 | Écrans TUI : pattern uniforme de câblage | P0 | Proposé | `lib/ui/mixins.py`, écrans |
-| 2 | Dry-run mode global | P0 | Proposé | `lib/daemon.py`, `__main__.py`, tâches |
-| 3 | Health-check au démarrage | P0 | Proposé | `lib/intents/system_intent.py`, `lib/ui/screens/welcome.py` |
-| 4 | Notifications TUI unifiées | P1 | Proposé | `lib/ui/app.py` |
-| 5 | Rollback automatique des montages | P0 | Proposé | `lib/function/mount/manager.py` |
-| 6 | Export/import de configuration de déploiement | P1 | Proposé | `lib/intents/system_intent.py`, `lib/ui/screens/presets.py` |
-| 7 | Mode recovery | P1 | Proposé | `__main__.py` (sous-commande), `lib/intents/system_intent.py` |
-| 8 | Métriques de performance des tâches | P1 | Proposé | MetricsScreen, scheduler |
-
-## 1. Écrans TUI : pattern uniforme de câblage
-
-**Problème** : Chaque écran réinvente sa connexion au scheduler. Certains ne sont pas connectés du tout.
-
-**Solution** : Créer un mixin `BridgeScreenMixin` dans `lib/ui/compat.py` :
+3 écrans importent directement `SchedulerBridge` depuis `lib/` — violation de l'architecture :
 
 ```python
-class BridgeScreenMixin:
-    """Mixin pour tous les écrans qui émettent des intents."""
-
-    def emit(self, event_name: str, **params) -> str:
-        return self.app.bridge.emit(event_name, **params)
-
-    def _refresh_from_store(self):
-        """Appelé par le timer de refresh — poll les tickets."""
-        self.app.bridge.poll()
+# MAUVAIS (cross_compile_screen.py, multiarch_screen.py)
+from fsdeploy.lib.scheduler.bridge import SchedulerBridge
+class CrossCompileScreen(Screen):
+    bridge = SchedulerBridge.default()  # singleton class-level
 ```
 
-Chaque écran hérite de ce mixin. Plus de code de bridge dupliqué.
+Les écrans bien faits utilisent une property :
+
+```python
+# BON (stream.py)
+class StreamScreen(Screen):
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
+```
 
 ---
 
-## 2. Dry-run mode global
+## Correction à appliquer
 
-**Problème** : Aucun moyen de tester le flux complet sans toucher au système réel.
+Pour chaque écran fautif :
 
-**Solution** : Ajouter `--dry-run` au CLI et à la config. Quand activé :
-- `mount -t zfs` → log la commande, retourne succès fictif
-- `zpool import` → idem
-- `zfs snapshot` → idem
-- Toutes les tâches reçoivent `dry_run=True` dans leur contexte
-
-Fichiers : `lib/daemon.py`, `lib/function/*/` (toutes les tâches), `__main__.py`
-
----
-
-## 3. Health-check au démarrage
-
-**Problème** : Si ZFS n'est pas chargé, si le venv est cassé, si les permissions sont mauvaises — on découvre tardivement.
-
-**Solution** : Intent `system.healthcheck` exécuté automatiquement au boot du daemon :
-- Vérifie `modprobe zfs`
-- Vérifie `zpool status` accessible
-- Vérifie permissions sudoers
-- Vérifie espace disque
-- Résultat affiché sur WelcomeScreen
-
-Fichiers : `lib/intents/system_intent.py` (ajouter `HealthCheckIntent`), `lib/ui/screens/welcome.py`
+1. **Supprimer** : `from fsdeploy.lib.scheduler.bridge import SchedulerBridge`
+2. **Supprimer** : `bridge = SchedulerBridge.default()` (class-level)
+3. **Ajouter** property bridge :
+```python
+@property
+def bridge(self):
+    return getattr(self.app, "bridge", None)
+```
+4. **Garder** tous les appels `self.bridge.emit(...)` — ils fonctionnent déjà avec la property.
 
 ---
 
-## 4. Notifications TUI unifiées
+## Fichiers à modifier
 
-**Problème** : Les écrans utilisent `self.notify()` de manière inconsistante. Pas de notification pour les événements bus importants.
-
-**Solution** : Le bridge écoute `task.failed` et `task.finished` sur le MessageBus global et appelle `app.notify()` automatiquement. Les écrans n'ont plus besoin de gérer les notifications manuellement pour les erreurs.
-
-Fichier : `lib/ui/app.py`
-
----
-
-## 5. Rollback automatique des montages
-
-**Problème** : Si le processus crash pendant une séquence de montages, les montages restent.
-
-**Solution** : `MountManager` dans `lib/function/mount/` qui :
-- Enregistre chaque montage dans un journal (`/tmp/fsdeploy-mounts.json`)
-- Au démarrage, vérifie si des montages orphelins existent
-- Propose un cleanup automatique
-- `umount -R /mnt` en shutdown hook
-
-Fichiers : `lib/function/mount/manager.py` (nouveau), `lib/daemon.py` (hook shutdown)
+| Fichier | Lignes à changer |
+|---------|-----------------|
+| `lib/ui/screens/cross_compile_screen.py` | Supprimer import L10 + class attr L20, ajouter property |
+| `lib/ui/screens/multiarch_screen.py` | Supprimer import L10 + class attr L20, ajouter property |
+| `lib/ui/screens/moduleregistry_screen.py` | Vérifier et corriger si même pattern |
 
 ---
 
-## 6. Export/import de configuration de déploiement
+## Après cette correction
 
-**Problème** : Pas moyen de sauvegarder une config de déploiement complète et la réappliquer.
-
-**Solution** : Les presets JSON existants sont étendus pour inclure :
-- Mapping montages
-- Noyau sélectionné + symlinks
-- Type initramfs + paramètres
-- Paramètres ZBM
-- Paramètres stream
-
-Intent `preset.export` / `preset.import` via PresetsScreen.
-
-Fichiers : `lib/intents/system_intent.py`, `lib/ui/screens/presets.py`
-
----
-
-## 7. Mode recovery
-
-**Problème** : Si le boot ZBM échoue, pas d'outil de diagnostic intégré.
-
-**Solution** : `python3 -m fsdeploy --recovery` qui :
-- Liste tous les pools importables
-- Tente l'import de chacun
-- Vérifie la cohérence
-- Propose des corrections (reimport, rollback snapshot, reconfiguration ZBM)
-
-Fichier : `__main__.py` (nouvelle sous-commande), `lib/intents/system_intent.py`
-
----
-
-## 8. Métriques de performance des tâches
-
-**Problème** : Pas de visibilité sur les tâches lentes ou qui échouent souvent.
-
-**Solution** : Le scheduler enregistre automatiquement durée + succès/échec de chaque tâche dans le HuffmanStore. MetricsScreen affiche :
-- Top 10 tâches les plus lentes
-- Taux d'échec par type de tâche
-- Historique d'exécution
-
-Déjà partiellement présent dans le code — à câbler dans MetricsScreen.
-
----
-
-## Résumé des fichiers à créer
-
-| Fichier | Description |
-|---------|-------------|
-| `lib/ui/mixins.py` | `BridgeScreenMixin` |
-| `lib/function/mount/manager.py` | MountManager avec journal et cleanup |
-
-## Additions log
-
-### 2026-04-10
-- BridgeScreenMixin créé dans `lib/ui/mixins.py`.
-- Statut de l'action « BridgeScreenMixin » marqué comme terminé dans next_actions.md.
-- Sous‑tâche « Intégration dans les écrans » ajoutée (P0, date cible 2026‑04‑11).
-
-## Résumé des fichiers à modifier
-
-Voir la table dans PLAN.md section "Fichiers à modifier".
+L'action 1.1 sera terminée. Prochaine action : **#2 Mode dry-run** (`--dry-run` dans CLI + propagation dans les tâches).
