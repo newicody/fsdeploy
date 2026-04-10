@@ -28,8 +28,11 @@ class ModuleRegistryScreen(Screen):
     }
     """
 
-    bridge = SchedulerBridge.default()
     selected_module = reactive("")
+
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
 
     def compose(self) -> ComposeResult:
         yield Header()
