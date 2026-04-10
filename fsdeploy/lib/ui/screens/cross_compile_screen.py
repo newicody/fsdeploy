@@ -9,7 +9,6 @@ from textual.widgets.data_table import RowSelected
 from textual.screen import Screen
 from textual.reactive import reactive
 from textual import work
-from fsdeploy.lib.scheduler.bridge import SchedulerBridge
 
 class CrossCompileScreen(Screen):
     """Lancer une compilation croisée et suivre la progression."""
@@ -29,7 +28,10 @@ class CrossCompileScreen(Screen):
     }
     """
 
-    bridge = SchedulerBridge.default()
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
+
     selected_arch = reactive("")
 
     def compose(self) -> ComposeResult:
