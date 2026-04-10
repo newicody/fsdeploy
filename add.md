@@ -1,58 +1,58 @@
-# add.md — Action 1.1 : Corrections écrans
+# add.md — Action 1.1 : Corriger cross_compile_screen.py
 
 **Date** : 2026-04-10
 
 ---
 
-## Problème
+## État réel après audit
 
-3 écrans importent directement `SchedulerBridge` depuis `lib/` — violation de l'architecture :
-
-```python
-# MAUVAIS (cross_compile_screen.py, multiarch_screen.py)
-from fsdeploy.lib.scheduler.bridge import SchedulerBridge
-class CrossCompileScreen(Screen):
-    bridge = SchedulerBridge.default()  # singleton class-level
-```
-
-Les écrans bien faits utilisent une property :
-
-```python
-# BON (stream.py)
-class StreamScreen(Screen):
-    @property
-    def bridge(self):
-        return getattr(self.app, "bridge", None)
-```
+| Fichier | Statut |
+|---------|--------|
+| `lib/ui/screens/moduleregistry_screen.py` | ✅ Déjà corrigé (property bridge, pas d'import direct) |
+| `lib/ui/screens/multiarch_screen.py` | ✅ N'existe pas — `multiarch.py` est OK |
+| `lib/ui/screens/cross_compile_screen.py` | ❌ **Seul fichier encore cassé** |
+| `tests/.../moduleregistry_screen.py` | ❌ Import direct (copie obsolète) |
+| `tests/.../crosscompile.py` | ❌ Import direct (copie obsolète) |
 
 ---
 
 ## Correction à appliquer
 
-Pour chaque écran fautif :
+### 1. `lib/ui/screens/cross_compile_screen.py`
 
-1. **Supprimer** : `from fsdeploy.lib.scheduler.bridge import SchedulerBridge`
-2. **Supprimer** : `bridge = SchedulerBridge.default()` (class-level)
-3. **Ajouter** property bridge :
+**Supprimer :**
+```python
+from fsdeploy.lib.scheduler.bridge import SchedulerBridge
+```
+```python
+bridge = SchedulerBridge.default()
+```
+
+**Ajouter :**
 ```python
 @property
 def bridge(self):
     return getattr(self.app, "bridge", None)
 ```
-4. **Garder** tous les appels `self.bridge.emit(...)` — ils fonctionnent déjà avec la property.
+
+### 2. `tests/fsdeploy/lib/ui/screens/moduleregistry_screen.py`
+
+Synchroniser avec la version `lib/` (supprimer import direct, ajouter property).
+
+### 3. `tests/fsdeploy/lib/ui/screens/crosscompile.py`
+
+Synchroniser avec `lib/ui/screens/crosscompile.py` (qui est déjà correct).
 
 ---
 
-## Fichiers à modifier
+## Fichiers explicites pour Aider
 
-| Fichier | Lignes à changer |
-|---------|-----------------|
-| `lib/ui/screens/cross_compile_screen.py` | Supprimer import L10 + class attr L20, ajouter property |
-| `lib/ui/screens/multiarch_screen.py` | Supprimer import L10 + class attr L20, ajouter property |
-| `lib/ui/screens/moduleregistry_screen.py` | Vérifier et corriger si même pattern |
+```
+fsdeploy/lib/ui/screens/cross_compile_screen.py
+```
 
 ---
 
 ## Après cette correction
 
-L'action 1.1 sera terminée. Prochaine action : **#2 Mode dry-run** (`--dry-run` dans CLI + propagation dans les tâches).
+Action 1.1 terminée. Prochaine : **1.2 Nettoyage doublons écrans** (unifier `_screen` vs écrans principaux, corriger `navigation.py`).

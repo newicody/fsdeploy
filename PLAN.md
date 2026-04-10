@@ -1,110 +1,43 @@
-# Plan de développement fsdeploy — État réel
+# PLAN — fsdeploy (branche dev)
 
 **Dernière mise à jour** : 2026-04-10
-**Branche** : dev
-**Itération** : 8
 
----
+## Phase 1 : Stabilisation TUI (en cours)
 
-## Diagnostic révisé (post-push dev)
+- [x] 1.0 BridgeScreenMixin créé
+- [ ] 1.1 Corriger `cross_compile_screen.py` (import direct bridge)
+- [ ] 1.2 Unifier doublons écrans (`_screen` vs écrans principaux dans `app.py`)
+- [ ] 1.3 Résoudre stub `ModuleRegistry` (crash au mount de `module_registry.py`)
+- [ ] 1.4 Synchroniser copies `tests/` avec `lib/`
 
-### Ce qui fonctionne
-- Architecture event->intent->task complète
-- Daemon, config, codec, runtime, executor, bridge, log, CLI
-- Migration Textual 8.2.1 effectuée
-- Bugfixes critiques portés (factory closures, SocketSource, threading, Screen.name)
-- **BridgeScreenMixin** créé dans `lib/ui/mixins.py` (action 1 terminée)
+## Phase 2 : Robustesse
 
-### Écrans déjà bien câblés au bridge
-- `detection.py` : pipeline 4 phases complet (import->pools->datasets->probes), factory callbacks
-- `mounts.py` : factory callbacks (`_make_mount_callback`, etc.), `_on_mount_done` / `_on_umount_done`
-- `coherence.py` : `bridge.emit("coherence.quick")` avec callback
-- `presets.py` : `bridge.emit("presets.save")` / `bridge.emit("presets.activate")`
-- `stream.py` : property `bridge` via `self.app.bridge` — pattern correct
+- [ ] 2.0 Mode `--dry-run` (CLI + propagation dans toutes les tasks)
+- [ ] 2.1 Health-check au démarrage (ZFS, permissions, espace disque)
+- [ ] 2.2 MountManager avec journal et cleanup automatique
+- [ ] 2.3 Notifications TUI unifiées via bridge → `app.notify()`
 
-### Violations d'architecture détectées
-- `cross_compile_screen.py` : **import direct** `from fsdeploy.lib.scheduler.bridge import SchedulerBridge` + `SchedulerBridge.default()` class-level
-- `multiarch_screen.py` : même violation
-- `moduleregistry_screen.py` : probablement même violation
+## Phase 3 : Fonctionnalités
 
-Ces écrans doivent utiliser `self.app.bridge` comme les autres.
+- [ ] 3.0 Export/import configuration (presets JSON étendus)
+- [ ] 3.1 Mode recovery (`--recovery`)
+- [ ] 3.2 Métriques de performance (durée, succès/échec par task)
+- [ ] 3.3 GraphViewScreen câblé sur données live (`get_state_snapshot()`)
+- [ ] 3.4 FileHandler dans `setup_logging()` pour logs persistants
 
----
+## Phase 4 : Intégration init/
 
-## [Fait]
+- [ ] 4.0 `live_setup` → `lib/function/live/setup.py`
+- [ ] 4.1 `init_script` → `lib/function/boot/init.py`
+- [ ] 4.2 `switch` → enrichit `lib/function/rootfs/switch.py`
+- [ ] 4.3 `network` → `lib/function/network/setup.py`
+- [ ] 4.4 `initramfs_hook` → `lib/function/boot/initramfs.py`
+- [ ] 4.5 `entry` → `lib/intents/boot_intent.py`
+- [ ] 4.6 `environment` → `lib/function/detect/environment.py`
+- [ ] 4.7 `services` → `lib/function/service/`
 
-- Architecture event->intent->task pipeline complet
-- Daemon, config(19 sections), codec(HuffmanStore), runtime(thread-safe), executor(ThreadPool), bridge(tickets), log(structlog+ASCII)
-- CLI typer 4 sous-commandes
-- launch.sh bootstrap complet
-- Migration Textual 8.2.1
-- Bugfixes critiques
-- BridgeScreenMixin (`lib/ui/mixins.py`)
-- Écrans detection/mounts/coherence/presets/stream câblés
+## Phase 5 : Tests complets
 
----
-
-## [En cours] — Action 1.1 : Intégration mixin dans les écrans
-
-Correction des 3 écrans qui violent l'isolation TUI/lib :
-
-| Fichier | Problème | Correction |
-|---------|----------|------------|
-| `lib/ui/screens/cross_compile_screen.py` | Import direct SchedulerBridge | Utiliser `self.app.bridge` via property |
-| `lib/ui/screens/multiarch_screen.py` | Import direct SchedulerBridge | Idem |
-| `lib/ui/screens/moduleregistry_screen.py` | Import direct SchedulerBridge | Idem (à vérifier) |
-
----
-
-## [À faire]
-
-### P0 — Bloquants
-
-| # | Action | Statut | Cible |
-|---|--------|--------|-------|
-| 1 | BridgeScreenMixin | **Terminé** | 2026-04-10 |
-| 1.1 | Intégration mixin dans écrans | **En cours** | 2026-04-11 |
-| 2 | Mode `--dry-run` | À faire | 2026-04-11 |
-| 3 | Health-check au démarrage | À faire | 2026-04-12 |
-| 4 | MountManager journal/cleanup | À faire | 2026-04-13 |
-
-### P1 — Fonctionnels
-
-| # | Action | Statut | Cible |
-|---|--------|--------|-------|
-| 5 | Notifications TUI unifiées | À faire | 2026-04-14 |
-| 6 | Export/import config | À faire | 2026-04-15 |
-| 7 | Mode recovery | À faire | 2026-04-16 |
-| 8 | Métriques performance | À faire | 2026-04-17 |
-
-### P2 — Améliorations
-
-- GraphViewScreen câblé données live
-- StreamScreen ffmpeg RTMP réel
-- ConfigScreen éditeur fonctionnel
-- DebugScreen logs/tasks/state temps réel
-- Cross-compilation tests aarch64
-- Purge CLEANUP.md
-- FileHandler dans setup_logging()
-- Wrapper fsdeploy-web (`textual serve`)
-- Intégration `init/` -> `lib/function/`
-- Tests : compléter test_all.py (30 tests)
-
-### P3 — Polish
-
-- Documentation utilisateur (manuel.md)
-- CI/CD GitHub Actions
-- Presets stream (boot sans rootfs)
-- Hot-swap noyau/modules/rootfs
-
----
-
-## Principes
-
-- **Zéro import de `lib/` dans les écrans TUI** : tout via `self.app.bridge`
-- **`mount -t zfs`** : forme canonique
-- **Factory closures** : obligatoires pour callbacks dans boucles
-- **Purger `__pycache__`** : après tout remplacement
-- **Fichiers complets** : jamais de patches
-- **`configobj`** : pas pydantic/dataclasses
-- **Trois contextes** : Debian Live / initramfs / système booté
+- [ ] 5.0 `test_all.py` (30 tests couvrant tous les layers)
+- [ ] 5.1 Tests unitaires pour chaque intent
+- [ ] 5.2 Tests d'intégration TUI (textual pilot)
