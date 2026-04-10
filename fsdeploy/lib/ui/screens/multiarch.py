@@ -17,6 +17,10 @@ class MultiArchScreen(Screen):
         Binding("r", "refresh", "Rafraîchir", show=True),
     ]
 
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
+
     DEFAULT_CSS = """
     MultiArchScreen {
         layout: vertical;

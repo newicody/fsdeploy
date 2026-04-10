@@ -9,7 +9,6 @@ from textual.widgets.data_table import RowSelected
 from textual.screen import Screen
 from textual.reactive import reactive
 from textual import work
-from fsdeploy.lib.scheduler.bridge import SchedulerBridge
 
 class ModuleRegistryScreen(Screen):
     """Permettre l'installation, la mise à jour et la suppression de modules tiers."""
