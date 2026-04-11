@@ -13,7 +13,7 @@
 ## Phase 2 : Robustesse (en cours)
 
 - [x] 2.0 Mode `--dry-run` (CLI + propagation dans toutes les tasks)
-- [ ] 2.1 Health-check au démarrage ← PROCHAINE
+- [ ] 2.1 Health-check au démarrage ← PROCHAINE (daemon émet l'event, mais intent+task manquants)
 - [ ] 2.2 MountManager avec journal et cleanup automatique
 - [ ] 2.3 Notifications TUI unifiées via bridge → `app.notify()`
 

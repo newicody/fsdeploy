@@ -1,52 +1,38 @@
-# add.md — Action 2.1 : Health-check au démarrage
+# add.md — Action 2.1 : Health-check (reste à faire)
 
 **Date** : 2026-04-11
 
 ---
 
-## Objectif
+## État actuel
 
-Au démarrage du daemon, émettre automatiquement un événement `health.check` qui vérifie les prérequis critiques. Le `WelcomeScreen` affiche le résultat.
-
----
-
-## Ce qui existe déjà
-
-- `coherence.check` : vérification complète (pools, datasets, montages) — trop lourd pour le startup
-- `init.detect` : détection du système d'init
-- `WelcomeScreen` : affiche infos hardware/mode mais pas de statut health
+- ✅ `daemon.py` : émet `Event(name="health.check")` au démarrage
+- ❌ `system_intent.py` : pas de `@register_intent("health.check")` → l'event est silencieusement ignoré
+- ❌ `lib/function/health/check.py` : n'existe pas
 
 ---
 
-## Correction
+## Reste à faire
 
-### 1. `lib/intents/system_intent.py` — ajouter `HealthCheckIntent`
+### 1. Créer `lib/function/health/check.py` — `HealthCheckTask`
+
+Vérifie :
+- `which zpool` / `which zfs` (binaires présents)
+- `sudo -n zpool list` (permissions sudo)
+- espace disque `/` > 100 MB (`shutil.disk_usage`)
+- `sys.version_info >= (3, 10)`
+
+Retourne `{"checks": [{check, ok, message}, ...], "all_ok": bool}`
+
+### 2. Ajouter dans `lib/intents/system_intent.py`
 
 ```python
 @register_intent("health.check")
 class HealthCheckIntent(Intent):
     def build_tasks(self):
+        from ..function.health.check import HealthCheckTask
         return [HealthCheckTask(id="health_check", params=self.params, context=self.context)]
 ```
-
-`HealthCheckTask` (dans `lib/function/health/check.py`) vérifie :
-- `zpool` et `zfs` disponibles (binaire + module noyau)
-- `sudo -n zpool list` fonctionne (permissions)
-- espace disque `/` > 100 MB
-- Python version >= 3.10
-
-Retourne une liste de `{check, ok, message}`.
-
-### 2. `lib/daemon.py` — émettre `health.check` au démarrage
-
-Dans `run()`, après `_register_all_intents()`, ajouter :
-```python
-self._runtime.event_queue.put(Event(name="health.check", params={}))
-```
-
-### 3. `lib/ui/screens/welcome.py` — afficher les résultats
-
-Dans `_refresh_from_store()`, lire les résultats du health-check depuis le store et mettre à jour l'affichage.
 
 ---
 
@@ -56,7 +42,6 @@ Dans `_refresh_from_store()`, lire les résultats du health-check depuis le stor
 fsdeploy/lib/function/health/__init__.py
 fsdeploy/lib/function/health/check.py
 fsdeploy/lib/intents/system_intent.py
-fsdeploy/lib/daemon.py
 ```
 
 ---
