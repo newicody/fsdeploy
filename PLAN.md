@@ -12,8 +12,8 @@
 
 ## Phase 2 : Robustesse (en cours)
 
-- [ ] 2.0 Mode `--dry-run` (CLI + propagation dans toutes les tasks) ← PROCHAINE
-- [ ] 2.1 Health-check au démarrage (ZFS, permissions, espace disque)
+- [x] 2.0 Mode `--dry-run` (CLI + propagation dans toutes les tasks)
+- [ ] 2.1 Health-check au démarrage ← PROCHAINE
 - [ ] 2.2 MountManager avec journal et cleanup automatique
 - [ ] 2.3 Notifications TUI unifiées via bridge → `app.notify()`
 

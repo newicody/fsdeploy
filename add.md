@@ -1,41 +1,61 @@
-# add.md — Action 2.0 : Mode dry-run — propagation
+# add.md — Action 2.1 : Health-check au démarrage
 
 **Date** : 2026-04-11
 
 ---
 
-## État actuel
+## Objectif
 
-Le dry-run est **partiellement câblé** :
-- ✅ `__main__.py` : option `--dry-run`/`-n`, stocké dans `state.dry_run`
-- ✅ `config.py` : `state.config.set("env.dry_run", True)` dans `_load_config()`
-- ✅ `Task.run_cmd()` : accepte `dry_run=True` et retourne `[dry-run]` sans exécuter
+Au démarrage du daemon, émettre automatiquement un événement `health.check` qui vérifie les prérequis critiques. Le `WelcomeScreen` affiche le résultat.
 
-**Ce qui manque** : quand `state.dry_run=True`, chaque `task.run_cmd()` est toujours appelé avec `dry_run=False` par défaut. Aucune task ne lit `self.context.get("dry_run")` ou `self.params.get("dry_run")` pour le propager.
+---
+
+## Ce qui existe déjà
+
+- `coherence.check` : vérification complète (pools, datasets, montages) — trop lourd pour le startup
+- `init.detect` : détection du système d'init
+- `WelcomeScreen` : affiche infos hardware/mode mais pas de statut health
 
 ---
 
 ## Correction
 
-1. **`daemon.py`** : dans `_register_all_intents()` ou au lancement, injecter `dry_run` dans le contexte global du scheduler pour qu'il soit propagé à chaque intent/task.
-
-2. **`task.py`** : modifier `run_cmd()` pour lire `self.context.get("dry_run", False)` comme valeur par défaut du paramètre `dry_run`, au lieu de `False` :
+### 1. `lib/intents/system_intent.py` — ajouter `HealthCheckIntent`
 
 ```python
-def run_cmd(self, cmd, ..., dry_run=None):
-    if dry_run is None:
-        dry_run = self.context.get("dry_run", False) or self.params.get("dry_run", False)
-    ...
+@register_intent("health.check")
+class HealthCheckIntent(Intent):
+    def build_tasks(self):
+        return [HealthCheckTask(id="health_check", params=self.params, context=self.context)]
 ```
 
-3. **`executor.py`** : quand le scheduler exécute une task, injecter `dry_run` dans `task.context` depuis la config globale.
+`HealthCheckTask` (dans `lib/function/health/check.py`) vérifie :
+- `zpool` et `zfs` disponibles (binaire + module noyau)
+- `sudo -n zpool list` fonctionne (permissions)
+- espace disque `/` > 100 MB
+- Python version >= 3.10
+
+Retourne une liste de `{check, ok, message}`.
+
+### 2. `lib/daemon.py` — émettre `health.check` au démarrage
+
+Dans `run()`, après `_register_all_intents()`, ajouter :
+```python
+self._runtime.event_queue.put(Event(name="health.check", params={}))
+```
+
+### 3. `lib/ui/screens/welcome.py` — afficher les résultats
+
+Dans `_refresh_from_store()`, lire les résultats du health-check depuis le store et mettre à jour l'affichage.
 
 ---
 
 ## Fichiers Aider
 
 ```
-fsdeploy/lib/scheduler/model/task.py
+fsdeploy/lib/function/health/__init__.py
+fsdeploy/lib/function/health/check.py
+fsdeploy/lib/intents/system_intent.py
 fsdeploy/lib/daemon.py
 ```
 
@@ -43,4 +63,4 @@ fsdeploy/lib/daemon.py
 
 ## Après
 
-2.0 terminé. Prochaine : **2.1** (health-check au démarrage).
+2.1 terminé. Prochaine : **2.2** (MountManager).
