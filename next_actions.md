@@ -8,12 +8,12 @@
 ### 1. BridgeScreenMixin — ✅ Terminé
 ### 1.1 Intégration bridge — ✅ Terminé
 
-### 1.2 Corriger imports navigation.py ← PROCHAINE
+### 1.2 Corriger imports navigation.py ← TERMINÉ
 - **Fichier** : `fsdeploy/lib/ui/screens/navigation.py`
 - **Problème** : `cross_compile_screen.py` est devenu un stub `raise ImportError`. `navigation.py` l'importe encore → crash.
 - **Action** : remplacer 2 imports (`cross_compile_screen` → `crosscompile`, `multiarch_screen` → `multiarch`)
-- **Statut** : ❌ PAS terminé (marqué à tort comme fait)
-- **Date cible** : 2026-04-11
+- **Statut** : ✅ Terminé
+- **Date cible** : 2026-04-12
 
 ### 1.3 Stub ModuleRegistry cassé
 - **Fichiers** : `lib/ui/screens/module_registry.py`, `lib/function/module/registry.py`

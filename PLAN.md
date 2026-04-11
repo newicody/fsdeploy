@@ -12,7 +12,7 @@
 - [x] 2.0 Mode `--dry-run`
 - [x] 2.1 Health-check au démarrage
 - [x] 2.2 MountManager avec journal et cleanup
-- [ ] 2.3 Notifications TUI unifiées via bridge → `app.notify()` ← PROCHAINE
+- [x] 2.3 Notifications TUI unifiées via bridge → `app.notify()` ← PROCHAINE
 
 ## Phase 3 : Fonctionnalités
 

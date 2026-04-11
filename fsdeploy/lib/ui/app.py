@@ -336,7 +336,20 @@ class FsDeployApp(App):
         # Poll le bridge — verifie les tasks terminees, fire les callbacks
         if self.bridge:
             try:
-                self.bridge.poll()
+                just_done = self.bridge.poll()
+                if isinstance(just_done, list):
+                    for ticket in just_done:
+                        if hasattr(ticket, 'status'):
+                            if ticket.status == "failed":
+                                self.notify(
+                                    f"Echec: {getattr(ticket, 'event_name', 'tâche')} — {getattr(ticket, 'error', '')}",
+                                    severity="error", timeout=5,
+                                )
+                            elif ticket.status == "completed":
+                                self.notify(
+                                    f"OK: {getattr(ticket, 'event_name', 'tâche')}",
+                                    severity="information", timeout=3,
+                                )
             except Exception:
                 pass
 
