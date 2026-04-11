@@ -1,4 +1,4 @@
-# add.md — Action 1.1 suite : Corriger 3 écrans enhanced/detection
+# add.md — Action 1.2 : Corriger navigation.py imports
 
 **Date** : 2026-04-11
 
@@ -6,45 +6,50 @@
 
 ## Problème
 
-3 écrans ont encore l'import direct `SchedulerBridge` + attribut de classe `bridge = SchedulerBridge.default()` :
+`navigation.py` importe depuis des fichiers `_screen` qui sont des doublons :
 
-| Fichier | Lignes à corriger |
-|---------|-------------------|
-| `fsdeploy/lib/ui/screens/graph_enhanced.py` | `from fsdeploy.lib.scheduler.bridge import SchedulerBridge` + `bridge = SchedulerBridge.default()` |
-| `fsdeploy/lib/ui/screens/security_enhanced.py` | idem |
-| `fsdeploy/lib/ui/screens/partition_detection.py` | idem |
-
----
-
-## Correction identique pour chaque fichier
-
-1. **Supprimer** : `from fsdeploy.lib.scheduler.bridge import SchedulerBridge`
-2. **Supprimer** : `bridge = SchedulerBridge.default()`
-3. **Ajouter** dans la classe :
 ```python
-@property
-def bridge(self):
-    return getattr(self.app, "bridge", None)
+from fsdeploy.lib.ui.screens.cross_compile_screen import CrossCompileScreen  # doublon
+from fsdeploy.lib.ui.screens.multiarch_screen import MultiArchScreen          # n'existe pas ou doublon
+```
+
+Les écrans canoniques (utilisés par `app.py` screen_map) sont `crosscompile.py` et `multiarch.py`.
+
+Les imports `graph_enhanced`, `security_enhanced`, `partition_detection` sont corrects — ce sont des écrans distincts (enhanced), pas des doublons.
+
+---
+
+## Correction
+
+Dans `fsdeploy/lib/ui/screens/navigation.py`, remplacer :
+
+```python
+from fsdeploy.lib.ui.screens.cross_compile_screen import CrossCompileScreen
+from fsdeploy.lib.ui.screens.multiarch_screen import MultiArchScreen
+```
+
+Par :
+
+```python
+from fsdeploy.lib.ui.screens.crosscompile import CrossCompileScreen
+from fsdeploy.lib.ui.screens.multiarch import MultiArchScreen
+```
+
+Les 4 autres imports restent inchangés.
+
+---
+
+## Fichier Aider
+
+```
+fsdeploy/lib/ui/screens/navigation.py
 ```
 
 ---
 
-## Fichiers Aider
+## Après
 
-```
-fsdeploy/lib/ui/screens/graph_enhanced.py
-fsdeploy/lib/ui/screens/security_enhanced.py
-fsdeploy/lib/ui/screens/partition_detection.py
-```
+Ajouter à CLEANUP.md :
+- `fsdeploy/lib/ui/screens/cross_compile_screen.py` (doublon de `crosscompile.py`)
 
----
-
-## Contexte
-
-Ces écrans sont importés par `navigation.py` mais ne sont PAS dans `app.py` screen_map. Ils constituent un second jeu d'écrans "enhanced" utilisés uniquement par `NavigationScreen`. L'action 1.2 traitera cette dualité — pour l'instant on corrige juste la violation bridge.
-
----
-
-## Après cette correction
-
-Action 1.1 terminée pour tous les fichiers `lib/`. Prochaine : **1.2** (décider du sort de `navigation.py` et des écrans `_enhanced`).
+Prochaine action : **1.3** (stub ModuleRegistry).
