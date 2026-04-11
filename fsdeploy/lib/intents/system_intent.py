@@ -396,3 +396,11 @@ class InitDetectIntent(Intent):
         from ..function.init_check import InitDetectTask
         return [InitDetectTask(id="init_detect", params=self.params,
                                context=self.context)]
+
+@register_intent("health.check")
+class HealthCheckIntent(Intent):
+    """Vérification de santé du système."""
+    def build_tasks(self):
+        from ..function.health.check import HealthCheckTask
+        return [HealthCheckTask(id="health_check", params=self.params,
+                                context=self.context)]
