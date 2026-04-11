@@ -1,4 +1,4 @@
-# add.md — Action 1.2 : Corriger navigation.py imports
+# add.md — Action 1.3 : Stub ModuleRegistry cassé
 
 **Date** : 2026-04-11
 
@@ -6,50 +6,42 @@
 
 ## Problème
 
-`navigation.py` importe depuis des fichiers `_screen` qui sont des doublons :
-
+`lib/ui/screens/module_registry.py` fait :
 ```python
-from fsdeploy.lib.ui.screens.cross_compile_screen import CrossCompileScreen  # doublon
-from fsdeploy.lib.ui.screens.multiarch_screen import MultiArchScreen          # n'existe pas ou doublon
+from fsdeploy.lib.modules.registry import ModuleRegistry
 ```
 
-Les écrans canoniques (utilisés par `app.py` screen_map) sont `crosscompile.py` et `multiarch.py`.
+Mais `lib/function/module/registry.py` est un stub vide :
+```python
+"""Module de registre distant (désactivé)."""
+```
 
-Les imports `graph_enhanced`, `security_enhanced`, `partition_detection` sont corrects — ce sont des écrans distincts (enhanced), pas des doublons.
+→ `ImportError` au chargement de l'écran "modules" dans `app.py` screen_map.
+
+Une implémentation complète existe dans `tests/fsdeploy/lib/modules/registry.py` avec données de démo et fallback.
 
 ---
 
 ## Correction
 
-Dans `fsdeploy/lib/ui/screens/navigation.py`, remplacer :
+Copier l'implémentation `ModuleRegistry` de `tests/fsdeploy/lib/modules/registry.py` vers `fsdeploy/lib/modules/registry.py` (créer le fichier si nécessaire, avec `__init__.py`).
 
-```python
-from fsdeploy.lib.ui.screens.cross_compile_screen import CrossCompileScreen
-from fsdeploy.lib.ui.screens.multiarch_screen import MultiArchScreen
-```
-
-Par :
-
-```python
-from fsdeploy.lib.ui.screens.crosscompile import CrossCompileScreen
-from fsdeploy.lib.ui.screens.multiarch import MultiArchScreen
-```
-
-Les 4 autres imports restent inchangés.
+L'implémentation contient :
+- `list_remote()` avec fallback démo si le registre distant est injoignable
+- `is_installed(name)` vérifie le répertoire local
+- `install(name)` / `uninstall(name)` basiques
 
 ---
 
-## Fichier Aider
+## Fichiers Aider
 
 ```
-fsdeploy/lib/ui/screens/navigation.py
+fsdeploy/lib/modules/__init__.py
+fsdeploy/lib/modules/registry.py
 ```
 
 ---
 
 ## Après
 
-Ajouter à CLEANUP.md :
-- `fsdeploy/lib/ui/screens/cross_compile_screen.py` (doublon de `crosscompile.py`)
-
-Prochaine action : **1.3** (stub ModuleRegistry).
+1.3 terminé. Prochaine : **2.0 Mode dry-run** (ou 1.4 synchro tests/ si prioritaire).
