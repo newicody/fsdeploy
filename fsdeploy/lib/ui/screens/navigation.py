@@ -7,6 +7,7 @@ from textual.containers import Container, Vertical, Horizontal
 from textual.widgets import Header, Footer, Button, Static
 from textual.screen import Screen
 
+# Import des écrans spécialisés (certains sont des versions améliorées)
 from fsdeploy.lib.ui.screens.graph_enhanced import GraphEnhancedScreen
 from fsdeploy.lib.ui.screens.security_enhanced import SecurityEnhancedScreen
 from fsdeploy.lib.ui.screens.partition_detection import PartitionDetectionScreen
@@ -16,7 +17,7 @@ from fsdeploy.lib.ui.screens.moduleregistry_screen import ModuleRegistryScreen
 
 
 class NavigationScreen(Screen):
-    """Écran d'accueil avec liens vers tous les écrans."""
+    """Écran d'accueil avec liens vers tous les écrans spécialisés (versions améliorées)."""
 
     CSS = """
     NavigationScreen {
