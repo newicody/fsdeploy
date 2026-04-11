@@ -1,18 +1,12 @@
 """
 Registre des modules tiers pour fsdeploy.
-
-Permet de découvrir, installer et mettre à jour des modules depuis
-un dépôt distant (par défaut un dépôt Git hébergé).
+Version simplifiée sans dépendance externe.
 """
 
 import json
-import tempfile
 import shutil
 from pathlib import Path
 from typing import List, Dict, Optional
-import requests
-
-from fsdeploy.lib.config import FsDeployConfig
 
 class ModuleRegistry:
     """
@@ -22,10 +16,20 @@ class ModuleRegistry:
     DEFAULT_REGISTRY_URL = "https://api.example.com/fsdeploy/modules.json"
     LOCAL_MODULES_DIR = Path("~/.local/share/fsdeploy/modules").expanduser()
 
-    def __init__(self, config: Optional[FsDeployConfig] = None):
-        self.config = config or FsDeployConfig()
-        self.registry_url = self.config.get("module.registry_url", self.DEFAULT_REGISTRY_URL)
-        self.local_dir = Path(self.config.get("module.local_dir", self.LOCAL_MODULES_DIR))
+    def __init__(self, config: Optional[object] = None):
+        """
+        Si config est fourni, on peut en extraire des paramètres.
+        Sinon, on utilise des valeurs par défaut.
+        """
+        # Si config a une méthode get, on l'utilise, sinon on ignore
+        self.config = config
+        if hasattr(config, 'get'):
+            self.registry_url = config.get("module.registry_url", self.DEFAULT_REGISTRY_URL)
+            local_dir = config.get("module.local_dir", self.LOCAL_MODULES_DIR)
+            self.local_dir = Path(local_dir).expanduser()
+        else:
+            self.registry_url = self.DEFAULT_REGISTRY_URL
+            self.local_dir = self.LOCAL_MODULES_DIR
         self.local_dir.mkdir(parents=True, exist_ok=True)
 
     def list_remote(self) -> List[Dict]:
@@ -33,6 +37,7 @@ class ModuleRegistry:
         Récupère la liste des modules disponibles depuis le registre distant.
         En cas d'erreur, retourne une liste de démo.
         """
+        import requests
         try:
             resp = requests.get(self.registry_url, timeout=5)
             resp.raise_for_status()
