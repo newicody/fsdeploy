@@ -11,13 +11,13 @@
 - Tous les écrans lib/ utilisent `@property def bridge` → `getattr(self.app, "bridge", None)`
 - Copies `tests/` encore désynchronisées (priorité basse, action 1.4)
 
-### 1.2 Corriger imports navigation.py ← PROCHAINE
+### 1.2 Corriger imports navigation.py — ✅ Terminé
 - **Fichier** : `fsdeploy/lib/ui/screens/navigation.py`
 - **Description** : Remplacer `cross_compile_screen` → `crosscompile`, `multiarch_screen` → `multiarch`
-- **Statut** : À faire
-- **Date cible** : 2026-04-11
+- **Statut** : ✅ Terminé
+- **Date réal.** : 2026-04-11
 
-### 1.3 Stub ModuleRegistry cassé
+### 1.3 Stub ModuleRegistry cassé ← PROCHAINE
 - **Fichiers** : `lib/ui/screens/module_registry.py`, `lib/function/module/registry.py`
 - **Statut** : À faire
 - **Date cible** : 2026-04-13
