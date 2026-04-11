@@ -127,7 +127,7 @@ class Task:
         sudo: bool = False,
         cwd: str | Path | None = None,
         env: dict | None = None,
-        dry_run: bool = False,
+        dry_run: bool = None,
     ) -> CommandResult:
         """
         Exécute une commande système avec logging complet.
@@ -142,6 +142,9 @@ class Task:
             env: variables d'environnement supplémentaires
             dry_run: simuler sans exécuter
         """
+        if dry_run is None:
+            dry_run = self.context.get("dry_run", False) or self.params.get("dry_run", False)
+
         if isinstance(cmd, str):
             parts = shlex.split(cmd)
         else:

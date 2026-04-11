@@ -162,11 +162,21 @@ class FsDeployDaemon:
                 log.warning("intent_import_failed", module=mod_name, error=str(e))
 
         intent_queue = self._runtime.intent_queue
+        # Extraction du flag dry_run
+        dry_run = False
+        try:
+            dry_run = self._config.get("env.dry_run", False)
+        except Exception:
+            # Fallback pour les dicts classiques
+            env = self._config.get("env", {})
+            if isinstance(env, dict):
+                dry_run = env.get("dry_run", False)
         # Contexte partagé pour les intents
         shared_context = {
             "runtime": self._runtime,
             "store": self._store,
             "config": self._config,
+            "dry_run": dry_run,
         }
         for event_name, intent_class in INTENT_REGISTRY.items():
             # Création d'un handler qui capture la classe et le contexte
