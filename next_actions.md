@@ -6,32 +6,19 @@
 
 ## Actions P0
 
-### 1. BridgeScreenMixin
-- **Statut** : ✅ Terminé
+### 1. BridgeScreenMixin — ✅ Terminé
+### 1.1 Intégration bridge dans les écrans — ✅ Terminé
+- Tous les écrans lib/ utilisent `@property def bridge` → `getattr(self.app, "bridge", None)`
+- Copies `tests/` encore désynchronisées (priorité basse, action 1.4)
 
-### 1.1 Intégration bridge dans les écrans
-- **Statut** : ⚠️ Partiellement terminé
-- **Détail audit 2026-04-11** :
-  - `crosscompile.py` : ✅ OK (property bridge)
-  - `cross_compile_screen.py` : ✅ corrigé (property bridge)
-  - `multiarch.py` : ✅ OK (property bridge)
-  - `moduleregistry_screen.py` : ✅ OK (property bridge)
-  - `graph_enhanced.py` : ❌ `from ...bridge import SchedulerBridge` + `bridge = SchedulerBridge.default()`
-  - `security_enhanced.py` : ❌ `from ...bridge import SchedulerBridge` + `bridge = SchedulerBridge.default()`
-  - `partition_detection.py` : ❌ `from ...bridge import SchedulerBridge` + `bridge = SchedulerBridge.default()`
-  - copies `tests/` : ❌ multiples fichiers encore cassés
-- **Reste à faire** : corriger `graph_enhanced.py`, `security_enhanced.py`, `partition_detection.py` ← PROCHAINE
+### 1.2 Corriger imports navigation.py ← PROCHAINE
+- **Fichier** : `fsdeploy/lib/ui/screens/navigation.py`
+- **Description** : Remplacer `cross_compile_screen` → `crosscompile`, `multiarch_screen` → `multiarch`
+- **Statut** : À faire
 - **Date cible** : 2026-04-11
-
-### 1.2 Nettoyage doublons écrans + navigation.py
-- **Fichiers** : `navigation.py`
-- **Description** : `navigation.py` importe `graph_enhanced`, `security_enhanced`, `partition_detection`, `cross_compile_screen`, `multiarch_screen`, `moduleregistry_screen`. Ces écrans ne sont PAS dans `app.py` screen_map (qui utilise `graph.py`, `security.py`, etc.). Décider : supprimer `navigation.py` ou le mettre à jour vers les écrans canoniques.
-- **Statut** : À faire (après 1.1)
-- **Date cible** : 2026-04-12
 
 ### 1.3 Stub ModuleRegistry cassé
 - **Fichiers** : `lib/ui/screens/module_registry.py`, `lib/function/module/registry.py`
-- **Description** : `module_registry.py` importe `ModuleRegistry` qui est un stub vide. Crash au mount.
 - **Statut** : À faire
 - **Date cible** : 2026-04-13
 
@@ -62,5 +49,5 @@
 | Date | Événement |
 |------|-----------|
 | 2026-04-09 | Analyse du projet et priorisation. |
-| 2026-04-10 | Audit partiel : `moduleregistry_screen.py` OK, `cross_compile_screen.py` corrigé. |
-| 2026-04-11 | Audit complet : 3 écrans `_enhanced`/`_detection` encore cassés (bridge direct). `navigation.py` importe des écrans hors `app.py` screen_map. |
+| 2026-04-10 | Audit partiel, corrections bridge. |
+| 2026-04-11 | Action 1.1 terminée (3 écrans enhanced/detection corrigés). Prochaine : 1.2 navigation.py. |
