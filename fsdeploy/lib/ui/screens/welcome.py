@@ -163,6 +163,13 @@ class WelcomeScreen(Screen):
         margin: 1;
     }
 
+    #health-panel {
+        height: auto;
+        border: solid $secondary;
+        padding: 1 2;
+        margin: 1;
+    }
+
     #actions-grid {
         layout: grid;
         grid-size: 4 4;
@@ -225,6 +232,14 @@ class WelcomeScreen(Screen):
                 yield InfoRow("Tasks", "0")
                 yield InfoRow("Locks", "0")
                 yield InfoRow("Compression", "N/A")
+
+            # Panneau health
+            with Vertical(id="health-panel"):
+                yield Label("Health Check", classes="panel-title")
+                yield InfoRow("Status", "Pending")
+                yield InfoRow("Last run", "Never")
+                yield InfoRow("Passed", "0")
+                yield InfoRow("Failed", "0")
 
         yield Rule()
 

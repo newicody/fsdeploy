@@ -30,6 +30,7 @@ os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
 from log import get_logger
 from bus.event_bus import set_event_queue
+from scheduler.model.event import Event
 
 log = get_logger("daemon")
 
@@ -65,6 +66,9 @@ class FsDeployDaemon:
             self._init_executor()
             self._init_scheduler()
             self._register_all_intents()
+            # Émettre un health-check au démarrage
+            if self._runtime and hasattr(self._runtime, 'event_queue'):
+                self._runtime.event_queue.put(Event(name="health.check", params={}))
         except Exception as e:
             log.error("init_failed", error=str(e))
             raise
