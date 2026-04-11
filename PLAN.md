@@ -1,12 +1,17 @@
 # PLAN — fsdeploy (branche dev)
 
-**Dernière mise à jour** : 2026-04-10
+**Dernière mise à jour** : 2026-04-11
 
 ## Phase 1 : Stabilisation TUI (en cours)
 
 - [x] 1.0 BridgeScreenMixin créé
-- [ ] 1.1 Corriger `cross_compile_screen.py` (import direct bridge)
-- [ ] 1.2 Unifier doublons écrans (`_screen` vs écrans principaux dans `app.py`)
+- [ ] 1.1 Corriger imports directs bridge dans TOUS les écrans ← EN COURS
+  - [x] `cross_compile_screen.py`
+  - [x] `crosscompile.py`, `multiarch.py`, `moduleregistry_screen.py`
+  - [ ] `graph_enhanced.py` ← PROCHAINE
+  - [ ] `security_enhanced.py`
+  - [ ] `partition_detection.py`
+- [ ] 1.2 Résoudre dualité `navigation.py` vs `app.py` screen_map (écrans `_enhanced` vs canoniques)
 - [ ] 1.3 Résoudre stub `ModuleRegistry` (crash au mount de `module_registry.py`)
 - [ ] 1.4 Synchroniser copies `tests/` avec `lib/`
 
