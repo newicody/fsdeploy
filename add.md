@@ -1,51 +1,64 @@
-# add.md — Action 2.1 : Health-check (reste à faire)
+# add.md — Action 2.2 : MountManager avec journal et cleanup
 
 **Date** : 2026-04-11
 
 ---
 
-## État actuel
+## Problème
 
-- ✅ `daemon.py` : émet `Event(name="health.check")` au démarrage
-- ❌ `system_intent.py` : pas de `@register_intent("health.check")` → l'event est silencieusement ignoré
-- ❌ `lib/function/health/check.py` : n'existe pas
+Les montages ZFS sont gérés directement par les tasks individuelles (`MountDatasetTask`, `MountsScreen` callbacks). Aucun journal centralisé → pas de cleanup des montages orphelins au shutdown, pas de rollback en cas d'erreur.
 
 ---
 
-## Reste à faire
+## Objectif
 
-### 1. Créer `lib/function/health/check.py` — `HealthCheckTask`
+Créer un `MountManager` centralisé qui :
+1. **Journalise** chaque mount/umount (dataset, mountpoint, timestamp)
+2. **Nettoie** les orphelins au shutdown du daemon
+3. **Rollback** : démonte dans l'ordre inverse en cas d'échec d'une séquence
 
-Vérifie :
-- `which zpool` / `which zfs` (binaires présents)
-- `sudo -n zpool list` (permissions sudo)
-- espace disque `/` > 100 MB (`shutil.disk_usage`)
-- `sys.version_info >= (3, 10)`
+---
 
-Retourne `{"checks": [{check, ok, message}, ...], "all_ok": bool}`
+## Fichiers à créer/modifier
 
-### 2. Ajouter dans `lib/intents/system_intent.py`
+### 1. `lib/function/mount/manager.py` (nouveau)
 
 ```python
-@register_intent("health.check")
-class HealthCheckIntent(Intent):
-    def build_tasks(self):
-        from ..function.health.check import HealthCheckTask
-        return [HealthCheckTask(id="health_check", params=self.params, context=self.context)]
+class MountManager:
+    def __init__(self):
+        self._journal: list[dict] = []  # {dataset, mountpoint, timestamp, action}
+        self._lock = threading.Lock()
+
+    def mount(self, dataset, mountpoint, task) -> bool:
+        """Monte via task.run_cmd, journalise."""
+
+    def umount(self, dataset, task) -> bool:
+        """Démonte, journalise."""
+
+    def cleanup(self, task=None):
+        """Démonte tous les montages journalisés (ordre inverse)."""
+
+    @property
+    def journal(self) -> list[dict]:
+        """Copie thread-safe du journal."""
 ```
+
+### 2. `lib/daemon.py` — instancier et injecter
+
+Dans `run()`, créer `MountManager()` et l'ajouter au `shared_context` pour que les tasks puissent y accéder via `self.context["mount_manager"]`. Hook `stop()` pour appeler `cleanup()`.
 
 ---
 
 ## Fichiers Aider
 
 ```
-fsdeploy/lib/function/health/__init__.py
-fsdeploy/lib/function/health/check.py
-fsdeploy/lib/intents/system_intent.py
+fsdeploy/lib/function/mount/__init__.py
+fsdeploy/lib/function/mount/manager.py
+fsdeploy/lib/daemon.py
 ```
 
 ---
 
 ## Après
 
-2.1 terminé. Prochaine : **2.2** (MountManager).
+2.2 terminé. Prochaine : **2.3** (notifications TUI unifiées).
