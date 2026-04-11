@@ -1,47 +1,46 @@
-# add.md — Action 1.3 : Stub ModuleRegistry cassé
+# add.md — Action 2.0 : Mode dry-run — propagation
 
 **Date** : 2026-04-11
 
 ---
 
-## Problème
+## État actuel
 
-`lib/ui/screens/module_registry.py` fait :
-```python
-from fsdeploy.lib.modules.registry import ModuleRegistry
-```
+Le dry-run est **partiellement câblé** :
+- ✅ `__main__.py` : option `--dry-run`/`-n`, stocké dans `state.dry_run`
+- ✅ `config.py` : `state.config.set("env.dry_run", True)` dans `_load_config()`
+- ✅ `Task.run_cmd()` : accepte `dry_run=True` et retourne `[dry-run]` sans exécuter
 
-Mais `lib/function/module/registry.py` est un stub vide :
-```python
-"""Module de registre distant (désactivé)."""
-```
-
-→ `ImportError` au chargement de l'écran "modules" dans `app.py` screen_map.
-
-Une implémentation complète existe dans `tests/fsdeploy/lib/modules/registry.py` avec données de démo et fallback.
+**Ce qui manque** : quand `state.dry_run=True`, chaque `task.run_cmd()` est toujours appelé avec `dry_run=False` par défaut. Aucune task ne lit `self.context.get("dry_run")` ou `self.params.get("dry_run")` pour le propager.
 
 ---
 
 ## Correction
 
-Copier l'implémentation `ModuleRegistry` de `tests/fsdeploy/lib/modules/registry.py` vers `fsdeploy/lib/modules/registry.py` (créer le fichier si nécessaire, avec `__init__.py`).
+1. **`daemon.py`** : dans `_register_all_intents()` ou au lancement, injecter `dry_run` dans le contexte global du scheduler pour qu'il soit propagé à chaque intent/task.
 
-L'implémentation contient :
-- `list_remote()` avec fallback démo si le registre distant est injoignable
-- `is_installed(name)` vérifie le répertoire local
-- `install(name)` / `uninstall(name)` basiques
+2. **`task.py`** : modifier `run_cmd()` pour lire `self.context.get("dry_run", False)` comme valeur par défaut du paramètre `dry_run`, au lieu de `False` :
+
+```python
+def run_cmd(self, cmd, ..., dry_run=None):
+    if dry_run is None:
+        dry_run = self.context.get("dry_run", False) or self.params.get("dry_run", False)
+    ...
+```
+
+3. **`executor.py`** : quand le scheduler exécute une task, injecter `dry_run` dans `task.context` depuis la config globale.
 
 ---
 
 ## Fichiers Aider
 
 ```
-fsdeploy/lib/modules/__init__.py
-fsdeploy/lib/modules/registry.py
+fsdeploy/lib/scheduler/model/task.py
+fsdeploy/lib/daemon.py
 ```
 
 ---
 
 ## Après
 
-1.3 terminé. Prochaine : **2.0 Mode dry-run** (ou 1.4 synchro tests/ si prioritaire).
+2.0 terminé. Prochaine : **2.1** (health-check au démarrage).

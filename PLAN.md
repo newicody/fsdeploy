@@ -2,17 +2,17 @@
 
 **Dernière mise à jour** : 2026-04-11
 
-## Phase 1 : Stabilisation TUI (en cours)
+## Phase 1 : Stabilisation TUI — ✅ TERMINÉE
 
 - [x] 1.0 BridgeScreenMixin créé
 - [x] 1.1 Corriger imports directs bridge dans TOUS les écrans
 - [x] 1.2 Corriger navigation.py : imports `_screen` → écrans canoniques
-- [ ] 1.3 Résoudre stub `ModuleRegistry` (crash au mount de `module_registry.py`) ← PROCHAINE
-- [ ] 1.4 Synchroniser copies `tests/` avec `lib/`
+- [x] 1.3 Résoudre stub `ModuleRegistry`
+- [ ] 1.4 Synchroniser copies `tests/` avec `lib/` (priorité basse, différé)
 
-## Phase 2 : Robustesse
+## Phase 2 : Robustesse (en cours)
 
-- [ ] 2.0 Mode `--dry-run` (CLI + propagation dans toutes les tasks)
+- [ ] 2.0 Mode `--dry-run` (CLI + propagation dans toutes les tasks) ← PROCHAINE
 - [ ] 2.1 Health-check au démarrage (ZFS, permissions, espace disque)
 - [ ] 2.2 MountManager avec journal et cleanup automatique
 - [ ] 2.3 Notifications TUI unifiées via bridge → `app.notify()`
