@@ -4,40 +4,28 @@
 
 ## Phase 1 : Stabilisation TUI — ✅ TERMINÉE
 
-- [x] 1.0 BridgeScreenMixin créé
-- [x] 1.1 Corriger imports directs bridge dans TOUS les écrans
-- [x] 1.2 Corriger navigation.py : imports `_screen` → écrans canoniques
-- [x] 1.3 Résoudre stub `ModuleRegistry`
+- [x] 1.0–1.3 Tous terminés
 - [ ] 1.4 Synchroniser copies `tests/` avec `lib/` (priorité basse, différé)
 
 ## Phase 2 : Robustesse (en cours)
 
-- [x] 2.0 Mode `--dry-run` (CLI + propagation dans toutes les tasks)
+- [x] 2.0 Mode `--dry-run`
 - [x] 2.1 Health-check au démarrage
-- [ ] 2.2 MountManager avec journal et cleanup automatique ← PROCHAINE
-- [ ] 2.3 Notifications TUI unifiées via bridge → `app.notify()`
+- [x] 2.2 MountManager avec journal et cleanup
+- [ ] 2.3 Notifications TUI unifiées via bridge → `app.notify()` ← PROCHAINE
 
 ## Phase 3 : Fonctionnalités
 
 - [ ] 3.0 Export/import configuration (presets JSON étendus)
 - [ ] 3.1 Mode recovery (`--recovery`)
-- [ ] 3.2 Métriques de performance (durée, succès/échec par task)
-- [ ] 3.3 GraphViewScreen câblé sur données live (`get_state_snapshot()`)
-- [ ] 3.4 FileHandler dans `setup_logging()` pour logs persistants
+- [ ] 3.2 Métriques de performance
+- [ ] 3.3 GraphViewScreen câblé sur données live
+- [ ] 3.4 FileHandler pour logs persistants
 
 ## Phase 4 : Intégration init/
 
-- [ ] 4.0 `live_setup` → `lib/function/live/setup.py`
-- [ ] 4.1 `init_script` → `lib/function/boot/init.py`
-- [ ] 4.2 `switch` → enrichit `lib/function/rootfs/switch.py`
-- [ ] 4.3 `network` → `lib/function/network/setup.py`
-- [ ] 4.4 `initramfs_hook` → `lib/function/boot/initramfs.py`
-- [ ] 4.5 `entry` → `lib/intents/boot_intent.py`
-- [ ] 4.6 `environment` → `lib/function/detect/environment.py`
-- [ ] 4.7 `services` → `lib/function/service/`
+- [ ] 4.0–4.7 (inchangé)
 
 ## Phase 5 : Tests complets
 
-- [ ] 5.0 `test_all.py` (30 tests couvrant tous les layers)
-- [ ] 5.1 Tests unitaires pour chaque intent
-- [ ] 5.2 Tests d'intégration TUI (textual pilot)
+- [ ] 5.0–5.2 (inchangé)
