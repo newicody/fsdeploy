@@ -48,6 +48,7 @@ class FsDeployDaemon:
         self._executor = None
         self._runtime = None
         self._store = None
+        self._mount_manager = None
         self._bus_sources = []
         self._scheduler_thread: Optional[threading.Thread] = None
         self._running = False
@@ -61,6 +62,7 @@ class FsDeployDaemon:
 
         try:
             self._init_store()
+            self._init_mount_manager()
             self._init_runtime()
             self._connect_message_bus()
             self._init_executor()
@@ -94,6 +96,9 @@ class FsDeployDaemon:
                 source.stop()
             except Exception:
                 pass
+        # Nettoyer les montages
+        if self._mount_manager is not None:
+            self._mount_manager.cleanup()
         if self._scheduler_thread and self._scheduler_thread.is_alive():
             self._scheduler_thread.join(timeout=5)
         if self._executor:
@@ -115,6 +120,18 @@ class FsDeployDaemon:
         except ImportError:
             log.warning("store_unavailable")
             self._store = None
+
+    def _init_mount_manager(self) -> None:
+        """
+        Initialise le gestionnaire de montages centralisé.
+        """
+        try:
+            from function.mount.manager import MountManager
+            self._mount_manager = MountManager()
+            log.info("mount_manager_ready")
+        except ImportError as e:
+            log.warning("mount_manager_unavailable", error=str(e))
+            self._mount_manager = None
 
     def _init_runtime(self) -> None:
         from scheduler.core.runtime import Runtime
@@ -181,6 +198,7 @@ class FsDeployDaemon:
             "store": self._store,
             "config": self._config,
             "dry_run": dry_run,
+            "mount_manager": self._mount_manager,
         }
         for event_name, intent_class in INTENT_REGISTRY.items():
             # Création d'un handler qui capture la classe et le contexte
