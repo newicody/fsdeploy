@@ -9,7 +9,6 @@ from textual.widgets.data_table import RowSelected
 from textual.screen import Screen
 from textual.reactive import reactive
 from textual import work
-from fsdeploy.lib.scheduler.bridge import SchedulerBridge
 
 class PartitionDetectionScreen(Screen):
     """Scanner les partitions par pattern et intégrer les modules."""
@@ -33,7 +32,9 @@ class PartitionDetectionScreen(Screen):
     }
     """
 
-    bridge = SchedulerBridge.default()
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
     selected_device = reactive("")
 
     def compose(self) -> ComposeResult:

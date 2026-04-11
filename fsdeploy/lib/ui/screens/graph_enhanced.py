@@ -11,7 +11,6 @@ from textual.screen import Screen
 from textual.reactive import reactive
 from textual import work
 
-from fsdeploy.lib.scheduler.bridge import SchedulerBridge
 
 
 class GraphEnhancedScreen(Screen):
@@ -35,7 +34,9 @@ class GraphEnhancedScreen(Screen):
     }
     """
 
-    bridge = SchedulerBridge.default()
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
     node_positions = reactive({})
     edges = reactive([])
     node_colors = reactive({})
