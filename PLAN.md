@@ -6,8 +6,8 @@
 
 - [x] 1.0 BridgeScreenMixin créé
 - [x] 1.1 Corriger imports directs bridge dans TOUS les écrans
-- [ ] 1.2 Corriger navigation.py : 2 imports cassés ← PROCHAINE
-- [ ] 1.3 Résoudre stub `ModuleRegistry` (crash au mount de `module_registry.py`)
+- [x] 1.2 Corriger navigation.py : imports `_screen` → écrans canoniques
+- [ ] 1.3 Résoudre stub `ModuleRegistry` (crash au mount de `module_registry.py`) ← PROCHAINE
 - [ ] 1.4 Synchroniser copies `tests/` avec `lib/`
 
 ## Phase 2 : Robustesse
