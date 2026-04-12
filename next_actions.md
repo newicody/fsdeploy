@@ -1,7 +1,7 @@
 # Suivi des actions prioritaires
 
 **Date de début** : 2026-04-09
-**Dernière mise à jour** : 2026-04-11
+**Dernière mise à jour** : 2026-04-12
 
 ## Actions P0
 
@@ -22,6 +22,12 @@
 ### 2. Mode dry-run — À faire
 ### 3. Health-check au démarrage — À faire
 ### 4. MountManager — À faire
+
+### 5.0 Test global (Phase 5)
+- **Fichier** : `test_all.py`
+- **Action** : créer un script de test global qui découvre tous les tests dans `tests/`.
+- **Statut** : En cours
+- **Date cible** : 2026-04-12
 
 ## Actions P1
 

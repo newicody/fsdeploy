@@ -8,3 +8,6 @@ ichiers existent :
     4.5 intents/boot_intent.py ✅
     4.6 detect/environment.py ✅
     4.7 service/install.py ✅
+
+## Tests
+    5.0 test_all.py ✅ Test global runner

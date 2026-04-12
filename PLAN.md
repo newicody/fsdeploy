@@ -9,6 +9,6 @@
 
 ## Phase 5 : Tests complets (en cours)
 
-- [ ] 5.0 `test_all.py` (30 tests couvrant tous les layers) ← PROCHAINE
+- [ ] 5.0 `test_all.py` (30 tests couvrant tous les layers) ← EN COURS
 - [ ] 5.1 Tests unitaires pour chaque intent
 - [ ] 5.2 Tests d'intégration TUI (textual pilot)
