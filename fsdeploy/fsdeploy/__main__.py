@@ -305,6 +305,26 @@ def coherence(
 
 
 @app.command()
+def recovery(
+    auto_fix: bool = typer.Option(False, "--fix", "-f", help="Appliquer les corrections."),
+    pool: Optional[str] = typer.Option(None, "--pool", "-p"),
+):
+    """Diagnostic et réparation du système."""
+    _load_config(None)
+    _setup_logging()
+
+    from function.recovery.diagnose import RecoveryDiagnoseTask
+
+    task = RecoveryDiagnoseTask(auto_fix=auto_fix, pool=pool)
+    result = task.run()
+
+    import json
+    print(json.dumps(result.output, indent=2, default=str))
+    if not result.success:
+        raise typer.Exit(1)
+
+
+@app.command()
 def toolchains():
     """Liste les toolchains disponibles."""
     try:
