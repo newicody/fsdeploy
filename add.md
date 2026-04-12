@@ -1,50 +1,50 @@
-# add.md — Action 2.3 : Notifications TUI unifiées
+# add.md — Action 3.1 : Mode recovery (`--recovery`)
 
-**Date** : 2026-04-11
-
----
-
-## Problème
-
-`app.py` appelle `bridge.poll()` dans `_refresh_from_store()` mais ignore la valeur de retour (liste de tickets terminés). Les tâches qui échouent passent inaperçues — aucun toast affiché.
+**Date** : 2026-04-12
 
 ---
 
-## Correction
+## Objectif
 
-Dans `fsdeploy/lib/ui/app.py`, modifier `_refresh_from_store()` :
+Ajouter une sous-commande `python3 -m fsdeploy --recovery` qui lance un diagnostic complet et propose des réparations. Pas de TUI complète, juste un workflow linéaire : health-check → coherence → propositions de fix → exécution.
+
+---
+
+## Implémentation
+
+### 1. `__main__.py` — ajouter sous-commande `recovery`
 
 ```python
-def _refresh_from_store(self) -> None:
-    if self.bridge:
-        try:
-            just_done = self.bridge.poll()
-            for ticket in just_done:
-                if ticket.status == "failed":
-                    self.notify(
-                        f"Echec: {ticket.event_name} — {ticket.error}",
-                        severity="error", timeout=5,
-                    )
-                elif ticket.status == "completed":
-                    self.notify(
-                        f"OK: {ticket.event_name}",
-                        severity="information", timeout=3,
-                    )
-        except Exception:
-            pass
-    # ... reste inchangé (store snapshot)
+@app.command()
+def recovery(
+    auto_fix: bool = typer.Option(False, "--fix", "-f", help="Appliquer les corrections."),
+    pool: Optional[str] = typer.Option(None, "--pool", "-p"),
+):
+    """Diagnostic et réparation du système."""
 ```
+
+La commande enchaîne :
+1. `HealthCheckTask` → vérifie ZFS/sudo/espace
+2. `CoherenceCheckTask(quick_mode=True)` → vérifie pools/datasets/montages
+3. Affiche le rapport
+4. Si `--fix` : applique les corrections proposées
+
+### 2. `lib/function/recovery/diagnose.py` (nouveau)
+
+`RecoveryDiagnoseTask` : orchestre health + coherence et produit un rapport structuré avec actions correctrices proposées.
 
 ---
 
-## Fichier Aider
+## Fichiers Aider
 
 ```
-fsdeploy/lib/ui/app.py
+fsdeploy/fsdeploy/__main__.py
+fsdeploy/lib/function/recovery/__init__.py
+fsdeploy/lib/function/recovery/diagnose.py
 ```
 
 ---
 
 ## Après
 
-Phase 2 terminée. Prochaine : **Phase 3** (3.0 Export/import configuration).
+3.1 terminé. Prochaine : **3.2** (métriques de performance).
