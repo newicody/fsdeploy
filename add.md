@@ -1,39 +1,50 @@
-# add.md — Action 6.0b : Remplacer `module_registry.py` par version complète
+# add.md — Action 6.1+6.2 : Imports cosmétiques + supprimer stub
 
 **Date** : 2026-04-12
 
 ---
 
-## Problème
+## 6.1 — Imports cosmétiques
 
-`lib/ui/screens/module_registry.py` utilise `bridge.emit("moduleregistry.install", ...)` directement — pas de `ModuleRegistry` class, pas de `DataTable` avec statut install.
+`navigation.py` et `test_screens_integration.py` importent encore depuis `moduleregistry_screen` (fonctionne via re-export, mais devrait pointer vers le canonique).
 
-La version complète existe dans `tests/fsdeploy/lib/ui/screens/module_registry.py` : elle utilise `ModuleRegistry` de `lib/modules/registry.py` (créé en phase 1.3), a un `DataTable` fonctionnel, des bindings propres.
+### Changement dans chaque fichier :
 
-`app.py` charge depuis `module_registry` — donc ce fichier doit contenir la bonne implémentation.
+```python
+# AVANT
+from fsdeploy.lib.ui.screens.moduleregistry_screen import ModuleRegistryScreen
+# APRÈS
+from fsdeploy.lib.ui.screens.module_registry import ModuleRegistryScreen
+```
+
+Fichiers concernés :
+- `fsdeploy/lib/ui/screens/navigation.py`
+- `tests/fsdeploy/lib/ui/screens/navigation.py`
+- `fsdeploy/tests/ui/test_screens_integration.py`
+- `tests/fsdeploy/tests/ui/test_screens_integration.py`
 
 ---
 
-## Correction
+## 6.2 — Supprimer stub `cross_compile_screen.py`
 
-Remplacer `fsdeploy/lib/ui/screens/module_registry.py` par le contenu de `tests/fsdeploy/lib/ui/screens/module_registry.py` :
-- Import `from fsdeploy.lib.modules.registry import ModuleRegistry`
-- `__init__` crée `self.registry = ModuleRegistry()`
-- `refresh_modules()` appelle `self.registry.list_remote()`
-- `action_install()` appelle `self.registry.install(name)`
-- DataTable avec colonnes Nom/Version/Description/Statut
-- Bindings : escape, r=refresh, i=install
+`fsdeploy/lib/ui/screens/cross_compile_screen.py` ne contient qu'un `raise ImportError`. Plus personne ne l'importe (navigation.py corrigé en 1.2). Supprimer.
+
+`scripts/cleanup.sh` contient déjà la commande `rm` — il suffit d'exécuter ou de supprimer manuellement.
 
 ---
 
-## Fichier Aider
+## Fichiers Aider
 
 ```
-fsdeploy/lib/ui/screens/module_registry.py
+fsdeploy/lib/ui/screens/navigation.py
+fsdeploy/tests/ui/test_screens_integration.py
+tests/fsdeploy/lib/ui/screens/navigation.py
+tests/fsdeploy/tests/ui/test_screens_integration.py
+fsdeploy/lib/ui/screens/cross_compile_screen.py   (supprimer)
 ```
 
 ---
 
 ## Après
 
-6.0b terminé. Prochaine : **6.1** (imports cosmétiques) puis **6.2** (supprimer cross_compile_screen.py).
+Phase 6 terminée. PLAN complet.
