@@ -1,50 +1,70 @@
-# add.md — Action 3.1 : Mode recovery (`--recovery`)
+# add.md — Action 3.3 : Scheduler.state_snapshot() pour GraphViewScreen
 
 **Date** : 2026-04-12
 
 ---
 
-## Objectif
+## Problème
 
-Ajouter une sous-commande `python3 -m fsdeploy --recovery` qui lance un diagnostic complet et propose des réparations. Pas de TUI complète, juste un workflow linéaire : health-check → coherence → propositions de fix → exécution.
+`bridge.get_scheduler_state()` appelle `scheduler.state_snapshot()` mais cette méthode n'existe pas dans `Scheduler`. Le bridge retourne des données aléatoires de démo → GraphViewScreen n'affiche jamais de vraies données.
 
 ---
 
-## Implémentation
+## Correction
 
-### 1. `__main__.py` — ajouter sous-commande `recovery`
+### `lib/scheduler/core/scheduler.py` — ajouter `state_snapshot()`
 
 ```python
-@app.command()
-def recovery(
-    auto_fix: bool = typer.Option(False, "--fix", "-f", help="Appliquer les corrections."),
-    pool: Optional[str] = typer.Option(None, "--pool", "-p"),
-):
-    """Diagnostic et réparation du système."""
+def state_snapshot(self) -> dict:
+    """Snapshot thread-safe pour GraphView et bridge."""
+    rt = self.runtime
+    return {
+        "event_count": rt.event_queue.qsize() if hasattr(rt, 'event_queue') else 0,
+        "intent_count": rt.intent_queue.qsize() if hasattr(rt, 'intent_queue') else 0,
+        "task_count": len(rt.state.running) if hasattr(rt, 'state') else 0,
+        "completed_count": len(rt.state.completed) if hasattr(rt, 'state') else 0,
+        "active_task": self._get_active_task_data(),
+        "recent_tasks": self._get_recent_tasks(10),
+    }
+
+def _get_active_task_data(self) -> dict | None:
+    running = getattr(self.runtime, 'state', None)
+    if not running or not running.running:
+        return None
+    task_id, info = next(iter(running.running.items()))
+    task = info.get("task")
+    return {
+        "id": task_id,
+        "name": task.__class__.__name__ if task else "?",
+        "status": "running",
+        "duration": time.monotonic() - info.get("started_at", 0),
+    }
+
+def _get_recent_tasks(self, limit: int = 10) -> list[dict]:
+    state = getattr(self.runtime, 'state', None)
+    if not state:
+        return []
+    recent = []
+    for tid, info in list(state.completed.items())[-limit:]:
+        recent.append({
+            "id": tid,
+            "name": info.get("task", "").__class__.__name__ if info.get("task") else "?",
+            "status": "completed",
+            "duration": info.get("duration", 0),
+        })
+    return recent
 ```
-
-La commande enchaîne :
-1. `HealthCheckTask` → vérifie ZFS/sudo/espace
-2. `CoherenceCheckTask(quick_mode=True)` → vérifie pools/datasets/montages
-3. Affiche le rapport
-4. Si `--fix` : applique les corrections proposées
-
-### 2. `lib/function/recovery/diagnose.py` (nouveau)
-
-`RecoveryDiagnoseTask` : orchestre health + coherence et produit un rapport structuré avec actions correctrices proposées.
 
 ---
 
-## Fichiers Aider
+## Fichier Aider
 
 ```
-fsdeploy/fsdeploy/__main__.py
-fsdeploy/lib/function/recovery/__init__.py
-fsdeploy/lib/function/recovery/diagnose.py
+fsdeploy/lib/scheduler/core/scheduler.py
 ```
 
 ---
 
 ## Après
 
-3.1 terminé. Prochaine : **3.2** (métriques de performance).
+3.3 terminé. Prochaine : **3.4** (FileHandler pour logs persistants).
