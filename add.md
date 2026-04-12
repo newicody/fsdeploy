@@ -1,4 +1,4 @@
-# add.md — Action 7.7 : lib/function/module/registry.py stub → re-export
+# add.md — Action 7.2 : Synchroniser tests/ avec lib/ (copies stale)
 
 **Date** : 2026-04-12
 
@@ -6,17 +6,33 @@
 
 ## Problème
 
-Deux fichiers `ModuleRegistry` :
-- `lib/function/module/registry.py` → **stub vide** (`class ModuleRegistry: pass`)
-- `lib/modules/registry.py` → **version complète** (list_remote, install, uninstall, is_installed)
+`tests/fsdeploy/` contient des copies miroir de `fsdeploy/` qui n'ont pas été mises à jour. Fichiers stale identifiés :
 
-Le stub crée une confusion d'import : si quelqu'un importe depuis `function.module.registry`, il obtient un objet inutile sans méthodes.
+1. `tests/fsdeploy/lib/ui/screens/cross_compile_screen.py` — ancienne version avec `SchedulerBridge.default()` direct (lib/ l'a supprimé)
+2. `tests/fsdeploy/lib/ui/screens/moduleregistry_screen.py` — ancienne version avec bridge direct (lib/ = re-export)
+3. `tests/fsdeploy/lib/function/module/registry.py` — ancien stub `pass` (lib/ = re-export)
 
 ---
 
-## Correction
+## Corrections
 
-Remplacer le stub par un re-export :
+### 1. `cross_compile_screen.py` → re-export
+
+```python
+"""Backward compat — canonical location is crosscompile."""
+from .crosscompile import CrossCompileScreen
+__all__ = ["CrossCompileScreen"]
+```
+
+### 2. `moduleregistry_screen.py` → re-export
+
+```python
+"""Backward compat — canonical location is module_registry."""
+from .module_registry import ModuleRegistryScreen
+__all__ = ["ModuleRegistryScreen"]
+```
+
+### 3. `function/module/registry.py` → re-export
 
 ```python
 """Backward compat — canonical location is lib/modules/registry."""
@@ -26,14 +42,16 @@ __all__ = ["ModuleRegistry"]
 
 ---
 
-## Fichier Aider
+## Fichiers Aider
 
 ```
-fsdeploy/lib/function/module/registry.py
+tests/fsdeploy/lib/ui/screens/cross_compile_screen.py
+tests/fsdeploy/lib/ui/screens/moduleregistry_screen.py
+tests/fsdeploy/lib/function/module/registry.py
 ```
 
 ---
 
 ## Après
 
-7.7 terminé. Prochaine : **7.2** (sync tests/ stale).
+7.2 terminé. Prochaine : **7.4** (README.md curl → dev).
