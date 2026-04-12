@@ -3,55 +3,57 @@
 **Date de début** : 2026-04-09
 **Dernière mise à jour** : 2026-04-12
 
-## Actions P0
+---
 
-### 1. BridgeScreenMixin — ✅ Terminé
-### 1.1 Intégration bridge — ✅ Terminé
+## Historique (Phases 1–6) — ✅ TERMINÉ
 
-### 1.2 Corriger imports navigation.py ← TERMINÉ
-- **Fichier** : `fsdeploy/lib/ui/screens/navigation.py`
-- **Problème** : `cross_compile_screen.py` est devenu un stub `raise ImportError`. `navigation.py` l'importe encore → crash.
-- **Action** : remplacer 2 imports (`cross_compile_screen` → `crosscompile`, `multiarch_screen` → `multiarch`)
-- **Statut** : ✅ Terminé
-- **Date cible** : 2026-04-12
+Toutes les phases précédentes sont terminées :
+- Phase 1 : Stabilisation TUI (BridgeScreenMixin, navigation, ModuleRegistry)
+- Phase 2 : Robustesse (dry-run, health-check, MountManager, notifications)
+- Phase 3 : Fonctionnalités (config export, recovery, métriques, state_snapshot, log_dir)
+- Phase 4 : Intégration init/ (live, boot, rootfs, network, initramfs, environment, service)
+- Phase 5 : Tests (test_all, test_intents_build, test_screens_integration)
+- Phase 6 : Nettoyage (module_registry unifié, re-exports, cross_compile_screen supprimé)
 
-### 1.3 Stub ModuleRegistry cassé
-- **Fichiers** : `lib/ui/screens/module_registry.py`, `lib/function/module/registry.py`
-- **Statut** : À faire
+---
 
-### 1.4 Demander les fichiers manquants pour synchronisation
-- **Description** : Les fichiers listés dans `add.md` nécessaires pour corriger les imports dans `tests/` ne sont pas présents dans le chat. Besoin de leur contenu.
-- **Action** : Ajouter au chat les fichiers `navigation.py`, `test_screens_integration.py`, etc.
-- **Statut** : ⏸️ En attente
-- **Date cible** : 2026-04-13
+## Phase 7 — Audit post-completion
 
-### 2. Mode dry-run — À faire
-### 3. Health-check au démarrage — À faire
-### 4. MountManager — À faire
+### 7.0 launch.sh : branche par défaut ← PROCHAINE
+- **Fichier** : `fsdeploy/launch.sh`
+- **Bug** : `REPO_BRANCH` défaut `main` → clone du code obsolète
+- **Fix** : Changer en `dev`, ajouter lancement auto post-install
+- **Priorité** : P0 (bloque l'installation pour tout nouvel utilisateur)
 
-### 5.0 Test global (Phase 5)
-- **Fichier** : `test_all.py`
-- **Action** : créer un script de test global qui découvre tous les tests dans `tests/`.
-- **Statut** : ✅ Terminé
-- **Date cible** : 2026-04-12
+### 7.1 live/setup.py : linux-headers dynamique
+- **Fichier** : `fsdeploy/lib/function/live/setup.py`
+- **Bug** : `linux-headers-amd64` hardcodé dans `DEBIAN_PACKAGES`
+- **Fix** : Détection dynamique via `uname -r`
+- **Priorité** : P0 (freeze DKMS potentiel)
 
-### 5.1 Tests unitaires par intent
-- **Fichier** : `tests/fsdeploy/test_intents_build.py`
-- **Action** : créer des tests pour vérifier que chaque intent enregistré produit les bonnes tâches via build_tasks().
-- **Statut** : ✅ Terminé
-- **Date cible** : 2026-04-12
+### 7.2 Sync tests/ stale copies
+- **Fichiers** : `tests/fsdeploy/lib/ui/screens/cross_compile_screen.py`, `moduleregistry_screen.py`
+- **Fix** : Remplacer par re-exports ou supprimer
+- **Priorité** : P1
 
-## Actions P1
+### 7.3 next_actions.md + docs refresh
+- **Fichiers** : `next_actions.md`, `README.md`, `DIAGRAMS.md`, `fsdeploy_main_status.md`
+- **Fix** : Réécriture cohérente avec l'état actuel
+- **Priorité** : P1
 
-### 5–8 : inchangées, à faire
+### 7.4 lib/function/module/registry.py stub
+- **Fichier** : `fsdeploy/lib/function/module/registry.py`
+- **Fix** : Re-export depuis `lib/modules/registry.py` ou supprimer
+- **Priorité** : P2
+
+---
 
 ## Journal des décisions
 
 | Date | Événement |
 |------|-----------|
-| 2026-04-09 | Priorisation initiale. |
-| 2026-04-10 | Corrections bridge écrans. |
-| 2026-04-11 | 1.1 terminé. 1.2 marqué à tort comme fait — `navigation.py` importe un stub qui lève ImportError. |
-| 2026-04-12 | Demande des fichiers manquants pour poursuivre la synchronisation des copies `tests/`. |
-| 2026-04-12 | Suppression du stub `cross_compile_screen.py` (tâche 6.2). |
-| 2026-04-12 | Script global de test `test_all.py` créé. |
+| 2026-04-09 | Priorisation initiale, début Phase 1 |
+| 2026-04-10 | Corrections bridge écrans |
+| 2026-04-11 | Phase 1 terminée, début Phase 2 |
+| 2026-04-12 | Phases 2–6 terminées. Audit complet → Phase 7 identifiée |
+| 2026-04-12 | launch.sh : branche `main` par défaut = bug bloquant identifié |
