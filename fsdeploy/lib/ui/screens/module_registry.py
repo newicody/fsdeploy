@@ -11,7 +11,7 @@ from textual.widgets import Header, Footer, DataTable, Label, Button
 from textual.containers import Container, VerticalScroll, Horizontal
 from textual.binding import Binding
 
-from fsdeploy.lib.modules.registry import ModuleRegistry
+from fsdeploy.lib.function.module.registry import ModuleRegistry
 
 
 class ModuleRegistryScreen(Screen):
