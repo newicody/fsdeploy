@@ -7,5 +7,5 @@
 ## Phase 5 : Tests complets (en cours)
 
 - [x] 5.0 `test_all.py` runner + tests unitaires existants
-- [ ] 5.1 Tests unitaires par intent (build_tasks vérifié) ← PROCHAINE
-- [ ] 5.2 Tests d'intégration TUI (textual pilot)
+- [x] 5.1 Tests unitaires par intent (build_tasks vérifié)
+- [ ] 5.2 Tests d'intégration TUI (textual pilot) ← PROCHAINE

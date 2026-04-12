@@ -29,6 +29,12 @@
 - **Statut** : En cours
 - **Date cible** : 2026-04-12
 
+### 5.1 Tests unitaires par intent
+- **Fichier** : `tests/fsdeploy/test_intents_build.py`
+- **Action** : créer des tests pour vérifier que chaque intent enregistré produit les bonnes tâches via build_tasks().
+- **Statut** : ✅ Terminé
+- **Date cible** : 2026-04-12
+
 ## Actions P1
 
 ### 5–8 : inchangées, à faire
