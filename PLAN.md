@@ -2,10 +2,16 @@
 
 **Dernière mise à jour** : 2026-04-12
 
-## Phase 1–4 — ✅ TERMINÉES
+## Phase 1 : Stabilisation TUI — ✅ TERMINÉE
+## Phase 2 : Robustesse — ✅ TERMINÉE
+## Phase 3 : Fonctionnalités — ✅ TERMINÉE
+## Phase 4 : Intégration init/ — ✅ TERMINÉE
+## Phase 5 : Tests complets — ✅ TERMINÉE
 
-## Phase 5 : Tests complets (en cours)
+---
 
-- [x] 5.0 `test_all.py` runner + tests unitaires existants
-- [x] 5.1 Tests unitaires par intent (build_tasks vérifié)
-- [ ] 5.2 Tests d'intégration TUI (textual pilot) ← PROCHAINE
+## Reste (priorité basse)
+
+- [ ] 1.4 Synchroniser copies `tests/` avec `lib/` (imports obsolètes dans tests/)
+- [ ] Cleanup : supprimer `cross_compile_screen.py` (stub ImportError), fichiers CLEANUP.md
+- [ ] Tests TUI : corriger imports dans `test_screens_integration.py` (pointe vers `_screen` obsolètes)

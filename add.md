@@ -1,48 +1,35 @@
-# add.md — Action 5.1 : Tests unitaires par intent
+# add.md — Nettoyage final (priorité basse)
 
 **Date** : 2026-04-12
 
 ---
 
-## État actuel
+## PLAN terminé — reste du nettoyage
 
-Seul `tests/test_intent.py` teste la classe de base `Intent`. Aucun test ne vérifie que les intents métier (`detection_intent`, `kernel_intent`, `system_intent`, `boot_intent`, `init_intent`) produisent les bonnes tasks via `build_tasks()`.
+### 1. Synchroniser `tests/` avec `lib/`
 
----
+Fichiers dans `tests/fsdeploy/lib/ui/screens/` qui ont encore des imports cassés :
+- `cross_compile_screen.py` → import direct `SchedulerBridge`
+- `multiarch_screen.py` → import direct `SchedulerBridge`
+- `moduleregistry_screen.py` → import direct `SchedulerBridge`
+- `partition_detection.py` → import direct `SchedulerBridge`
+- `security_enhanced.py` → import direct `SchedulerBridge`
+- `navigation.py` → imports `_screen` obsolètes
 
-## Objectif
+### 2. Supprimer fichiers obsolètes (CLEANUP.md)
 
-Créer `fsdeploy/tests/unit/test_intents_build.py` qui vérifie pour chaque intent enregistré que `build_tasks()` retourne une liste non-vide de `Task` avec les bons types.
+- `fsdeploy/lib/ui/screens/cross_compile_screen.py` (stub `raise ImportError`)
+- Vérifier les entrées de `CLEANUP.md` existant
 
-Tests à écrire (~15) :
-- `test_detection_start` → `DetectionTask`
-- `test_pool_import_all` → `PoolImportAllTask`
-- `test_kernel_list` → `KernelListTask`
-- `test_kernel_provision` → `KernelProvisionTask`
-- `test_coherence_check` → `CoherenceCheckTask`
-- `test_preset_list` → `PresetListTask`
-- `test_snapshot_create` → `SnapshotCreateTask`
-- `test_stream_start` → `StreamStartTask`
-- `test_health_check` → `HealthCheckTask`
-- `test_init_detect` → `InitCheckTask`
-- `test_zbm_install` → `ZBMInstallTask`
-- `test_config_snapshot_save` → `ConfigSnapshotTask`
-- `test_debug_exec` → `DebugExecTask`
-- `test_mount_request` → `MountDatasetTask`
-- `test_security_status` → `SecurityStatusTask`
+### 3. Corriger `test_screens_integration.py`
 
-Chaque test instancie l'intent avec des params minimaux et vérifie `len(build_tasks()) > 0` + `isinstance(tasks[0], expected_class)`.
+Remplacer les imports `_screen` par les écrans canoniques pour que les tests passent.
 
 ---
 
-## Fichier Aider
+## Fichiers Aider
 
 ```
-fsdeploy/tests/unit/test_intents_build.py
+tests/fsdeploy/lib/ui/screens/navigation.py
+tests/fsdeploy/tests/ui/test_screens_integration.py
 ```
-
----
-
-## Après
-
-5.1 terminé. Prochaine : **5.2** (tests TUI textual pilot).
