@@ -190,7 +190,7 @@ if [[ $UPDATE_MODE -eq 1 ]]; then
 
     # 2. pip install -r requirements.txt
     if [[ -f "${INSTALL_DIR}/requirements.txt" ]] && [[ -x "${VENV_DIR}/bin/pip" ]]; then
-        as_user "$VENV_DIR/bin/pip" install --quiet --upgrade -r "${INSTALL_DIR}/requirements.txt"
+        as_user "$VENV_DIR/bin/pip" install --timeout 120 --progress-bar on --upgrade -r "${INSTALL_DIR}/requirements.txt"
         ok "Dépendances Python mises à jour"
     fi
 
@@ -553,7 +553,7 @@ fi
 as_user "$VENV_DIR/bin/pip" install --quiet --upgrade pip setuptools wheel
 
 if [[ -f "${INSTALL_DIR}/requirements.txt" ]]; then
-    as_user "$VENV_DIR/bin/pip" install --quiet -r "${INSTALL_DIR}/requirements.txt"
+    as_user "$VENV_DIR/bin/pip" install --timeout 120 --progress-bar on -r "${INSTALL_DIR}/requirements.txt"
     ok "Dépendances Python installées"
 else
     # Fallback : dépendances minimales directement
