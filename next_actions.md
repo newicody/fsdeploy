@@ -1,7 +1,7 @@
 # Suivi des actions prioritaires
 
 **Date de début** : 2026-04-09
-**Dernière mise à jour** : 2026-04-12
+**Dernière mise à jour** : 2026-04-13
 
 ---
 
@@ -36,6 +36,12 @@ Toutes les phases précédentes sont terminées :
 - **Fichiers** : `tests/fsdeploy/lib/ui/screens/cross_compile_screen.py`, `moduleregistry_screen.py`
 - **Fix** : Remplacer par re-exports ou supprimer
 - **Priorité** : P1
+- **État** : ⏳ **En attente** (besoin d'ajouter les fichiers au chat pour modification)
+
+### 7.2a Demande d'ajout des fichiers tests
+- **Objectif** : Ajouter `tests/fsdeploy/lib/ui/screens/cross_compile_screen.py` et `tests/fsdeploy/lib/ui/screens/moduleregistry_screen.py` au chat pour permettre les modifications.
+- **Action** : Veuillez ajouter ces fichiers au chat via un message utilisateur.
+- **Priorité** : P0 (bloque 7.2)
 
 ### 7.3 next_actions.md + docs refresh
 - **Fichiers** : `next_actions.md`, `README.md`, `DIAGRAMS.md`, `fsdeploy_main_status.md`
@@ -59,3 +65,4 @@ Toutes les phases précédentes sont terminées :
 | 2026-04-12 | Phases 2–6 terminées. Audit complet → Phase 7 identifiée |
 | 2026-04-12 | launch.sh : branche `main` par défaut = bug bloquant identifié |
 | 2026-04-12 | 7.0 corrigé (branch=dev, --run/--no-run ajoutées) |
+| 2026-04-13 | Demande d'ajout des fichiers tests pour 7.2 |
