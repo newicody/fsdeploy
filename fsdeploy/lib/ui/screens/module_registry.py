@@ -1,97 +1,118 @@
 """
-Écran pour le registre de modules tiers.
+Écran du registre des modules pour fsdeploy.
+
+Permet de parcourir, installer et mettre à jour des modules tiers
+depuis un registre distant.
 """
 
 from textual.app import ComposeResult
-from textual.containers import Container, Vertical, Horizontal
-from textual.widgets import Header, Footer, Button, Input, Select, DataTable, Static, Label
-from textual.widgets.data_table import RowSelected
 from textual.screen import Screen
-from textual.reactive import reactive
-from textual import work
+from textual.widgets import Header, Footer, DataTable, Label, Button
+from textual.containers import Container, VerticalScroll, Horizontal
+from textual.binding import Binding
+
+from fsdeploy.lib.modules.registry import ModuleRegistry
+
 
 class ModuleRegistryScreen(Screen):
-    """Permettre l'installation, la mise à jour et la suppression de modules tiers."""
+    """
+    Affiche la liste des modules disponibles dans le registre.
+    """
 
-    CSS = """
+    BINDINGS = [
+        ("escape", "app.pop_screen", "Retour"),
+        ("r", "refresh", "Rafraîchir"),
+        ("i", "install", "Installer le module sélectionné"),
+    ]
+
+    DEFAULT_CSS = """
     ModuleRegistryScreen {
         layout: vertical;
     }
-    .controls {
-        height: 30%;
-        padding: 1;
-        border: solid $primary;
+
+    #registry-title {
+        height: auto;
+        padding: 1 2;
+        text-style: bold;
+        background: $boost;
     }
-    .modules {
-        height: 70%;
-        border: solid $secondary;
+
+    #module-table {
+        height: 1fr;
+        border: solid $accent;
+    }
+
+    #button-bar {
+        height: auto;
+        padding: 1 2;
+        border-top: solid $panel;
     }
     """
 
-    selected_module = reactive("")
-
-    @property
-    def bridge(self):
-        return getattr(self.app, "bridge", None)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.registry = ModuleRegistry()
+        self.modules = []
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Container(classes="controls"):
-            yield Static("Nom du module:")
-            yield Input(placeholder="module‑zfs‑extra", id="module-name")
-            yield Static("Version (optionnel):")
-            yield Input(placeholder="1.0.0", id="module-version")
-            yield Button("Installer", id="install")
-            yield Button("Mettre à jour", id="update")
-            yield Button("Supprimer", id="delete", variant="error")
-        with Container(classes="modules"):
-            yield DataTable(id="modules-table")
+        yield VerticalScroll(
+            Label("Registre des modules tiers", id="registry-title"),
+            DataTable(id="module-table"),
+        )
+        yield Horizontal(
+            Button("Rafraîchir", variant="primary", id="refresh"),
+            Button("Installer", variant="success", id="install"),
+            Button("Retour", variant="default", id="back"),
+            id="button-bar",
+        )
         yield Footer()
 
     def on_mount(self) -> None:
-        table = self.query_one("#modules-table", DataTable)
-        table.add_columns("Nom", "Version", "Statut")
+        table = self.query_one("#module-table", DataTable)
+        table.add_columns("Nom", "Version", "Description", "Statut")
+        self.refresh_modules()
+
+    def refresh_modules(self) -> None:
+        """Met à jour la liste des modules depuis le registre."""
+        self.modules = self.registry.list_remote()
+        table = self.query_one("#module-table", DataTable)
+        table.clear()
+        for mod in self.modules:
+            installed = self.registry.is_installed(mod["name"])
+            status = "✅" if installed else "⭕"
+            table.add_row(
+                mod["name"],
+                mod.get("version", "?"),
+                mod.get("description", ""),
+                status,
+            )
+
+    def action_refresh(self) -> None:
+        self.refresh_modules()
+        self.notify("Liste des modules rafraîchie", severity="information")
+
+    def action_install(self) -> None:
+        table = self.query_one("#module-table", DataTable)
+        if not table.cursor_row:
+            self.notify("Aucun module sélectionné", severity="warning")
+            return
+        row_index = table.cursor_row
+        if row_index >= len(self.modules):
+            return
+        module = self.modules[row_index]
+        name = module["name"]
+        try:
+            self.registry.install(name)
+            self.notify(f"Module '{name}' installé avec succès", severity="success")
+            self.refresh_modules()
+        except Exception as e:
+            self.notify(f"Échec d'installation : {e}", severity="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "install":
-            self.install_module()
-        elif event.button.id == "update":
-            self.update_module()
-        elif event.button.id == "delete":
-            self.delete_module()
-
-    def install_module(self):
-        name_input = self.query_one("#module-name", Input)
-        version_input = self.query_one("#module-version", Input)
-        name = name_input.value
-        version = version_input.value if version_input.value else ""
-        params = {"name": name}
-        if version:
-            params["version"] = version
-        ticket = self.bridge.emit("moduleregistry.install", params, callback=self.on_install_result)
-
-    def update_module(self):
-        name_input = self.query_one("#module-name", Input)
-        name = name_input.value
-        ticket = self.bridge.emit("moduleregistry.update", {"name": name}, callback=self.on_update_result)
-
-    def delete_module(self):
-        name_input = self.query_one("#module-name", Input)
-        name = name_input.value
-        ticket = self.bridge.emit("moduleregistry.delete", {"name": name}, callback=self.on_delete_result)
-
-    def on_install_result(self, result):
-        table = self.query_one("#modules-table", DataTable)
-        if result and result.get("success"):
-            module = result.get("module", {})
-            table.add_row(module.get("name"), module.get("version"), "Installé")
-        else:
-            table.add_row("Erreur", "", "Échec")
-
-    def on_update_result(self, result):
-        # Similaire
-        pass
-
-    def on_delete_result(self, result):
-        # Similaire
-        pass
+        if event.button.id == "refresh":
+            self.action_refresh()
+        elif event.button.id == "install":
+            self.action_install()
+        elif event.button.id == "back":
+            self.app.pop_screen()
