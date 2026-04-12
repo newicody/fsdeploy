@@ -1,35 +1,67 @@
-# add.md — Nettoyage final (priorité basse)
+# add.md — Action 6.0–6.2 : Unifier ModuleRegistryScreen + corriger imports
 
 **Date** : 2026-04-12
 
 ---
 
-## PLAN terminé — reste du nettoyage
+## Problème
 
-### 1. Synchroniser `tests/` avec `lib/`
+Trois fichiers pour le même écran :
+- `lib/ui/screens/module_registry.py` → **stub** ("désactivé") — c'est ce que `app.py` charge
+- `lib/ui/screens/moduleregistry_screen.py` → **ancienne version** (imports directs SchedulerBridge)
+- `tests/fsdeploy/lib/ui/screens/module_registry.py` → **version complète** (avec ModuleRegistry)
 
-Fichiers dans `tests/fsdeploy/lib/ui/screens/` qui ont encore des imports cassés :
-- `cross_compile_screen.py` → import direct `SchedulerBridge`
-- `multiarch_screen.py` → import direct `SchedulerBridge`
-- `moduleregistry_screen.py` → import direct `SchedulerBridge`
-- `partition_detection.py` → import direct `SchedulerBridge`
-- `security_enhanced.py` → import direct `SchedulerBridge`
-- `navigation.py` → imports `_screen` obsolètes
+`navigation.py` et `test_screens_integration.py` importent depuis `moduleregistry_screen` (ancien nom).
 
-### 2. Supprimer fichiers obsolètes (CLEANUP.md)
+---
 
-- `fsdeploy/lib/ui/screens/cross_compile_screen.py` (stub `raise ImportError`)
-- Vérifier les entrées de `CLEANUP.md` existant
+## Actions
 
-### 3. Corriger `test_screens_integration.py`
+### 1. `lib/ui/screens/module_registry.py` — remplacer stub par version complète
 
-Remplacer les imports `_screen` par les écrans canoniques pour que les tests passent.
+Copier le contenu de `tests/fsdeploy/lib/ui/screens/module_registry.py` (version avec `ModuleRegistry`, `DataTable`, install/refresh). C'est déjà le fichier que `app.py` charge.
+
+### 2. `lib/ui/screens/moduleregistry_screen.py` — convertir en re-export
+
+```python
+"""Backward compat — canonical location is module_registry."""
+from .module_registry import ModuleRegistryScreen
+__all__ = ["ModuleRegistryScreen"]
+```
+
+### 3. `lib/ui/screens/navigation.py` — changer import
+
+```python
+# AVANT
+from fsdeploy.lib.ui.screens.moduleregistry_screen import ModuleRegistryScreen
+# APRÈS
+from fsdeploy.lib.ui.screens.module_registry import ModuleRegistryScreen
+```
+
+### 4. `tests/fsdeploy/tests/ui/test_screens_integration.py` + `fsdeploy/tests/ui/test_screens_integration.py` — changer import
+
+```python
+# AVANT
+from fsdeploy.lib.ui.screens.moduleregistry_screen import ModuleRegistryScreen
+# APRÈS
+from fsdeploy.lib.ui.screens.module_registry import ModuleRegistryScreen
+```
 
 ---
 
 ## Fichiers Aider
 
 ```
-tests/fsdeploy/lib/ui/screens/navigation.py
+fsdeploy/lib/ui/screens/module_registry.py
+fsdeploy/lib/ui/screens/moduleregistry_screen.py
+fsdeploy/lib/ui/screens/navigation.py
+fsdeploy/tests/ui/test_screens_integration.py
 tests/fsdeploy/tests/ui/test_screens_integration.py
+tests/fsdeploy/lib/ui/screens/navigation.py
 ```
+
+---
+
+## Après
+
+6.0–6.2 terminés. Prochaine : **6.3** (supprimer `cross_compile_screen.py`).
