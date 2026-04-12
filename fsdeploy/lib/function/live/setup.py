@@ -119,18 +119,27 @@ class LiveSetupTask(Task):
 
     def _install_packages(self) -> list[str]:
         """Installe les paquets nécessaires."""
+        packages = DEBIAN_PACKAGES.copy()
+        # Remplacer linux-headers-amd64 par linux-headers-$(uname -r)
+        result = self.run_cmd("uname -r", check=False)
+        if result.success and result.stdout.strip():
+            kernel_release = result.stdout.strip()
+            target_header = f"linux-headers-{kernel_release}"
+            for i, pkg in enumerate(packages):
+                if pkg == "linux-headers-amd64":
+                    packages[i] = target_header
+                    break
+        # installer
         installed = []
-        # Installer en un bloc
-        pkg_str = " ".join(DEBIAN_PACKAGES)
+        pkg_str = " ".join(packages)
         result = self.run_cmd(
             f"apt-get install -y -qq {pkg_str}",
             sudo=True, check=False, timeout=600,
         )
         if result.success:
-            installed = DEBIAN_PACKAGES
+            installed = packages
         else:
-            # Installer un par un pour identifier les échecs
-            for pkg in DEBIAN_PACKAGES:
+            for pkg in packages:
                 r = self.run_cmd(
                     f"apt-get install -y -qq {pkg}",
                     sudo=True, check=False, timeout=120,
