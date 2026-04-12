@@ -32,7 +32,7 @@
 ### 5.0 Test global (Phase 5)
 - **Fichier** : `test_all.py`
 - **Action** : créer un script de test global qui découvre tous les tests dans `tests/`.
-- **Statut** : En cours
+- **Statut** : ✅ Terminé
 - **Date cible** : 2026-04-12
 
 ### 5.1 Tests unitaires par intent
@@ -53,3 +53,5 @@
 | 2026-04-10 | Corrections bridge écrans. |
 | 2026-04-11 | 1.1 terminé. 1.2 marqué à tort comme fait — `navigation.py` importe un stub qui lève ImportError. |
 | 2026-04-12 | Demande des fichiers manquants pour poursuivre la synchronisation des copies `tests/`. |
+| 2026-04-12 | Suppression du stub `cross_compile_screen.py` (tâche 6.2). |
+| 2026-04-12 | Script global de test `test_all.py` créé. |

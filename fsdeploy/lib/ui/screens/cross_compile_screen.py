@@ -1,14 +1,10 @@
 """
-FICHIER DOUBLON OBSOLÈTE — Utiliser `crosscompile.py` à la place.
+FICHIER OBSOLÈTE – SUPPRIMÉ (phase 6).
 
-Ce fichier était une version alternative de l'écran de compilation croisée.
-Il a été remplacé par `fsdeploy/lib/ui/screens/crosscompile.py` (écran canonique).
-
-Pour éviter toute confusion, ce fichier ne contient plus de code actif.
-Les imports doivent être redirigés vers `fsdeploy.lib.ui.screens.crosscompile`.
+Ce fichier est supprimé dans le cadre de la phase 6 de nettoyage.
+Veuillez utiliser `fsdeploy.lib.ui.screens.crosscompile` à la place.
 """
-
 raise ImportError(
-    "cross_compile_screen.py est obsolète. "
-    "Veuillez utiliser `from fsdeploy.lib.ui.screens.crosscompile import CrossCompileScreen`."
+    "cross_compile_screen.py a été supprimé. "
+    "Utilisez `from fsdeploy.lib.ui.screens.crosscompile import CrossCompileScreen`."
 )
