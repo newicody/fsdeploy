@@ -6,7 +6,7 @@
 
 ## Phase 6 : Nettoyage (en cours)
 
-- [ ] 6.0 Unifier ModuleRegistryScreen : remplacer stub `module_registry.py` par version complète, supprimer `moduleregistry_screen.py` ← PROCHAINE
-- [ ] 6.1 Corriger imports `navigation.py` : `moduleregistry_screen` → `module_registry`
-- [ ] 6.2 Corriger imports `test_screens_integration.py` : idem
-- [ ] 6.3 Supprimer `cross_compile_screen.py` (stub ImportError)
+- [x] 6.0a `moduleregistry_screen.py` converti en re-export
+- [ ] 6.0b Remplacer `module_registry.py` (lib/) par version complète (avec ModuleRegistry) ← PROCHAINE
+- [ ] 6.1 Corriger imports cosmétiques `navigation.py` + `test_screens_integration.py`
+- [ ] 6.2 Supprimer `cross_compile_screen.py` (stub ImportError)
