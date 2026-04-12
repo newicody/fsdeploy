@@ -14,6 +14,7 @@ Le développement actif est sur `dev` → l'utilisateur qui lance
 `curl ... | bash` n'obtient jamais le code à jour.
 **Fix** : Changer le défaut en `dev` ou ajouter un mécanisme de sélection
 interactif quand aucune branche n'est spécifiée.
+**État** : ✅ **Corrigé** (branche dev, options --run/--no-run ajoutées).
 
 ### 7.1 — live/setup.py : linux-headers-amd64 hardcodé
 **Bug** : `DEBIAN_PACKAGES` contient `"linux-headers-amd64"` (meta-package).

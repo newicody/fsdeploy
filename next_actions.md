@@ -24,6 +24,7 @@ Toutes les phases précédentes sont terminées :
 - **Bug** : `REPO_BRANCH` défaut `main` → clone du code obsolète
 - **Fix** : Changer en `dev`, ajouter lancement auto post-install
 - **Priorité** : P0 (bloque l'installation pour tout nouvel utilisateur)
+- **État** : ✅ **Corrigé** (branche dev, options --run/--no-run ajoutées)
 
 ### 7.1 live/setup.py : linux-headers dynamique
 - **Fichier** : `fsdeploy/lib/function/live/setup.py`
@@ -57,3 +58,4 @@ Toutes les phases précédentes sont terminées :
 | 2026-04-11 | Phase 1 terminée, début Phase 2 |
 | 2026-04-12 | Phases 2–6 terminées. Audit complet → Phase 7 identifiée |
 | 2026-04-12 | launch.sh : branche `main` par défaut = bug bloquant identifié |
+| 2026-04-12 | 7.0 corrigé (branch=dev, --run/--no-run ajoutées) |
