@@ -8,5 +8,5 @@
 
 - [x] 6.0a `moduleregistry_screen.py` converti en re-export
 - [x] 6.0b `module_registry.py` remplacé par version complète
-- [ ] 6.1 Imports cosmétiques : `moduleregistry_screen` → `module_registry` dans navigation + tests ← PROCHAINE
-- [ ] 6.2 Supprimer `cross_compile_screen.py` (stub raise ImportError)
+- [x] 6.1 Imports cosmétiques corrigés (navigation + tests)
+- [ ] 6.2 Supprimer `cross_compile_screen.py` (stub raise ImportError) ← DERNIÈRE TÂCHE
