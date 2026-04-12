@@ -8,8 +8,8 @@ from textual.test import Press, Pilot
 from fsdeploy.lib.ui.screens.graph_enhanced import GraphEnhancedScreen
 from fsdeploy.lib.ui.screens.security_enhanced import SecurityEnhancedScreen
 from fsdeploy.lib.ui.screens.partition_detection import PartitionDetectionScreen
-from fsdeploy.lib.ui.screens.cross_compile_screen import CrossCompileScreen
-from fsdeploy.lib.ui.screens.multiarch_screen import MultiArchScreen
+from fsdeploy.lib.ui.screens.crosscompile import CrossCompileScreen
+from fsdeploy.lib.ui.screens.multiarch import MultiArchScreen
 from fsdeploy.lib.ui.screens.moduleregistry_screen import ModuleRegistryScreen
 
 @pytest.mark.asyncio
