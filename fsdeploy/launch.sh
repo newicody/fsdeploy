@@ -24,7 +24,7 @@ IFS=$'\n\t'
 # CONSTANTES
 # ─────────────────────────────────────────────────────────────────────────────
 REPO_URL="${FSDEPLOY_REPO:-https://github.com/newicody/fsdeploy.git}"
-REPO_BRANCH="${FSDEPLOY_BRANCH:-main}"
+REPO_BRANCH="${FSDEPLOY_BRANCH:-dev}"
 INSTALL_DIR="/opt/fsdeploy"
 VENV_DIR="${INSTALL_DIR}/.venv"
 LOG_DIR="${INSTALL_DIR}/logs"
@@ -37,6 +37,7 @@ DKMS_WAIT_MAX=180   # secondes max pour la compilation DKMS
 DEV_MODE=0
 UPDATE_MODE=0
 FORCED_USER=""
+RUN_AFTER=1
 
 # ─────────────────────────────────────────────────────────────────────────────
 # COULEURS
@@ -65,8 +66,10 @@ while [[ $# -gt 0 ]]; do
         --dev)     DEV_MODE=1;       shift   ;;
         --update)  UPDATE_MODE=1;    shift   ;;
         --user)    FORCED_USER="$2"; shift 2 ;;
+        --run)     RUN_AFTER=1;      shift   ;;
+        --no-run)  RUN_AFTER=0;      shift   ;;
         -h|--help)
-            printf "Usage: bash launch.sh [--repo URL] [--branch NAME] [--dev] [--update] [--user NOM]\n"
+            printf "Usage: bash launch.sh [--repo URL] [--branch NAME] [--dev] [--update] [--user NOM] [--run|--no-run]\n"
             exit 0 ;;
         *) warn "Argument ignoré : $1"; shift ;;
     esac
@@ -728,10 +731,18 @@ if [[ ${#GROUPS_ADDED[@]} -gt 0 ]]; then
     printf "     (Pleinement actifs à la prochaine session.)\n\n"
 fi
 
-printf "   Lancement de fsdeploy...\n\n"
-if [[ "$(id -un)" == "$REAL_USER" ]]; then
-    exec "$VENV_DIR/bin/python3" -m fsdeploy "$@"
+if [[ $RUN_AFTER -eq 1 ]]; then
+    printf "   Lancement de fsdeploy...\n\n"
+    if [[ "$(id -un)" == "$REAL_USER" ]]; then
+        exec "$VENV_DIR/bin/python3" -m fsdeploy "$@"
+    else
+        exec sudo -u "$REAL_USER" \
+             "$VENV_DIR/bin/python3" -m fsdeploy "$@"
+    fi
 else
-    exec sudo -u "$REAL_USER" \
-         "$VENV_DIR/bin/python3" -m fsdeploy "$@"
+    step "Installation terminée"
+    ok "fsdeploy est prêt dans ${INSTALL_DIR}"
+    info "Lancer : ${VENV_DIR}/bin/python3 -m fsdeploy"
+    info "Ou utiliser le wrapper : fsdeploy"
+    exit 0
 fi
