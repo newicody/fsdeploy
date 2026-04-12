@@ -10,7 +10,7 @@ from fsdeploy.lib.ui.screens.security_enhanced import SecurityEnhancedScreen
 from fsdeploy.lib.ui.screens.partition_detection import PartitionDetectionScreen
 from fsdeploy.lib.ui.screens.crosscompile import CrossCompileScreen
 from fsdeploy.lib.ui.screens.multiarch import MultiArchScreen
-from fsdeploy.lib.ui.screens.moduleregistry_screen import ModuleRegistryScreen
+from fsdeploy.lib.ui.screens.module_registry import ModuleRegistryScreen
 
 @pytest.mark.asyncio
 async def test_graph_screen():
