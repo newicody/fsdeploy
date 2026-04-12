@@ -1,4 +1,4 @@
-# add.md — Action 3.3 : Scheduler.state_snapshot() pour GraphViewScreen
+# add.md — Action 3.4 : Passer log_dir à setup_logging()
 
 **Date** : 2026-04-12
 
@@ -6,53 +6,40 @@
 
 ## Problème
 
-`bridge.get_scheduler_state()` appelle `scheduler.state_snapshot()` mais cette méthode n'existe pas dans `Scheduler`. Le bridge retourne des données aléatoires de démo → GraphViewScreen n'affiche jamais de vraies données.
+`log.py` accepte `log_dir` et `util/logging.py` a un `RotatingFileHandler` complet. Mais `__main__.py._setup_logging()` appelle :
+
+```python
+setup_logging(level=..., verbose=..., debug=..., quiet=...)
+```
+
+Sans `log_dir` → les logs ne vont jamais sur disque.
+
+`_build_daemon_config()` construit bien `"log": {"dir": ...}` mais ce n'est pas exploité par `_setup_logging()`.
 
 ---
 
 ## Correction
 
-### `lib/scheduler/core/scheduler.py` — ajouter `state_snapshot()`
+Dans `fsdeploy/fsdeploy/__main__.py`, modifier `_setup_logging()` :
 
 ```python
-def state_snapshot(self) -> dict:
-    """Snapshot thread-safe pour GraphView et bridge."""
-    rt = self.runtime
-    return {
-        "event_count": rt.event_queue.qsize() if hasattr(rt, 'event_queue') else 0,
-        "intent_count": rt.intent_queue.qsize() if hasattr(rt, 'intent_queue') else 0,
-        "task_count": len(rt.state.running) if hasattr(rt, 'state') else 0,
-        "completed_count": len(rt.state.completed) if hasattr(rt, 'state') else 0,
-        "active_task": self._get_active_task_data(),
-        "recent_tasks": self._get_recent_tasks(10),
-    }
-
-def _get_active_task_data(self) -> dict | None:
-    running = getattr(self.runtime, 'state', None)
-    if not running or not running.running:
-        return None
-    task_id, info = next(iter(running.running.items()))
-    task = info.get("task")
-    return {
-        "id": task_id,
-        "name": task.__class__.__name__ if task else "?",
-        "status": "running",
-        "duration": time.monotonic() - info.get("started_at", 0),
-    }
-
-def _get_recent_tasks(self, limit: int = 10) -> list[dict]:
-    state = getattr(self.runtime, 'state', None)
-    if not state:
-        return []
-    recent = []
-    for tid, info in list(state.completed.items())[-limit:]:
-        recent.append({
-            "id": tid,
-            "name": info.get("task", "").__class__.__name__ if info.get("task") else "?",
-            "status": "completed",
-            "duration": info.get("duration", 0),
-        })
-    return recent
+def _setup_logging():
+    log_dir = ""
+    if state.config:
+        log_dir = state.config.get("log.dir", "")
+    try:
+        from log import setup_logging
+        setup_logging(
+            level=state.log_level,
+            verbose=state.verbose,
+            debug=state.debug,
+            quiet=state.quiet,
+            log_dir=log_dir,
+        )
+    except ImportError:
+        import logging
+        level = getattr(logging, state.log_level.upper(), logging.INFO)
+        logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 ```
 
 ---
@@ -60,11 +47,11 @@ def _get_recent_tasks(self, limit: int = 10) -> list[dict]:
 ## Fichier Aider
 
 ```
-fsdeploy/lib/scheduler/core/scheduler.py
+fsdeploy/fsdeploy/__main__.py
 ```
 
 ---
 
 ## Après
 
-3.3 terminé. Prochaine : **3.4** (FileHandler pour logs persistants).
+Phase 3 terminée. Prochaine : **Phase 4** (intégration init/).
