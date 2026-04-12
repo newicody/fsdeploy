@@ -92,6 +92,9 @@ def _load_config(config_path: str | None = None):
 
 def _setup_logging():
     """Configure le logging structlog."""
+    log_dir = ""
+    if state.config:
+        log_dir = state.config.get("log.dir", "")
     try:
         from log import setup_logging
         setup_logging(
@@ -99,6 +102,7 @@ def _setup_logging():
             verbose=state.verbose,
             debug=state.debug,
             quiet=state.quiet,
+            log_dir=log_dir,
         )
     except ImportError:
         import logging
