@@ -106,6 +106,45 @@ def _setup_logging():
         logging.basicConfig(level=level, format="%(levelname)s: %(message)s")
 
 
+def _health_check() -> bool:
+    """
+    Vérifie les prérequis système avant de lancer le daemon.
+    Retourne True si tout est ok, False sinon.
+    """
+    import shutil
+    import subprocess
+    errors = []
+    # Vérifier que zfs est disponible
+    if shutil.which("zfs") is None:
+        errors.append("zfs command not found")
+    # Vérifier que mount est disponible
+    if shutil.which("mount") is None:
+        errors.append("mount command not found")
+    # Vérifier que /proc/mounts est accessible
+    try:
+        with open("/proc/mounts", "r"):
+            pass
+    except PermissionError:
+        errors.append("cannot read /proc/mounts")
+    # Vérifier que le système a au moins 128 MB RAM (approximatif)
+    try:
+        with open("/proc/meminfo", "r") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    kb = int(line.split()[1])
+                    if kb < 128 * 1024:
+                        errors.append("system memory below 128 MB")
+                    break
+    except Exception:
+        pass  # ignorer
+    if errors:
+        from log import get_logger
+        logger = get_logger()
+        for err in errors:
+            logger.warning("Health check: %s", err)
+        return False
+    return True
+
 def _build_daemon_config() -> dict:
     """Construit le dict de config pour FsDeployDaemon."""
     cfg = {}
@@ -227,6 +266,12 @@ def main(
         mode = "daemon"
     elif bare:
         mode = "bare"
+
+    # Health check
+    if not _health_check():
+        from log import get_logger
+        logger = get_logger()
+        logger.warning("Health check a échoué, continuation malgré tout.")
 
     _run_daemon(mode=mode, web_port=web_port)
 
