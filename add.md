@@ -1,4 +1,4 @@
-# add.md — Action 7.0b : requirements.txt — retirer cryptography + séparer dev
+# add.md — Action 7.7 : lib/function/module/registry.py stub → re-export
 
 **Date** : 2026-04-12
 
@@ -6,60 +6,34 @@
 
 ## Problème
 
-`requirements.txt` contient :
-1. `cryptography>=42.0.0` — nécessite compilateur Rust, absent sur Debian Live → pip hang 5+ min puis échec. **Aucun code runtime n'importe cryptography.**
-2. `pytest`, `pytest-cov`, `pytest-asyncio`, `pytest-mock`, `black`, `isort`, `mypy` — deps dev inutiles sur Live, rallongent l'install de 2-3 min.
-3. `pip install --quiet` dans launch.sh masque tout → l'utilisateur voit un freeze sans explication.
+Deux fichiers `ModuleRegistry` :
+- `lib/function/module/registry.py` → **stub vide** (`class ModuleRegistry: pass`)
+- `lib/modules/registry.py` → **version complète** (list_remote, install, uninstall, is_installed)
+
+Le stub crée une confusion d'import : si quelqu'un importe depuis `function.module.registry`, il obtient un objet inutile sans méthodes.
 
 ---
 
-## Corrections
+## Correction
 
-### 1. `requirements.txt` — garder uniquement runtime
+Remplacer le stub par un re-export :
 
-Retirer :
-- `cryptography>=42.0.0`
-- `pytest>=7.0.0`, `pytest-cov>=4.0.0`, `pytest-asyncio>=0.23.0`, `pytest-mock>=3.12.0`
-- `black>=23.0.0`, `isort>=5.12.0`, `mypy>=1.0.0`
-
-### 2. `requirements-dev.txt` — nouveau fichier
-
-```
-# Dev/test dependencies — NOT installed on Live
--r requirements.txt
-pytest>=7.0.0
-pytest-cov>=4.0.0
-pytest-asyncio>=0.23.0
-pytest-mock>=3.12.0
-black>=23.0.0
-isort>=5.12.0
-mypy>=1.0.0
-cryptography>=42.0.0
-```
-
-### 3. `launch.sh` — pip avec timeout et progress
-
-Remplacer :
-```bash
-as_user "$VENV_DIR/bin/pip" install --quiet -r "${INSTALL_DIR}/requirements.txt"
-```
-Par :
-```bash
-as_user "$VENV_DIR/bin/pip" install --timeout 120 --progress-bar on -r "${INSTALL_DIR}/requirements.txt"
+```python
+"""Backward compat — canonical location is lib/modules/registry."""
+from fsdeploy.lib.modules.registry import ModuleRegistry
+__all__ = ["ModuleRegistry"]
 ```
 
 ---
 
-## Fichiers Aider
+## Fichier Aider
 
 ```
-fsdeploy/requirements.txt        (retirer cryptography + dev deps)
-fsdeploy/requirements-dev.txt    (nouveau)
-fsdeploy/launch.sh               (pip --timeout 120 --progress-bar on)
+fsdeploy/lib/function/module/registry.py
 ```
 
 ---
 
 ## Après
 
-7.0b terminé. Prochaine : **7.1** (live/setup.py linux-headers dynamique).
+7.7 terminé. Prochaine : **7.2** (sync tests/ stale).
