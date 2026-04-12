@@ -12,6 +12,6 @@
 
 ## Reste (priorité basse)
 
-- [ ] 1.4 Synchroniser copies `tests/` avec `lib/` (imports obsolètes dans tests/)
+- [ ] 1.4 Synchroniser copies `tests/` avec `lib/` (imports obsolètes dans tests/) — en attente des fichiers
 - [ ] Cleanup : supprimer `cross_compile_screen.py` (stub ImportError), fichiers CLEANUP.md
 - [ ] Tests TUI : corriger imports dans `test_screens_integration.py` (pointe vers `_screen` obsolètes)

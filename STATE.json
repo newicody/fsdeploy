@@ -1,5 +1,5 @@
 {
   "current_task": "continue execution from current project state using PLAN.md and next_actions.md and add.md",
-  "status": "RUNNING",
-  "iteration": 36
+  "status": "WAITING_FOR_FILES",
+  "iteration": 37
 }

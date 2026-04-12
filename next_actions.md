@@ -19,6 +19,12 @@
 - **Fichiers** : `lib/ui/screens/module_registry.py`, `lib/function/module/registry.py`
 - **Statut** : À faire
 
+### 1.4 Demander les fichiers manquants pour synchronisation
+- **Description** : Les fichiers listés dans `add.md` nécessaires pour corriger les imports dans `tests/` ne sont pas présents dans le chat. Besoin de leur contenu.
+- **Action** : Ajouter au chat les fichiers `navigation.py`, `test_screens_integration.py`, etc.
+- **Statut** : ⏸️ En attente
+- **Date cible** : 2026-04-13
+
 ### 2. Mode dry-run — À faire
 ### 3. Health-check au démarrage — À faire
 ### 4. MountManager — À faire
@@ -46,3 +52,4 @@
 | 2026-04-09 | Priorisation initiale. |
 | 2026-04-10 | Corrections bridge écrans. |
 | 2026-04-11 | 1.1 terminé. 1.2 marqué à tort comme fait — `navigation.py` importe un stub qui lève ImportError. |
+| 2026-04-12 | Demande des fichiers manquants pour poursuivre la synchronisation des copies `tests/`. |
