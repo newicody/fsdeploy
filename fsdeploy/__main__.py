@@ -13,6 +13,9 @@ from fsdeploy.lib.ui.app import FsDeployApp
 
 
 def main() -> None:
+    from fsdeploy.lib.util.logging import setup_logging
+    setup_logging()
+
     parser = argparse.ArgumentParser(
         description="fsdeploy - Déploiement et gestion de systèmes de fichiers ZFS"
     )
