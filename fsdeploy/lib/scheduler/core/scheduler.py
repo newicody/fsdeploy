@@ -82,7 +82,17 @@ class Scheduler:
     """
     Boucle principale du scheduler fsdeploy.
     """
+    _global_instance = None  # Ajouter
 
+    @classmethod
+    def global_instance(cls):
+        if cls._global_instance is None:
+            from fsdeploy.lib.scheduler.core.resolver import Resolver
+            from fsdeploy.lib.scheduler.core.executor import Executor
+            from fsdeploy.lib.scheduler.runtime import Runtime
+            cls._global_instance = cls(Resolver(), Executor(), Runtime())
+        return cls._global_instance
+      
     def __init__(self, resolver, executor, runtime):
         self.resolver = resolver
         self.executor = executor
