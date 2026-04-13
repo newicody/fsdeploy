@@ -11,10 +11,18 @@ from pathlib import Path
 
 from fsdeploy.lib.ui.app import FsDeployApp
 
+from fsdeploy.lib.scheduler.runtime import Runtime
+from fsdeploy.lib.scheduler.core.scheduler import Scheduler
+from fsdeploy.lib.scheduler.core.resolver import Resolver
+from fsdeploy.lib.scheduler.core.executor import Executor
+
+    
 
 def main() -> None:
     from fsdeploy.lib.util.logging import setup_logging
     setup_logging()
+    
+
 
     parser = argparse.ArgumentParser(
         description="fsdeploy - Déploiement et gestion de systèmes de fichiers ZFS"
@@ -191,7 +199,17 @@ def main() -> None:
         loader = ModuleLoader(config)
         if not loader.load_module("health"):
             print("[ERREUR] Impossible de charger le module health")
-            sys.exit(1)
+            sys.exit(1)from fsdeploy.lib.scheduler.runtime import Runtime
+from fsdeploy.lib.scheduler.core.scheduler import Scheduler
+from fsdeploy.lib.scheduler.core.resolver import Resolver
+from fsdeploy.lib.scheduler.core.executor import Executor
+
+def main():
+    runtime = Runtime()
+    scheduler = Scheduler(Resolver(), Executor(), runtime)
+    Scheduler._global_instance = scheduler  # Définir le singleton
+    app = FsDeployApp(runtime=runtime)  # ✅ Passer runtime
+    app.run()
         health_func = loader.scanners.get("health")
         if not health_func:
             print("[ERREUR] Scanner health non enregistré")
@@ -213,8 +231,12 @@ def main() -> None:
         # Remplacer le store par défaut par un store persistant
         intent_log.store = PersistentRecordStore(args.log_persist)
         print(f"[INFO] Persistance des logs activée vers {args.log_persist}")
+        
+    runtime = Runtime()
+    scheduler = Scheduler(Resolver(), Executor(), runtime)
+    Scheduler._global_instance = scheduler  # Définir le singleton
+    app = FsDeployApp(runtime=runtime)  # ✅ Passer runtime
 
-    app = FsDeployApp()
     app.run()
 
 
