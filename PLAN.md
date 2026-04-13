@@ -10,7 +10,7 @@
 - [x] 7.0b requirements.txt nettoyé + requirements-dev.txt créé
 - [x] 7.1 live/setup.py : linux-headers dynamique uname -r
 - [x] 7.7 lib/function/module/registry.py : re-export
-- [ ] 7.2 Synchroniser tests/ avec lib/ (3 copies stale) ← EN ATTENTE (fichiers à ajouter)
+- [ ] 7.2 Sync 2 écrans stale dans tests/ ← PROCHAINE
 - [ ] 7.4 README.md : curl install → dev
 - [ ] 7.5 DIAGRAMS.md : linux-headers-amd64 → $(uname -r)
 - [ ] 7.6 fsdeploy_main_status.md : obsolète

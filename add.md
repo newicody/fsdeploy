@@ -1,16 +1,17 @@
-# add.md — Action 7.2 : Synchroniser tests/ avec lib/ (copies stale)
+# add.md — Action 7.2 : Sync 2 écrans stale dans tests/
 
-**Date** : 2026-04-12
+**Date** : 2026-04-13
 
 ---
 
 ## Problème
 
-`tests/fsdeploy/` contient des copies miroir de `fsdeploy/` qui n'ont pas été mises à jour :
+`tests/fsdeploy/lib/function/module/registry.py` ✅ déjà corrigé (re-export).
 
-1. `tests/.../cross_compile_screen.py` — ancienne version avec `SchedulerBridge.default()` direct
-2. `tests/.../moduleregistry_screen.py` — ancienne version avec bridge direct
-3. `tests/.../function/module/registry.py` — ancien stub `pass`
+Restent 2 fichiers avec `SchedulerBridge.default()` direct :
+
+1. `tests/fsdeploy/lib/ui/screens/cross_compile_screen.py` — ancienne version complète
+2. `tests/fsdeploy/lib/ui/screens/moduleregistry_screen.py` — ancienne version complète
 
 ---
 
@@ -30,13 +31,6 @@ from .module_registry import ModuleRegistryScreen
 __all__ = ["ModuleRegistryScreen"]
 ```
 
-### 3. `function/module/registry.py` → re-export
-```python
-"""Backward compat — canonical location is lib/modules/registry."""
-from fsdeploy.lib.modules.registry import ModuleRegistry
-__all__ = ["ModuleRegistry"]
-```
-
 ---
 
 ## Fichiers Aider
@@ -44,7 +38,6 @@ __all__ = ["ModuleRegistry"]
 ```
 tests/fsdeploy/lib/ui/screens/cross_compile_screen.py
 tests/fsdeploy/lib/ui/screens/moduleregistry_screen.py
-tests/fsdeploy/lib/function/module/registry.py
 ```
 
 ---
