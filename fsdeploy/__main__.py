@@ -199,17 +199,7 @@ def main() -> None:
         loader = ModuleLoader(config)
         if not loader.load_module("health"):
             print("[ERREUR] Impossible de charger le module health")
-            sys.exit(1)from fsdeploy.lib.scheduler.runtime import Runtime
-from fsdeploy.lib.scheduler.core.scheduler import Scheduler
-from fsdeploy.lib.scheduler.core.resolver import Resolver
-from fsdeploy.lib.scheduler.core.executor import Executor
-
-def main():
-    runtime = Runtime()
-    scheduler = Scheduler(Resolver(), Executor(), runtime)
-    Scheduler._global_instance = scheduler  # Définir le singleton
-    app = FsDeployApp(runtime=runtime)  # ✅ Passer runtime
-    app.run()
+            sys.exit(1)
         health_func = loader.scanners.get("health")
         if not health_func:
             print("[ERREUR] Scanner health non enregistré")
@@ -232,10 +222,18 @@ def main():
         intent_log.store = PersistentRecordStore(args.log_persist)
         print(f"[INFO] Persistance des logs activée vers {args.log_persist}")
         
+    # Initialisation de la configuration
+    from fsdeploy.lib.config import FsDeployConfig
+    from fsdeploy.lib.scheduler.runtime import Runtime
+    from fsdeploy.lib.scheduler.core.scheduler import Scheduler
+    from fsdeploy.lib.scheduler.core.resolver import Resolver
+    from fsdeploy.lib.scheduler.core.executor import Executor
+
+    config = FsDeployConfig.default() if hasattr(FsDeployConfig, 'default') else FsDeployConfig()
     runtime = Runtime()
     scheduler = Scheduler(Resolver(), Executor(), runtime)
     Scheduler._global_instance = scheduler  # Définir le singleton
-    app = FsDeployApp(runtime=runtime)  # ✅ Passer runtime
+    app = FsDeployApp(runtime=runtime, config=config)  # Passer runtime et config
 
     app.run()
 
