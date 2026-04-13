@@ -15,12 +15,13 @@
 - [x] **7.6** `fsdeploy_main_status.md` : Suppression (obsolète).
 - [x] **7.7** `fsdeploy/lib/function/module/registry.py` : Re-export corrigé.
 - [x] **7.8** **Supprimer `tests/fsdeploy/`** → Fait ✅ (29 fichiers supprimés, plus de duplication).
+- [x] **7.9** `contrib/` nettoyé et centralisé dans `fsdeploy/contrib/`.
 
 ---
 
 ---
 
-## 🔴 **7.9–7.16 : Tâches Restantes (Priorité Absolue)**
+## 🔴 **7.10–7.16 : Tâches Restantes (Priorité Absolue)**
 
 ---
 
