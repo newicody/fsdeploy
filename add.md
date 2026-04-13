@@ -1,4 +1,6 @@
-# **add.md — Tâche 7.9 : Nettoyer et Centraliser `contrib/`**
+add.md (Prochaine Étape : 7.10)
+
+# **add.md — Tâche 7.10 : Supprimer `lib/ui/` à la racine**
 *Date : 2026-04-13*
 
 ---
@@ -6,20 +8,41 @@
 ---
 
 ## **📌 Problème Identifié**
-La structure des dossiers **`contrib/`** et **`fsdeploy/contrib/`** est **désorganisée** :
-- **`contrib/` à la racine** contient des scripts **sysvinit/upstart** obsolètes (peu utilisés aujourd’hui).
-- **`fsdeploy/contrib/`** contient des scripts **OpenRC/systemd** modernes.
-- **Redondance** : Les fichiers dans `contrib/sysvinit/fsdeploy` et `contrib/upstart/fsdeploy.conf` font doublon avec ceux dans `fsdeploy/contrib/openrc/` et `fsdeploy/contrib/systemd/`.
+Le dossier **`lib/ui/` à la racine** contient un fichier redondant (`mixins.py`), avec des fonctionnalités déjà présentes dans `fsdeploy/lib/ui/`. Aucun fichier dans `fsdeploy/` n’importe depuis `lib.ui.*`.
 
 **Conséquences** :
-- **Maintenance complexe** : Deux emplacements pour les scripts d’init.
-- **Confusion** : Où placer les nouveaux scripts d’init ?
-- **Incohérences** : Certains systèmes d’init (sysvinit/upstart) sont obsolètes.
+- **Maintenance inutile** : Deux emplacements pour des fonctionnalités similaires.
+- **Risque de bugs** : Confusion sur les imports.
 
 ---
+
 ---
+
 ## **📌 Tâches à Réaliser**
-1. **Centraliser les fichiers utiles** dans `fsdeploy/contrib/` :
-   - Déplacer les scripts de test (`test_*.sh`) de `contrib/integration/` vers `fsdeploy/contrib/integration/`.
-   - Déplacer les scripts OpenRC (`fsdeploy.init`, `fsdeploy.initd`) dans `fsdeploy/contrib/openrc/`.
-   - Déplacer le service systemd (`fsdeploy.service`) dans `fs
+1. **Supprimer le dossier `lib/ui/`** :
+   ```bash
+   rm -rf lib/ui/
+
+    Vérifier que l’UI fonctionne sans ce dossier :
+
+        Aucun import depuis lib.ui.* ne doit exister.
+
+        Tous les écrans doivent continuer à fonctionner.
+
+📂 Fichiers Concernés
+
+Chemin
+	
+
+Taille
+	
+
+Problème
+
+lib/ui/mixins.py
+	
+
+1 768 octets
+	
+
+Mixin redondant (BridgeScreenMixin déjà dans fsdeploy/lib/ui/).
