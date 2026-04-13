@@ -92,6 +92,11 @@ class Scheduler:
             from fsdeploy.lib.scheduler.runtime import Runtime
             cls._global_instance = cls(Resolver(), Executor(), Runtime())
         return cls._global_instance
+
+    @classmethod
+    def default(cls):
+        """Alias pour global_instance."""
+        return cls.global_instance()
       
     def __init__(self, resolver, executor, runtime):
         self.resolver = resolver

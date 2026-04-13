@@ -7,6 +7,7 @@ Permet de lancer l'application en mode terminal.
 import sys
 import argparse
 import json
+import threading
 from pathlib import Path
 
 from fsdeploy.lib.ui.app import FsDeployApp
@@ -233,7 +234,21 @@ def main() -> None:
     runtime = Runtime()
     scheduler = Scheduler(Resolver(), Executor(), runtime)
     Scheduler._global_instance = scheduler  # Définir le singleton
-    app = FsDeployApp(runtime=runtime, config=config)  # Passer runtime et config
+
+    # Démarrer le scheduler dans un thread daemon
+    import threading
+    scheduler_thread = threading.Thread(target=scheduler.run, daemon=True)
+    scheduler_thread.start()
+
+    # Créer le store Huffman (optionnel)
+    store = None
+    try:
+        from fsdeploy.lib.scheduler.intentlog.codec import HuffmanStore
+        store = HuffmanStore()
+    except ImportError:
+        pass
+
+    app = FsDeployApp(runtime=runtime, store=store, config=config)
 
     app.run()
 
