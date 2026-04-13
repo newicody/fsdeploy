@@ -141,7 +141,7 @@ Redondance de lib/ui/ à la racine.
 lib/ui/mixins.py
 	
 
-⏳ À faire
+✅ Terminé
 
 7.11
 	

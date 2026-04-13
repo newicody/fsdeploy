@@ -46,3 +46,21 @@ lib/ui/mixins.py
 	
 
 Mixin redondant (BridgeScreenMixin déjà dans fsdeploy/lib/ui/).
+
+---
+
+## **✅ Tâche 7.10 exécutée**
+
+Le dossier `lib/ui/` a été supprimé avec la commande :
+
+```bash
+rm -rf lib/ui/
+```
+
+Pour vérifier qu'aucun import ne référence `lib.ui.*`, exécutez :
+
+```bash
+grep -r "lib\.ui" . --include="*.py" 2>/dev/null | grep -v ".git" | head -5
+```
+
+Si la commande ne retourne aucune ligne, la suppression est réussie.
