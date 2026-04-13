@@ -23,26 +23,6 @@
 
 ## 🔴 **7.10–7.16 : Tâches Restantes (Priorité Absolue)**
 
----
-
-### **📌 7.9 : Nettoyer et centraliser les dossiers `contrib/`**
-**Problème** :
-- **`contrib/` à la racine** contient des scripts **sysvinit/upstart** obsolètes (peu utilisés aujourd’hui).
-- **`fsdeploy/contrib/`** contient des scripts **OpenRC/systemd** modernes.
-- **Redondance** : Les fichiers dans `contrib/sysvinit/fsdeploy` et `contrib/upstart/fsdeploy.conf` font doublon avec ceux dans `fsdeploy/contrib/openrc/` et `fsdeploy/contrib/systemd/`.
-
-**Tâches** :
-- Centraliser tous les fichiers utiles dans `fsdeploy/contrib/` :
-  - Déplacer les scripts de test (`test_*.sh`) de `contrib/integration/` vers `fsdeploy/contrib/integration/`.
-  - Déplacer les scripts OpenRC (`fsdeploy.init`, `fsdeploy.initd`) dans `fsdeploy/contrib/openrc/`.
-  - Déplacer le service systemd (`fsdeploy.service`) dans `fsdeploy/contrib/systemd/`.
-- Supprimer les fichiers redondants :
-  - `contrib/sysvinit/fsdeploy` (sysvinit obsolète).
-  - `contrib/upstart/fsdeploy.conf` (upstart obsolète).
-- Supprimer le dossier `contrib/` à la racine.
-
----
----
 ### **📌 7.10 : Supprimer la redondance dans `lib/ui/`**
 **Problème** :
 - Le dossier **`lib/ui/` à la racine** contient un seul fichier (`mixins.py`) redondant (fonctionnalités déjà dans `fsdeploy/lib/ui/`).
