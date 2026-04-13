@@ -5,7 +5,7 @@
 
 ---
 
-## ✅ **7.0–7.7 : Tâches Déjà Terminées**
+## ✅ **7.0–7.8 : Tâches Terminées**
 - [x] **7.0** `launch.sh` : Branche `dev` par défaut + options `--run/--no-run`.
 - [x] **7.1** `live/setup.py` : Correction de l’initialisation des `linux-headers` via `uname -r`.
 - [x] **7.2** Sync des écrans dans `tests/` (stale copies) → Fichiers corrigés.
