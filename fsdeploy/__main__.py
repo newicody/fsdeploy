@@ -230,7 +230,7 @@ def main() -> None:
     from fsdeploy.lib.scheduler.core.resolver import Resolver
     from fsdeploy.lib.scheduler.core.executor import Executor
 
-    config = FsDeployConfig()
+    config = FsDeployConfig.default()
     runtime = Runtime()
     scheduler = Scheduler(Resolver(), Executor(), runtime)
     Scheduler._global_instance = scheduler  # Définir le singleton
