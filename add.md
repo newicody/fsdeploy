@@ -1,4 +1,4 @@
-# **add.md — Étape 7.10 : Supprimer `lib/ui/` à la racine**
+# **add.md — Étape 7.11 : Ajouter `global_instance()` à `Scheduler**`
 
 *Date : 2026-04-13*
 
@@ -8,12 +8,10 @@
 
 ## **📌 Problème Identifié**
 
-Le dossier `**lib/ui/` à la racine** contient un fichier redondant (`mixins.py`), avec des fonctionnalités déjà présentes dans `fsdeploy/lib/ui/`. Aucun fichier dans `fsdeploy/` n’importe depuis `lib.ui.*`.
+Le `Scheduler` n’a **pas de méthode `global_instance()**`, donc le `SchedulerBridge` ne peut pas accéder au `Scheduler` global. Résultat :
 
-**Conséquences** :
-
-- **Maintenance inutile** : Deux emplacements pour des fonctionnalités similaires.
-- **Risque de bugs** : Confusion sur les imports.
+- **Tous les écrans ont `self.app.bridge = None**`.
+- Erreur **"bridge non disponible"** dans la console et l’UI.
 
 ---
 
@@ -21,13 +19,26 @@ Le dossier `**lib/ui/` à la racine** contient un fichier redondant (`mixins.py`
 
 ## **📌 Tâches à Réaliser**
 
-1. **Supprimer le dossier `lib/ui/**` :
-  ```bash
-   rm -rf lib/ui/
+1. **Ajouter `global_instance()` à la classe `Scheduler**` dans `fsdeploy/lib/scheduler/core/scheduler.py` :
+  ```python
+   # Dans fsdeploy/lib/scheduler/core/scheduler.py, après la classe Scheduler :
+   class Scheduler:
+       _global_instance = None  # Ajouter cette ligne
+
+       @classmethod
+       def global_instance(cls):
+           if cls._global_instance is None:
+               from fsdeploy.lib.scheduler.core.resolver import Resolver
+               from fsdeploy.lib.scheduler.core.executor import Executor
+               from fsdeploy.lib.scheduler.runtime import Runtime
+               cls._global_instance = cls(Resolver(), Executor(), Runtime())
+           return cls._global_instance
   ```
-2. **Vérifier que l’UI fonctionne sans ce dossier** :
-  - Aucun import depuis `lib.ui.*` ne doit exister.
-  - Tous les écrans doivent continuer à fonctionner normalement.
+2. **Vérifier que `Scheduler.global_instance()` retourne une instance** :
+  ```bash
+   python -c "from fsdeploy.lib.scheduler.core.scheduler import Scheduler; print(Scheduler.global_instance())"
+  ```
+   → Doit retourner une instance de `Scheduler` (pas `None`).
 
 ---
 
@@ -36,9 +47,9 @@ Le dossier `**lib/ui/` à la racine** contient un fichier redondant (`mixins.py`
 ## **📂 Fichiers Concernés**
 
 
-| **Chemin**         | **Taille**   | **Problème**                                                        |
-| ------------------ | ------------ | ------------------------------------------------------------------- |
-| `lib/ui/mixins.py` | 1 768 octets | Mixin redondant (`BridgeScreenMixin` déjà dans `fsdeploy/lib/ui/`). |
+| **Chemin**                                 | **Type**           | **Modification Requise**                           |
+| ------------------------------------------ | ------------------ | -------------------------------------------------- |
+| `fsdeploy/lib/scheduler/core/scheduler.py` | Classe `Scheduler` | Ajouter `_global_instance` et `global_instance()`. |
 
 
 ---
@@ -47,17 +58,15 @@ Le dossier `**lib/ui/` à la racine** contient un fichier redondant (`mixins.py`
 
 ## **🔍 Validation Après Correction**
 
-1. **Vérifier les imports** :
+1. **Vérifier l’instance globale** :
   ```bash
-   grep -r "lib.ui" .
+   python -c "from fsdeploy.lib.scheduler.core.scheduler import Scheduler; print(Scheduler.global_instance())"
   ```
-   → **Doit retourner 0 résultat** (aucun import depuis `lib.ui.*`).
-2. **Exécuter l’application** :
-  ```bash
-   python -m fsdeploy
-  ```
-   → Doit lancer l’UI **sans erreur**.
-3. **Vérifier que tous les écrans fonctionnent** :
-  - Tester un écran (ex: `CrossCompileScreen`).
-  - Tester le `ModuleRegistryScreen`.
-  - Aucun message d’erreur lié à `BridgeScreenMixin` ne doit apparaître.
+   → Résultat attendu : `<fsdeploy.lib.scheduler.core.scheduler.Scheduler object at ...>`
+2. **Vérifier que le `bridge` fonctionne** :
+  - Lancer l’application :
+  - Ouvrir un écran (ex: `CrossCompileScreen`).
+  - Aucun message **"bridge non disponible"** ne doit apparaître.
+3. **Vérifier que `SchedulerBridge` fonctionne** :
+  - Dans un écran, tester :  
+   → Doit fonctionner sans erreur.
