@@ -254,6 +254,25 @@ def main() -> None:
     except ImportError:
         pass
 
+    # Initialiser le bridge global du scheduler
+    try:
+        from fsdeploy.lib.scheduler.bridge import SchedulerBridge as GlobalBridge
+        # S'assurer qu'une instance globale existe
+        if hasattr(GlobalBridge, '_global_instance'):
+            if GlobalBridge._global_instance is None:
+                # Créer une instance par défaut
+                GlobalBridge._global_instance = GlobalBridge()
+        else:
+            # Attribut de classe non présent, on tente d'appeler global_instance()
+            try:
+                bridge = GlobalBridge.global_instance()
+                if bridge is None:
+                    GlobalBridge._global_instance = GlobalBridge()
+            except (AttributeError, TypeError):
+                GlobalBridge._global_instance = GlobalBridge()
+    except Exception:
+        pass  # Ne pas bloquer si le module bridge n'est pas disponible
+
     app = FsDeployApp(runtime=runtime, store=store, config=config)
 
     app.run()
