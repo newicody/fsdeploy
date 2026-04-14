@@ -225,13 +225,13 @@ def main() -> None:
         
     # Initialisation de la configuration
     from fsdeploy.lib.config import FsDeployConfig
-    from fsdeploy.lib.scheduler.runtime import Runtime
+    from fsdeploy.lib.scheduler.model.runtime import get_global_runtime
     from fsdeploy.lib.scheduler.core.scheduler import Scheduler
     from fsdeploy.lib.scheduler.core.resolver import Resolver
     from fsdeploy.lib.scheduler.core.executor import Executor
 
     config = FsDeployConfig.default()
-    runtime = Runtime()
+    runtime = get_global_runtime()
     scheduler = Scheduler(Resolver(), Executor(), runtime)
     Scheduler._global_instance = scheduler  # Définir le singleton
 
