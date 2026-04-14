@@ -1,7 +1,7 @@
 # **PLAN.md — fsdeploy (Branche `dev`)**
 
 *Dernière mise à jour : 2026-04-13*  
-*Objectif : Finaliser la restructuration et la correction de tous les problèmes identifiés.*
+*État après mise à jour du dépôt et prochaines étapes à réaliser.*
 
 ---
 
@@ -10,7 +10,7 @@
 ## ✅ **Tâches Terminées (7.0–7.10)**
 
 
-| **Étape** | **Description**                                                                      | **Statut** | **Preuve**                                                    |
+| **Étape** | **Description**                                                                      | **Statut** | **Validation**                                                |
 | --------- | ------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------- |
 | **7.0**   | `launch.sh` : Branche `dev` par défaut + options `--run/--no-run` ajoutées.          | ✅          | Fichier modifié et testé.                                     |
 | **7.1**   | `live/setup.py` : Correction de l’initialisation des `linux-headers` via `uname -r`. | ✅          | Fichier modifié et testé.                                     |
@@ -28,7 +28,7 @@
 
 ---
 
-## 🔴 **Tâches Restantes (Priorité Absolue)**
+## 🔴 **Tâches Restantes (Priorité)**
 
 
 | **Étape** | **Problème**                                                           | **Tâche**                                                                     | **Fichiers Concernés**                                                               | **Statut**               |
