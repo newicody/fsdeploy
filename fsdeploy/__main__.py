@@ -235,6 +235,12 @@ def main() -> None:
     scheduler = Scheduler(Resolver(), Executor(), runtime)
     Scheduler._global_instance = scheduler  # Définir le singleton
 
+    # S'assurer que global_instance() retourne le scheduler démarré
+    global_scheduler = Scheduler.global_instance()
+    if global_scheduler is not scheduler:
+        # Cela ne devrait pas arriver si _global_instance a été défini
+        Scheduler._global_instance = scheduler
+
     # Démarrer le scheduler dans un thread daemon
     import threading
     scheduler_thread = threading.Thread(target=scheduler.run, daemon=True)
