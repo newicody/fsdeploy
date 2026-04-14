@@ -15,4 +15,20 @@ class ModuleRegistryScreen(Screen):
         from textual.widgets import Label
         yield Label("Module registry screen (TODO)")
 
+    @property
+    def bridge(self):
+        """Return the application's bridge instance."""
+        return self.app.bridge
+
+    def load_modules(self) -> None:
+        """Load modules via the bridge."""
+        if hasattr(self.app, 'bridge'):
+            # Example: emit an event to load modules
+            self.app.bridge.emit("module_registry.load")
+            # update UI placeholder
+            pass
+        else:
+            # Bridge not available
+            pass
+
 __all__ = ["ModuleRegistryScreen"]

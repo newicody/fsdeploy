@@ -195,7 +195,18 @@ class FsDeployApp(App):
             from .bridge import SchedulerBridge
             self.bridge = SchedulerBridge(runtime, store)
         else:
-            self.bridge = None
+            # Dummy bridge for when no runtime is available (e.g., test mode)
+            class DummyBridge:
+                def emit(self, event_name, *args, **kwargs):
+                    pass
+                def poll(self):
+                    return []
+                def on_result(self, ticket_id, callback):
+                    pass
+                def __getattr__(self, name):
+                    # Prevent AttributeError for any other method
+                    return lambda *args, **kwargs: None
+            self.bridge = DummyBridge()
 
     # ── Compose ───────────────────────────────────────────────────────────────
 
