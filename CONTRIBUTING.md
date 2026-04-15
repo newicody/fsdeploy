@@ -56,6 +56,27 @@ adjusting any paths that may differ on the target system.
 **Permissions**: Ensure that scripts have the correct execute permissions.
 For OpenRC: `chmod +x fsdeploy.init`. For systemd: `chmod 644 fsdeploy.service`.
 
+### Installation of contributed scripts
+
+To install the OpenRC init script:
+
+```bash
+cp fsdeploy/contrib/openrc/fsdeploy.init /etc/init.d/fsdeploy
+chmod +x /etc/init.d/fsdeploy
+rc-update add fsdeploy default
+```
+
+To install the systemd service unit:
+
+```bash
+cp fsdeploy/contrib/systemd/fsdeploy.service /etc/systemd/system/
+chmod 644 /etc/systemd/system/fsdeploy.service
+systemctl daemon-reload
+systemctl enable fsdeploy
+```
+
+Adjust the source path if you are copying from a different location.
+
 ## Code style
 
 - Use **Black** formatting for Python code (line length 88).

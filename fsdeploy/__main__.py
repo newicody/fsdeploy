@@ -277,6 +277,16 @@ def main() -> None:
     except Exception:
         pass  # Ne pas bloquer si le module bridge n'est pas disponible
 
+    # Fallback to dummy bridge if none was created
+    if bridge_instance is None:
+        # Create a dummy bridge to avoid AttributeError in screens
+        class DummyBridge:
+            def emit(self, event_type, data=None):
+                pass
+            def get_scheduler_state(self):
+                return {}
+        bridge_instance = DummyBridge()
+
     app = FsDeployApp(runtime=runtime, store=store, config=config)
     # Attacher le bridge à l'application
     app.bridge = bridge_instance
