@@ -1,14 +1,12 @@
 ## 📄 **PLAN.md — fsdeploy (Branche `dev`)**
 
-*Dernière mise à jour : 14 avril 2026*
-
----
+*Dernière mise à jour : 15 avril 2026*
 
 ---
 
 ### ✅ **Tâches Terminées (7.0–7.12)**
 
-*(Conservées et visibles pour référence : étapes 7.0 à 7.12 validées et terminées.)*
+*(Conservées pour référence et historique.)*
 
 
 | **Étape** | **Description**                                                                             | **Statut** | **Fichiers Validés**                       |
@@ -34,13 +32,13 @@
 ### 🔴 **Tâches Restantes (Priorité)**
 
 
-| **Étape** | **Problème**                                                                                         | **Tâche**                                                                                    | **Fichiers Concernés**                                                               | **Statut**               |
-| --------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------ |
-| **7.13**  | La configuration (`FsDeployConfig`) n’est **pas encore validée** dans les écrans.                    | Finaliser la configuration et l’utilisation dans `ModuleRegistryScreen`.                     | `fsdeploy/__main__.py`, `fsdeploy/lib/ui/screens/module_registry.py`                 | 🟡 **En cours**          |
-| **7.14**  | Le `bridge` n’est **pas validé ni utilisé correctement** dans les écrans.                            | Vérifier et valider l’accès à `self.app.bridge` dans tous les écrans.                        | Tous les écrans (`CrossCompileScreen`, `ModuleRegistryScreen`, etc.)                 | ⚠️ **À valider**         |
-| **7.15**  | Documentation manquante pour `contrib/`.                                                             | Ajouter une section dans `CONTRIBUTING.md` expliquant l’organisation de `fsdeploy/contrib/`. | `CONTRIBUTING.md`                                                                    | ⚠️ **À valider**         |
-| **7.16**  | **Permissions incorrectes** sur les scripts init (`OpenRC`, `systemd`).                              | Vérifier et corriger les permissions : `chmod +x` pour OpenRC, `chmod 644` pour systemd.     | `fsdeploy/contrib/openrc/fsdeploy.init`, `fsdeploy/contrib/systemd/fsdeploy.service` | ⏳ **À faire maintenant** |
-| **7.17**  | **Intégration finale** : Vérifier que toutes les corrections sont bien appliquées et fonctionnelles. | Tester et valider l’intégration globale des étapes 7.13 à 7.16.                              | Tous les fichiers et écrans modifiés.                                                | ⏳ **À faire**            |
+| **Étape** | **Problème**                                                                           | **Tâche**                                                                                  | **Fichiers Concernés**                                                               | **Statut**               |
+| --------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------ |
+| **7.13**  | La configuration (`FsDeployConfig`) n’est **pas validée** dans `ModuleRegistryScreen`. | **Valider l’utilisation de `self.app.config**` dans `ModuleRegistryScreen`.                | `fsdeploy/__main__.py`, `fsdeploy/lib/ui/screens/module_registry.py`                 | 🟡 **À valider**         |
+| **7.14**  | Le `bridge` n’est **pas validé** dans les écrans.                                      | **Valider l’accès à `self.app.bridge**` dans tous les écrans (`CrossCompileScreen`, etc.). | Tous les écrans (`fsdeploy/lib/ui/screens/`)                                         | 🟡 **À valider**         |
+| **7.15**  | Documentation manquante pour `contrib/`.                                               | **Ajouter une section dans `CONTRIBUTING.md**` pour `fsdeploy/contrib/`.                   | `CONTRIBUTING.md`                                                                    | ⏳ **À faire maintenant** |
+| **7.16**  | **Permissions incorrectes** sur les scripts init (`OpenRC`, `systemd`).                | **Corriger les permissions** : `chmod +x` pour OpenRC, `chmod 644` pour systemd.           | `fsdeploy/contrib/openrc/fsdeploy.init`, `fsdeploy/contrib/systemd/fsdeploy.service` | ⏳ **À faire maintenant** |
+| **7.17**  | **Intégration globale** : Vérifier que toutes les corrections sont cohérentes.         | **Tester l’intégration** des étapes 7.13 à 7.16.                                           | Tous les fichiers modifiés                                                           | ⏳ **Préparation**        |
 
 
 ---
