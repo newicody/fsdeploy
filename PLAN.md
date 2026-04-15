@@ -32,15 +32,17 @@
 ### 🔴 **Tâches Restantes (Priorité)**
 
 
-| **Étape** | **Problème**                                                                           | **Tâche**                                                                              | **Fichiers Concernés**                                                               | **Statut**               |
-| --------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------ |
-| **7.13**  | La configuration (`FsDeployConfig`) n’est **pas validée** dans `ModuleRegistryScreen`. | Valider l’utilisation de `self.app.config` dans `ModuleRegistryScreen`.                | `fsdeploy/__main__.py`, `fsdeploy/lib/ui/screens/module_registry.py`                 | 🟡 **À valider**         |
-| **7.14**  | Le `bridge` n’est **pas validé** dans les écrans.                                      | Valider l’accès à `self.app.bridge` dans tous les écrans (`CrossCompileScreen`, etc.). | Tous les écrans (`fsdeploy/lib/ui/screens/`)                                         | 🟡 **À valider**         |
-| **7.15**  | Documentation manquante pour `contrib/`.                                               | Ajouter une section dans `CONTRIBUTING.md` pour `fsdeploy/contrib/`.                   | `CONTRIBUTING.md`                                                                    | ⚠️ **À faire**           |
-| **7.16**  | **Permissions incorrectes** sur les scripts init (`OpenRC`, `systemd`).                | Corriger les permissions : `chmod +x` pour OpenRC, `chmod 644` pour systemd.           | `fsdeploy/contrib/openrc/fsdeploy.init`, `fsdeploy/contrib/systemd/fsdeploy.service` | ✅ **Terminée**           |
-| **7.17**  | **Intégration globale** : Vérifier que toutes les corrections sont cohérentes.         | Tester l’intégration des étapes 7.13 à 7.16.                                           | Tous les fichiers modifiés                                                           | ⏳ **À faire maintenant** |
+| **Étape** | **Problème**                                                                           | **Tâche**                                                                              | **Fichiers Concernés**                                                               | **Statut**       |
+| --------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------- |
+| **7.13**  | La configuration (`FsDeployConfig`) n’est **pas validée** dans `ModuleRegistryScreen`. | Valider l’utilisation de `self.app.config` dans `ModuleRegistryScreen`.                | `fsdeploy/__main__.py`, `fsdeploy/lib/ui/screens/module_registry.py`                 | 🟡 **À valider** |
+| **7.14**  | Le `bridge` n’est **pas validé** dans les écrans.                                      | Valider l’accès à `self.app.bridge` dans tous les écrans (`CrossCompileScreen`, etc.). | Tous les écrans (`fsdeploy/lib/ui/screens/`)                                         | 🟡 **À valider** |
+| **7.15**  | Documentation manquante pour `contrib/`.                                               | Ajouter une section dans `CONTRIBUTING.md` pour `fsdeploy/contrib/`.                   | `CONTRIBUTING.md`                                                                    | ⚠️ **À faire**   |
+| **7.16**  | **Permissions incorrectes** sur les scripts init (`OpenRC`, `systemd`).                | Corriger les permissions : `chmod +x` pour OpenRC, `chmod 644` pour systemd.           | `fsdeploy/contrib/openrc/fsdeploy.init`, `fsdeploy/contrib/systemd/fsdeploy.service` | ✅ **Terminée**   |
+| **7.17**  | **Intégration globale** : Vérifier que toutes les corrections sont cohérentes.         | Tester l’intégration des étapes 7.13 à 7.16.                                           | Tous les fichiers modifiés                                                           | ✅ **À valider**  |
 
 
 ---
 
 ---
+
+## 📌 **Prochaine étape : Préparer la nouvelle itération**

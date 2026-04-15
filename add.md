@@ -1,52 +1,56 @@
-## 📄 **add.md — Prochaine Tâche : 7.17**
-
-*(Tester l’intégration globale des corrections 7.13 à 7.16)*
+### **📄 add.md — Préparation de la suite**
 
 ---
 
-### **📌 Problème Identifié**
+### **📌 Prochaine tâche (7.18 ou nouvelle itération) :**
 
-Toutes les corrections (7.13 à 7.16) doivent être **validées ensemble** pour s’assurer qu’elles fonctionnent en cohérence et sans régression.
-
----
-
-### **📌 Fichiers à tester**
-
-
-| **Fichier/Feature**                                    | **Action requise**                                                                    | **Test à effectuer**                                                                           |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Tous les écrans** (`fsdeploy/lib/ui/screens/`)       | Vérifier que `self.app.config` et `self.app.bridge` sont accessibles et fonctionnels. | Lancer `fsdeploy` et tester l’accès aux écrans (`ModuleRegistryScreen`, `CrossCompileScreen`). |
-| `**fsdeploy/__main__.py**`                             | Confirmer que la configuration est bien passée à `FsDeployApp`.                       | Vérifier les logs pour s’assurer que `FsDeployConfig` est initialisé.                          |
-| **Scripts init** (`fsdeploy.init`, `fsdeploy.service`) | Vérifier que les scripts s’exécutent sans erreur.                                     | Lancer `./fsdeploy/contrib/openrc/fsdeploy.init start` et `systemctl start fsdeploy.service`.  |
-| `**CONTRIBUTING.md**`                                  | Vérifier que la documentation pour `contrib/` est claire et complète.                 | Relire la section ajoutée et valider son contenu.                                              |
-
+*(À définir selon tes besoins)*
 
 ---
 
-### **📌 Instructions rapides**
+#### **Options possibles :**
 
-1. **Lancer fsdeploy** :
-  ```bash
-   python -m fsdeploy --run
-  ```
-  - **Vérifier les logs** :
-    - Confirmer que `FsDeployConfig` est bien initialisé.
-    - Vérifier que les écrans (`ModuleRegistryScreen`, `CrossCompileScreen`) accèdent à `self.app.config` et `self.app.bridge`.
-2. **Tester les scripts init** :
-  ```bash
-   ./fsdeploy/contrib/openrc/fsdeploy.init start
-   systemctl start fsdeploy.service
-  ```
-  - **Vérifier qu’aucun message d’erreur** n’apparaît.
-3. **Valider la documentation** :
-  - Relire la section `contrib/` dans `CONTRIBUTING.md`.
+
+| **Option**                       | **Description**                                                                        | **Fichiers à préparer**                                              |
+| -------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **7.18 : Ajouter un CHANGELOG**  | Documenter les changements apportés par les étapes 7.13 à 7.17 dans `CHANGELOG.md`.    | `CHANGELOG.md`                                                       |
+| **7.18 : Améliorer la sécurité** | Ajouter des validations supplémentaires dans le scheduler (ex: limites de ressources). | `fsdeploy/lib/scheduler/core/scheduler.py`, `fsdeploy/lib/config.py` |
+| **7.18 : Optimiser les logs**    | Centraliser les logs et ajouter des niveaux de log (debug, info, warning, error).      | `fsdeploy/__main__.py`, `fsdeploy/lib/logging/...`                   |
+| **7.18 : Préparer une release**  | Préparer les fichiers pour une release (ex: `setup.py`, `README.md`, `CHANGELOG.md`).  | `setup.py`, `README.md`, `CHANGELOG.md`, `MANIFEST.in`               |
+
+
+---
+
+#### **Fichiers à éditer selon l’option choisie :**
+
+*(Exemple pour un CHANGELOG)*
+
+
+| **Fichier**    | **Action requise**                                                                   |
+| -------------- | ------------------------------------------------------------------------------------ |
+| `CHANGELOG.md` | **Ajouter une section** pour les étapes 7.13 à 7.17 :                                |
+| &nbsp;         | ```markdown                                                                          |
+| &nbsp;         | ## [1.0.0] - 2026-04-15                                                              |
+| &nbsp;         | ### Ajouté                                                                           |
+| &nbsp;         | - Validation de `FsDeployConfig` dans `ModuleRegistryScreen`.                        |
+| &nbsp;         | - Accès à `self.app.bridge` dans tous les écrans.                                    |
+| &nbsp;         | - Documentation de `fsdeploy/contrib/`.                                              |
+| &nbsp;         | - Correction des permissions des scripts init (`fsdeploy.init`, `fsdeploy.service`). |
+| &nbsp;         | ```                                                                                  |
+
+
+---
+
+### **📌 Instructions rapides :**
+
+1. **Choisis une option** pour la prochaine itération (7.18).
+2. **Prépare les fichiers** nécessaires (ex: `CHANGELOG.md`).
+3. **Documente les changements** pour faciliter la maintenance.
 
 ---
 
 ---
 
-**Prochaine étape** :  
-**Teste l’intégration globale des corrections.**
-
-**Besoin d’aide pour rédiger un script de test ou analyser les logs ?**  
-Dis-moi ce que tu veux faire ensuite ! 🚀
+**Prochaine étape :**  
+**Quelle option veux-tu choisir pour la prochaine itération ?**  
+Dis-moi ce que tu veux faire, et je t’aide à préparer les fichiers ! 🚀
