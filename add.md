@@ -1,51 +1,51 @@
-## 📄 **add.md — Prochaine Tâche : 7.16**
+## 📄 **add.md — Prochaine Tâche : 7.17**
 
-*(Corriger les permissions des scripts init)*
+*(Tester l’intégration globale des corrections 7.13 à 7.16)*
 
 ---
 
 ### **📌 Problème Identifié**
 
-Les scripts init (`fsdeploy.init`, `fsdeploy.service`) ont des **permissions incorrectes** :
-
-- `fsdeploy.init` doit être **exécutable** (`chmod +x`).
-- `fsdeploy.service` doit être en **lecture seule pour tous** (`chmod 644`).
+Toutes les corrections (7.13 à 7.16) doivent être **validées ensemble** pour s’assurer qu’elles fonctionnent en cohérence et sans régression.
 
 ---
 
-### **📌 Fichiers à éditer**
+### **📌 Fichiers à tester**
 
 
-| **Fichier**                                 | **Action requise**                                   | **Commande pour corriger**                            |
-| ------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------- |
-| `fsdeploy/contrib/openrc/fsdeploy.init`     | **Rendre exécutable** (`chmod +x`).                  | `chmod +x fsdeploy/contrib/openrc/fsdeploy.init`      |
-| `fsdeploy/contrib/systemd/fsdeploy.service` | **Mettre en lecture seule pour tous** (`chmod 644`). | `chmod 644 fsdeploy/contrib/systemd/fsdeploy.service` |
+| **Fichier/Feature**                                | **Action requise**                                                                    | **Test à effectuer**                                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Tous les écrans (`fsdeploy/lib/ui/screens/`)       | Vérifier que `self.app.config` et `self.app.bridge` sont accessibles et fonctionnels. | Lancer `fsdeploy` et tester l’accès aux écrans (`ModuleRegistryScreen`, `CrossCompileScreen`). |
+| `fsdeploy/__main__.py`                             | Confirmer que la configuration est bien passée à `FsDeployApp`.                       | Vérifier les logs pour s’assurer que `FsDeployConfig` est initialisé.                          |
+| Scripts init (`fsdeploy.init`, `fsdeploy.service`) | Vérifier que les scripts s’exécutent sans erreur.                                     | Lancer `./fsdeploy/contrib/openrc/fsdeploy.init start` et `systemctl start fsdeploy.service`.  |
+| `CONTRIBUTING.md`                                  | Vérifier que la documentation pour `contrib/` est claire et complète.                 | Relire la section ajoutée et valider son contenu.                                              |
 
 
 ---
 
 ### **📌 Instructions rapides**
 
-1. **Vérifier les permissions actuelles** :
+1. **Lancer fsdeploy** :
   ```bash
-   ls -l fsdeploy/contrib/openrc/fsdeploy.init
-   ls -l fsdeploy/contrib/systemd/fsdeploy.service
+   python -m fsdeploy --run
   ```
-  - **Attendu pour `fsdeploy.init**` : `-rwxr-xr-x` (755).
-  - **Attendu pour `fsdeploy.service**` : `-rw-r--r--` (644).
-2. **Appliquer les corrections** :
+  - **Vérifier les logs** pour confirmer que :
+    - `FsDeployConfig` est bien initialisé.
+    - Les écrans (`ModuleRegistryScreen`, `CrossCompileScreen`) accèdent à `self.app.config` et `self.app.bridge`.
+2. **Tester les scripts init** :
   ```bash
-   chmod +x fsdeploy/contrib/openrc/fsdeploy.init
-   chmod 644 fsdeploy/contrib/systemd/fsdeploy.service
+   ./fsdeploy/contrib/openrc/fsdeploy.init start
+   systemctl start fsdeploy.service
   ```
-3. **Valider** :
-  - Relancer les tests pour s’assurer que les scripts init fonctionnent correctement.
+  - **Vérifier qu’aucun message d’erreur** n’apparaît.
+3. **Valider la documentation** :
+  - Lire la nouvelle section dans `CONTRIBUTING.md` pour s’assurer qu’elle est claire.
 
 ---
 
 ---
 
 **Prochaine étape** :  
-**Applique les corrections de permissions sur les deux fichiers init.**
+**Teste l’intégration globale des corrections.**
 
-**Besoin d’aide pour valider les changements ?** 🚀
+**Besoin d’aide pour rédiger un script de test ou analyser les logs ?** 🚀
