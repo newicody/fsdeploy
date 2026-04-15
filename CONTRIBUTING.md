@@ -1,71 +1,67 @@
-# Contribution à fsdeploy
+# Contributing to fsdeploy
 
-Ce document décrit comment contribuer au projet fsdeploy.
+We welcome contributions! Here are a few guidelines.
 
-## Organisation des contributions
+## Development environment
 
-### Répertoire `fsdeploy/contrib/`
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your‑org/fsdeploy.git
+   cd fsdeploy
+   ```
 
-Ce répertoire contient des scripts et configurations pour l'intégration avec divers systèmes d'initialisation et outils externes.
+2. Switch to the `dev` branch (the main development branch):
+   ```bash
+   git checkout dev
+   ```
 
-- `openrc/` : Scripts pour OpenRC (init script).
-- `systemd/` : Fichiers de service systemd.
-- `test/` : Scripts et configurations pour tester les contributions (les scripts exécutables doivent avoir `chmod +x`).
-- D'autres sous‑répertoires peuvent être ajoutés pour d'autres systèmes (sysvinit, runit, etc.)
+3. Install dependencies (see `README.md` for details).
 
-#### Permissions attendues
+## Contribution workflow
 
-- Les scripts OpenRC (`fsdeploy.init`) doivent être **exécutables** (`chmod +x`).
-- Les fichiers systemd (`.service`) doivent avoir les permissions **644** (`chmod 644`).
-- Les scripts de test situés dans `test/` qui sont destinés à être exécutés doivent également être rendus exécutables.
+1. Create a feature branch from `dev`:
+   ```bash
+   git checkout -b feature/my‑feature
+   ```
 
-Ces permissions sont vérifiées automatiquement par le script `scripts/validate-integration.sh`.
+2. Make your changes, ensuring they follow the existing code style.
 
-### Exemple d'installation pour OpenRC et systemd
+3. Test your changes (run the existing test suite with `pytest`).
 
-#### OpenRC
+4. Commit your changes with a descriptive message.
 
-Pour installer le script OpenRC, exécutez :
+5. Push the branch and open a pull request against the `dev` branch.
 
-```bash
-chmod +x fsdeploy/contrib/openrc/fsdeploy.init
-cp fsdeploy/contrib/openrc/fsdeploy.init /etc/init.d/fsdeploy
-rc-update add fsdeploy default
-```
+## Directory structure
 
-#### systemd
+Key directories:
 
-Pour installer le service systemd, exécutez :
+- `fsdeploy/lib/` – Core library (scheduler, configuration, UI, etc.)
+- `fsdeploy/lib/ui/screens/` – Textual UI screens
+- `fsdeploy/contrib/` – **Contributed scripts and integration files**
 
-```bash
-chmod 644 fsdeploy/contrib/systemd/fsdeploy.service
-cp fsdeploy/contrib/systemd/fsdeploy.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable fsdeploy.service
-```
+### The `contrib/` directory
 
-Notez que ces commandes nécessitent généralement les privilèges root.
+The `fsdeploy/contrib/` folder contains ready‑to‑use integration files for various
+init systems, service managers, and third‑party tools.
 
-### Ajout d'un nouveau système d'initialisation
+- `openrc/` – OpenRC init script (`fsdeploy.init`)
+- `systemd/` – systemd service unit (`fsdeploy.service`)
+- (Other sub‑directories may be added in the future)
 
-1. Créez un sous‑répertoire sous `fsdeploy/contrib/` (ex: `mysys/`).
-2. Placez‑y les fichiers nécessaires (script d'init, unité systemd, etc.).
-3. Assurez‑vous que les permissions sont correctes.
-4. Mettez à jour la documentation (ce fichier) pour décrire brièvement le nouveau système.
+These files are meant to be copied to the appropriate system directories
+(e.g., `/etc/init.d/` for OpenRC, `/etc/systemd/system/` for systemd) after
+adjusting any paths that may differ on the target system.
 
-### Tests
+**Permissions**: Ensure that scripts have the correct execute permissions.
+For OpenRC: `chmod +x fsdeploy.init`. For systemd: `chmod 644 fsdeploy.service`.
 
-Avant de soumettre une contribution, exécutez les scripts de validation :
+## Code style
 
-```bash
-bash scripts/validate-integration.sh
-```
+- Use **Black** formatting for Python code (line length 88).
+- Type hints are strongly encouraged for all function signatures.
+- Use descriptive variable names and add docstrings for public functions/classes.
 
-Cela vérifiera entre autres les permissions et l'accès au bridge.
+## Questions?
 
-### Convention de code
-
-- Suivez le style de code existant (PEP 8 pour Python, shellcheck pour les scripts bash).
-- Ajoutez des tests unitaires pour les nouvelles fonctionnalités.
-
-Merci de contribuer !
+Feel free to open an issue on GitHub if you have any questions about the project.
