@@ -39,3 +39,8 @@
 | **7.15**  | Documentation manquante pour `contrib/`.                                               | Ajouter une section dans `CONTRIBUTING.md` pour `fsdeploy/contrib/`.                   | `CONTRIBUTING.md`                                                                    | ⚠️ **À faire**           |
 | **7.16**  | **Permissions incorrectes** sur les scripts init (`OpenRC`, `systemd`).                | Corriger les permissions : `chmod +x` pour OpenRC, `chmod 644` pour systemd.           | `fsdeploy/contrib/openrc/fsdeploy.init`, `fsdeploy/contrib/systemd/fsdeploy.service` | ✅ **Terminée**           |
 | **7.17**  | **Intégration globale** : Vérifier que toutes les corrections sont cohérentes.         | Tester l’intégration des étapes 7.13 à 7.16.                                           | Tous les fichiers modifiés                                                           | ⏳ **À faire maintenant** |
+
+
+---
+
+---
