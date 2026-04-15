@@ -7,8 +7,13 @@ class ModuleRegistryScreen(Screen):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Utiliser la configuration passée à l'application
-        self.registry = ModuleRegistry(self.app.config)
+        self.registry = None
+
+    def on_mount(self) -> None:
+        """Initialize registry after the screen is attached to the app."""
+        if hasattr(self.app, 'config') and self.app.config:
+            from fsdeploy.lib.modules.registry import ModuleRegistry
+            self.registry = ModuleRegistry(self.app.config)
 
     def compose(self):
         # À implémenter plus tard
