@@ -12,6 +12,13 @@ class GraphScreen(Screen):
     """
     Graphe des dépendances et des états du scheduler.
     """
+    @property
+    def bridge(self):
+        return self.app.bridge
+
+    @property
+    def config(self):
+        return self.app.config
 
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Retour", show=True),

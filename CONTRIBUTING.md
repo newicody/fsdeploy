@@ -21,6 +21,31 @@ Ce répertoire contient des scripts et configurations pour l'intégration avec d
 
 Ces permissions sont vérifiées automatiquement par le script `scripts/validate-integration.sh`.
 
+### Exemple d'installation pour OpenRC et systemd
+
+#### OpenRC
+
+Pour installer le script OpenRC, exécutez :
+
+```bash
+chmod +x fsdeploy/contrib/openrc/fsdeploy.init
+cp fsdeploy/contrib/openrc/fsdeploy.init /etc/init.d/fsdeploy
+rc-update add fsdeploy default
+```
+
+#### systemd
+
+Pour installer le service systemd, exécutez :
+
+```bash
+chmod 644 fsdeploy/contrib/systemd/fsdeploy.service
+cp fsdeploy/contrib/systemd/fsdeploy.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable fsdeploy.service
+```
+
+Notez que ces commandes nécessitent généralement les privilèges root.
+
 ### Ajout d'un nouveau système d'initialisation
 
 1. Créez un sous‑répertoire sous `fsdeploy/contrib/` (ex: `mysys/`).

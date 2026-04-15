@@ -18,6 +18,13 @@ from fsdeploy.lib.ui.screens.module_registry import ModuleRegistryScreen
 
 class NavigationScreen(Screen):
     """Écran d'accueil avec liens vers tous les écrans spécialisés (versions améliorées)."""
+    @property
+    def bridge(self):
+        return self.app.bridge
+
+    @property
+    def config(self):
+        return self.app.config
 
     CSS = """
     NavigationScreen {

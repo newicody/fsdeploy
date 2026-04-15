@@ -19,7 +19,11 @@ class CrossCompileScreen(Screen):
 
     @property
     def bridge(self):
-        return getattr(self.app, "bridge", None)
+        return self.app.bridge
+
+    @property
+    def config(self):
+        return self.app.config
 
     DEFAULT_CSS = """
     CrossCompileScreen {

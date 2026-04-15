@@ -12,6 +12,13 @@ class SecurityScreen(Screen):
     """
     Aperçu et configuration des paramètres de sécurité.
     """
+    @property
+    def bridge(self):
+        return self.app.bridge
+
+    @property
+    def config(self):
+        return self.app.config
 
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Retour", show=True),
