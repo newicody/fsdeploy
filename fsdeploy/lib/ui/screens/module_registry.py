@@ -16,9 +16,15 @@ class ModuleRegistryScreen(Screen):
             self.registry = ModuleRegistry(self.app.config)
 
     def compose(self):
-        # À implémenter plus tard
-        from textual.widgets import Label
-        yield Label("Module registry screen (TODO)")
+        from textual.widgets import Header, Footer, Static
+        yield Header()
+        yield Static("Module Registry - under construction")
+        yield Footer()
+
+    @property
+    def config(self):
+        """Return the application's config instance."""
+        return self.app.config
 
     @property
     def bridge(self):

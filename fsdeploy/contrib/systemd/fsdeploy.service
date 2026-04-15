@@ -1,4 +1,5 @@
 [Unit]
+# Permissions: chmod 644
 Description=fsdeploy service
 After=network.target
 
