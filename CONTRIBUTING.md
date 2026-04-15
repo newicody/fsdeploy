@@ -10,12 +10,16 @@ Ce répertoire contient des scripts et configurations pour l'intégration avec d
 
 - `openrc/` : Scripts pour OpenRC (init script).
 - `systemd/` : Fichiers de service systemd.
+- `test/` : Scripts et configurations pour tester les contributions (les scripts exécutables doivent avoir `chmod +x`).
 - D'autres sous‑répertoires peuvent être ajoutés pour d'autres systèmes (sysvinit, runit, etc.)
 
 #### Permissions attendues
 
 - Les scripts OpenRC (`fsdeploy.init`) doivent être **exécutables** (`chmod +x`).
 - Les fichiers systemd (`.service`) doivent avoir les permissions **644** (`chmod 644`).
+- Les scripts de test situés dans `test/` qui sont destinés à être exécutés doivent également être rendus exécutables.
+
+Ces permissions sont vérifiées automatiquement par le script `scripts/validate-integration.sh`.
 
 ### Ajout d'un nouveau système d'initialisation
 
