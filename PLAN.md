@@ -4,9 +4,28 @@
 
 ---
 
+---
+
 ### ✅ **Tâches Terminées (7.0–7.12)**
 
-*(Conservées pour référence : étapes 7.0 à 7.12 validées et terminées.)*
+*(Conservées et visibles pour référence : étapes 7.0 à 7.12 validées et terminées.)*
+
+
+| **Étape** | **Description**                                                                             | **Statut** | **Fichiers Validés**                       |
+| --------- | ------------------------------------------------------------------------------------------- | ---------- | ------------------------------------------ |
+| **7.0**   | `launch.sh` : Branche `dev` par défaut + options `--run/--no-run` ajoutées.                 | ✅          | `launch.sh`                                |
+| **7.1**   | `live/setup.py` : Correction de l’initialisation des `linux-headers` via `uname -r`.        | ✅          | `live/setup.py`                            |
+| **7.2**   | Sync des écrans dans `tests/` (stale copies) → Fichiers corrigés.                           | ✅          | `tests/`                                   |
+| **7.4**   | README.md : Mise à jour des instructions d’installation pour `dev`.                         | ✅          | `README.md`                                |
+| **7.5**   | DIAGRAMS.md : Correction des chemins `linux-headers`.                                       | ✅          | `DIAGRAMS.md`                              |
+| **7.6**   | `fsdeploy_main_status.md` : Suppression (obsolète).                                         | ✅          | `fsdeploy_main_status.md`                  |
+| **7.7**   | `fsdeploy/lib/function/module/registry.py` : Re-export corrigé.                             | ✅          | `fsdeploy/lib/function/module/registry.py` |
+| **7.8**   | Supprimer `tests/fsdeploy/` (29 fichiers dupliqués).                                        | ✅          | `tests/fsdeploy/`                          |
+| **7.9**   | Nettoyer et centraliser `contrib/` dans `fsdeploy/contrib/`.                                | ✅          | `contrib/`, `fsdeploy/contrib/`            |
+| **7.10**  | Supprimer `lib/ui/` à la racine (redondant).                                                | ✅          | `lib/ui/`                                  |
+| **7.11**  | Ajouter `global_instance()` à `Scheduler` pour résoudre le problème du `bridge`.            | ✅          | `fsdeploy/lib/scheduler/core/scheduler.py` |
+| **7.12**  | Initialiser `Runtime` et `FsDeployConfig` dans `__main__.py` et les passer à `FsDeployApp`. | ✅          | `fsdeploy/__main__.py`                     |
+
 
 ---
 
@@ -15,32 +34,13 @@
 ### 🔴 **Tâches Restantes (Priorité)**
 
 
-| **Étape** | **Problème**                                                                      | **Tâche**                                                                                            | **Fichiers Concernés**                                                               | **Statut**               |
-| --------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------ |
-| **7.13**  | La configuration (`FsDeployConfig`) n’est **pas encore validée** dans les écrans. | **Finaliser la configuration et l’utilisation dans `ModuleRegistryScreen**`.                         | `fsdeploy/__main__.py`, `fsdeploy/lib/ui/screens/module_registry.py`                 | ⏳ **À faire avant 7.14** |
-| **7.14**  | Le `bridge` n’est **pas validé ni utilisé correctement** dans les écrans.         | **Vérifier et valider l’accès à `self.app.bridge**` dans tous les écrans (ex: `CrossCompileScreen`). | **Tous les écrans** (`CrossCompileScreen`, `ModuleRegistryScreen`, etc.)             | ⏳ **À faire maintenant** |
-| **7.15**  | Documentation manquante pour `contrib/`.                                          | **Ajouter une section dans `CONTRIBUTING.md**` expliquant l’organisation de `fsdeploy/contrib/`.     | `CONTRIBUTING.md`                                                                    | ⏳                        |
-| **7.16**  | Permissions incorrectes sur les scripts init.                                     | **Vérifier et corriger les permissions** : `chmod +x` pour OpenRC, `chmod 644` pour systemd.         | `fsdeploy/contrib/openrc/fsdeploy.init`, `fsdeploy/contrib/systemd/fsdeploy.service` | ⏳                        |
+| **Étape** | **Problème**                                                                                         | **Tâche**                                                                                    | **Fichiers Concernés**                                                               | **Statut**               |
+| --------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------ |
+| **7.13**  | La configuration (`FsDeployConfig`) n’est **pas encore validée** dans les écrans.                    | Finaliser la configuration et l’utilisation dans `ModuleRegistryScreen`.                     | `fsdeploy/__main__.py`, `fsdeploy/lib/ui/screens/module_registry.py`                 | 🟡 **En cours**          |
+| **7.14**  | Le `bridge` n’est **pas validé ni utilisé correctement** dans les écrans.                            | Vérifier et valider l’accès à `self.app.bridge` dans tous les écrans.                        | Tous les écrans (`CrossCompileScreen`, `ModuleRegistryScreen`, etc.)                 | ⚠️ **À valider**         |
+| **7.15**  | Documentation manquante pour `contrib/`.                                                             | Ajouter une section dans `CONTRIBUTING.md` expliquant l’organisation de `fsdeploy/contrib/`. | `CONTRIBUTING.md`                                                                    | ⚠️ **À valider**         |
+| **7.16**  | **Permissions incorrectes** sur les scripts init (`OpenRC`, `systemd`).                              | Vérifier et corriger les permissions : `chmod +x` pour OpenRC, `chmod 644` pour systemd.     | `fsdeploy/contrib/openrc/fsdeploy.init`, `fsdeploy/contrib/systemd/fsdeploy.service` | ⏳ **À faire maintenant** |
+| **7.17**  | **Intégration finale** : Vérifier que toutes les corrections sont bien appliquées et fonctionnelles. | Tester et valider l’intégration globale des étapes 7.13 à 7.16.                              | Tous les fichiers et écrans modifiés.                                                | ⏳ **À faire**            |
 
 
 ---
-
-## 📄 **add.md — Étape 7.14 : Fichiers à modifier pour valider `self.app.bridge**`
-
----
-
-### **📌 Problème Identifié**
-
-Le `bridge` n’est **ni validé ni utilisé correctement** dans les écrans (`CrossCompileScreen`, `ModuleRegistryScreen`, etc.).
-
----
-
-### **📌 Fichiers à modifier (par ordre de priorité)**
-
-
-| **Fichier**                                       | **Action requise**                                                                       | **Méthodes/Classes à vérifier**            |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
-| **Tous les écrans** (`fsdeploy/lib/ui/screens/`)  | **Vérifier et corriger l’accès à `self.app.bridge**` dans chaque écran.                  | `__init__`, `on_activate`, `on_deactivate` |
-| `fsdeploy/__main__.py`                            | **S’assurer que `FsDeployApp` initialise et passe `self.bridge**` à tous les écrans.     | `FsDeployApp.__init__`                     |
-| `fsdeploy/lib/ui/screens/cross_compile_screen.py` | **Valider l’utilisation de `self.app.bridge**` dans les méthodes critiques.              | `on_activate`, `compile`, `clean`          |
-| `fsdeploy/lib/ui/screens/module_registry.py`      | **Vérifier que `self.app.bridge` est accessible** dans l’initialisation et les méthodes. | `__init__`, `load_modules`                 |

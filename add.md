@@ -1,23 +1,26 @@
----
-
-## 📄 **add.md — Étape 7.14 : Fichiers à modifier pour valider `self.app.bridge**`
+## 📄 **add.md — Étape 7.17 : Valider l’intégration globale**
 
 ---
 
 ### **📌 Problème Identifié**
 
-Le `bridge` n’est **ni validé ni utilisé correctement** dans les écrans (`CrossCompileScreen`, `ModuleRegistryScreen`, etc.).
+Toutes les corrections (7.13 à 7.16) doivent être **validées ensemble** pour s’assurer qu’elles fonctionnent en cohérence et sans régression.
 
 ---
 
-### **📌 Fichiers à modifier (par ordre de priorité)**
+### **📌 Étapes de validation à suivre**
 
+1. **Lancer l’application** :
+  - Vérifier que les écrans (`ModuleRegistryScreen`, `CrossCompileScreen`) accèdent correctement à `self.app.config` et `self.app.bridge`.
+  - Confirmer que les permissions des scripts init (`fsdeploy.init`, `fsdeploy.service`) sont conformes.
+2. **Tester les fonctionnalités critiques** :
+  - Tester le déploiement et le chargement des modules.
+  - Vérifier que les scripts init (OpenRC/systemd) s’exécutent sans erreur.
+3. **Documenter les résultats** :
+  - Ajouter une section dans `CHANGELOG.md` ou `RELEASE_NOTES.md` pour résumer les corrections appliquées.
 
-| **Fichier**                                       | **Action requise**                                                                       | **Méthodes/Classes à vérifier**            |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------ |
-| **Tous les écrans** (`fsdeploy/lib/ui/screens/`)  | **Vérifier et corriger l’accès à `self.app.bridge**` dans chaque écran.                  | `__init__`, `on_activate`, `on_deactivate` |
-| `fsdeploy/__main__.py`                            | **S’assurer que `FsDeployApp` initialise et passe `self.bridge**` à tous les écrans.     | `FsDeployApp.__init__`                     |
-| `fsdeploy/lib/ui/screens/cross_compile_screen.py` | **Valider l’utilisation de `self.app.bridge**` dans les méthodes critiques.              | `on_activate`, `compile`, `clean`          |
-| `fsdeploy/lib/ui/screens/module_registry.py`      | **Vérifier que `self.app.bridge` est accessible** dans l’initialisation et les méthodes. | `__init__`, `load_modules`                 |
+---
 
+**Prochaine étape** : Valide l’intégration des étapes 7.13 à 7.16 avant de passer à une nouvelle itération.
 
+Besoin d’aide pour rédiger un script de test ou un rapport de validation ? 🚀
