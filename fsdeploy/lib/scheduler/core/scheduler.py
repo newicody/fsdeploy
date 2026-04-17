@@ -89,7 +89,7 @@ class Scheduler:
         if cls._global_instance is None:
             from fsdeploy.lib.scheduler.core.resolver import Resolver
             from fsdeploy.lib.scheduler.core.executor import Executor
-            from fsdeploy.lib.scheduler.runtime import Runtime
+            from fsdeploy.lib.scheduler.core.runtime import Runtime
             from fsdeploy.lib.scheduler.security.resolver import SecurityResolver
             security_resolver = SecurityResolver()
             rt = Runtime()
