@@ -1,56 +1,61 @@
-### **📄 add.md — Préparation de la suite**
+# add.md — Tâche 8.1 : Unification scheduler ↔ bridge global
+
+> **Worker** : charger les fichiers listés, appliquer uniquement les changements décrits.
 
 ---
 
-### **📌 Prochaine tâche (7.18 ou nouvelle itération) :**
+## Contexte
 
-*(À définir selon tes besoins)*
-
----
-
-#### **Options possibles :**
-
-
-| **Option**                       | **Description**                                                                        | **Fichiers à préparer**                                              |
-| -------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **7.18 : Ajouter un CHANGELOG**  | Documenter les changements apportés par les étapes 7.13 à 7.17 dans `CHANGELOG.md`.    | `CHANGELOG.md`                                                       |
-| **7.18 : Améliorer la sécurité** | Ajouter des validations supplémentaires dans le scheduler (ex: limites de ressources). | `fsdeploy/lib/scheduler/core/scheduler.py`, `fsdeploy/lib/config.py` |
-| **7.18 : Optimiser les logs**    | Centraliser les logs et ajouter des niveaux de log (debug, info, warning, error).      | `fsdeploy/__main__.py`, `fsdeploy/lib/logging/...`                   |
-| **7.18 : Préparer une release**  | Préparer les fichiers pour une release (ex: `setup.py`, `README.md`, `CHANGELOG.md`).  | `setup.py`, `README.md`, `CHANGELOG.md`, `MANIFEST.in`               |
-
+Le bridge TUI et le scheduler daemon sont deux instances séparées. Toutes les `bridge.emit()` partent dans le vide. C'est le blocage #1 — tant que ce n'est pas fixé, aucune fonctionnalité UI ne peut être testée ni aucun câblage vérifié (Phase 16).
 
 ---
 
-#### **Fichiers à éditer selon l’option choisie :**
+## Fichiers à charger
 
-*(Exemple pour un CHANGELOG)*
+### 1. `fsdeploy/lib/scheduler/core/scheduler.py`
 
+**Bug** : `global_instance()` → imports cassés (`scheduler.runtime` n'existe pas), `Resolver()` sans security_resolver, `Executor()` sans runtime.
 
-| **Fichier**    | **Action requise**                                                                   |
-| -------------- | ------------------------------------------------------------------------------------ |
-| `CHANGELOG.md` | **Ajouter une section** pour les étapes 7.13 à 7.17 :                                |
-| &nbsp;         | ```markdown                                                                          |
-| &nbsp;         | ## [1.0.0] - 2026-04-15                                                              |
-| &nbsp;         | ### Ajouté                                                                           |
-| &nbsp;         | - Validation de `FsDeployConfig` dans `ModuleRegistryScreen`.                        |
-| &nbsp;         | - Accès à `self.app.bridge` dans tous les écrans.                                    |
-| &nbsp;         | - Documentation de `fsdeploy/contrib/`.                                              |
-| &nbsp;         | - Correction des permissions des scripts init (`fsdeploy.init`, `fsdeploy.service`). |
-| &nbsp;         | ```                                                                                  |
+**Fix** :
+- Imports : `scheduler.core.runtime.Runtime`, `scheduler.security.resolver.SecurityResolver`
+- Construction : `rt = Runtime()` → `Executor(runtime=rt)` → `Resolver(security_resolver=SecurityResolver())` → `Scheduler(...)`
+- Ajouter `set_global_instance(cls, instance)` classmethod
 
+### 2. `fsdeploy/lib/daemon.py`
+
+**Fix `_init_scheduler()`** : après construction, appeler `Scheduler.set_global_instance(self._scheduler)`
+
+**Fix `_register_all_intents()`** : remplacer la lambda par factory qui propage `_bridge_ticket` :
+```python
+def _make_handler(cls, shared_ctx):
+    def handler(event):
+        ctx = dict(shared_ctx)
+        ticket = event.params.get("_bridge_ticket")
+        if ticket:
+            ctx["_bridge_ticket"] = ticket
+        return [cls(params=event.params, context=ctx)]
+    return handler
+```
+
+### 3. `fsdeploy/lib/scheduler/bridge.py`
+
+**Fix** : `default()`/`global_instance()` doit accéder au runtime via `Scheduler.global_instance().runtime`. Dans `poll()`, chercher `_bridge_ticket` dans `task.context` ET `task.params` (fallback).
+
+### 4. `fsdeploy/lib/ui/bridge.py`
+
+**Fix** : si `GlobalBridge.default()` échoue, ne pas créer d'instance locale silencieuse. Logger `"scheduler_bridge_unavailable"` et assigner un DummyBridge loggué.
 
 ---
 
-### **📌 Instructions rapides :**
+## Critères d'acceptation
 
-1. **Choisis une option** pour la prochaine itération (7.18).
-2. **Prépare les fichiers** nécessaires (ex: `CHANGELOG.md`).
-3. **Documente les changements** pour faciliter la maintenance.
+1. `python3 -c "from scheduler.core.scheduler import Scheduler; Scheduler.global_instance()"` → pas d'erreur (depuis `lib/`)
+2. `python3 -m fsdeploy --debug` → log `scheduler_global_instance_set`
+3. `cd lib && python3 test_run.py` → 3/3 tests pass
+4. `bridge.poll()` retrouve les tickets via `task.context["_bridge_ticket"]`
 
 ---
 
----
+## Ne pas toucher
 
-**Prochaine étape :**  
-**Quelle option veux-tu choisir pour la prochaine itération ?**  
-Dis-moi ce que tu veux faire, et je t’aide à préparer les fichiers ! 🚀
+Phases 9-16 sont toutes bloquées par 8.1. Une fois 8.1 fait, on peut tester le câblage existant et mesurer les gaps Phase 16 en live.
