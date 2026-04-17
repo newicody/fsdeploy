@@ -35,10 +35,6 @@ from textual.widgets import (
 )
 
 # ── Import des écrans additionnels ───────────────────────────────────────────
-from .security import SecurityScreen
-from .graph import GraphScreen
-from .intentlog import IntentLogScreen
-from .metrics import MetricsScreen
 
 # ── Détection framebuffer ─────────────────────────────────────────────────────
 
@@ -516,19 +512,42 @@ class WelcomeScreen(Screen):
         return f"v{version} — Deploiement et gestion ZFS/ZFSBootMenu"
 
     def _switch_to_screen(self, screen_name: str) -> None:
-        """Passe à l'écran correspondant."""
-        screen_map = {
-            "security": SecurityScreen,
-            "graph": GraphScreen,
-            "intentlog": IntentLogScreen,
-            "metrics": MetricsScreen,
-        }
-        screen_class = screen_map.get(screen_name)
-        if screen_class:
-            self.app.push_screen(screen_class())
+        """Passe à l'écran correspondant avec lazy import."""
+        screen_cls = None
+        if screen_name == "security":
+            try:
+                from .security import SecurityScreen
+                screen_cls = SecurityScreen
+            except ImportError as e:
+                self.app.notify(f"Failed to import security screen: {e}")
+                return
+        elif screen_name == "graph":
+            try:
+                from .graph import GraphScreen
+                screen_cls = GraphScreen
+            except ImportError as e:
+                self.app.notify(f"Failed to import graph screen: {e}")
+                return
+        elif screen_name == "intentlog":
+            try:
+                from .intentlog import IntentLogScreen
+                screen_cls = IntentLogScreen
+            except ImportError as e:
+                self.app.notify(f"Failed to import intentlog screen: {e}")
+                return
+        elif screen_name == "metrics":
+            try:
+                from .metrics import MetricsScreen
+                screen_cls = MetricsScreen
+            except ImportError as e:
+                self.app.notify(f"Failed to import metrics screen: {e}")
+                return
         else:
             # Fallback sur l'action par défaut de l'app
             self.app.action_switch_screen(screen_name)
+            return
+        if screen_cls:
+            self.app.push_screen(screen_cls())
 
     @staticmethod
     def _read_file(path: str) -> str:
