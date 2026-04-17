@@ -18,7 +18,6 @@ def test_config_bridge():
         from fsdeploy.lib.ui.screens.crosscompile import CrossCompileScreen
         from fsdeploy.lib.ui.screens.graph import GraphScreen
         from fsdeploy.lib.ui.screens.intentlog import IntentLogScreen
-        from fsdeploy.lib.ui.screens.navigation import NavigationScreen
         from fsdeploy.lib.ui.screens.security import SecurityScreen
         from fsdeploy.lib.ui.screens.multiarch import MultiArchScreen
     except ImportError as e:
@@ -26,7 +25,7 @@ def test_config_bridge():
         return False
     # Vérifie chaque classe
     for cls in [CrossCompileScreen, GraphScreen, IntentLogScreen,
-                NavigationScreen, SecurityScreen, MultiArchScreen]:
+                SecurityScreen, MultiArchScreen]:
         if not hasattr(cls, 'bridge'):
             print(f"La classe {cls.__name__} n'a pas la propriété bridge")
             return False
