@@ -92,18 +92,20 @@ class SchedulerBridge:
                     break
             except (AttributeError, TypeError):
                 continue
-        # Si aucune méthode n'a fonctionné, créer une nouvelle instance
+        # Si aucune méthode n'a fonctionné, créer un dummy bridge loggué
         if self._global_bridge is None:
-            try:
-                # Le constructeur peut accepter runtime et store
-                self._global_bridge = GlobalBridge(runtime=self.runtime, store=self.store)
-            except (TypeError, Exception):
-                # Sinon, essayer un constructeur sans arguments
-                self._global_bridge = GlobalBridge()
-            # Logguer l'absence de bridge global
+            from fsdeploy.lib.log import get_logger
             log = get_logger("ui.bridge")
-            log.warning("scheduler_bridge_unavailable",
-                        msg="Global bridge unavailable, using standalone instance.")
+            log.error("scheduler_bridge_unavailable")
+            # DummyBridge loggué
+            class LoggedDummyBridge:
+                def emit(self, event_name, *a, **kw):
+                    log.warning("dummy_bridge_emit", event=event_name)
+                    return "dummy-ticket"
+                def poll(self): return []
+                def __getattr__(self, name):
+                    return lambda *a, **kw: None
+            self._global_bridge = LoggedDummyBridge()
 
     # ═══════════════════════════════════════════════════════════════
     # EMISSION — la seule methode que la TUI utilise

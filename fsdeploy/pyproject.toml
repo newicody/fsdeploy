@@ -60,10 +60,10 @@ Repository = "https://github.com/newicody/fsdeploy.git"
 Issues = "https://github.com/newicody/fsdeploy/issues"
 
 [project.scripts]
-fsdeploy = "lib.__main__:main"
+fsdeploy = "fsdeploy.__main__:app"
 
 [tool.hatch.build.targets.wheel]
-packages = ["lib"]
+packages = ["fsdeploy"]
 
 [tool.ruff]
 line-length = 100
