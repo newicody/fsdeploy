@@ -1,159 +1,46 @@
-# add.md — Batch P0 : 16.20 + 16.21 + 16.50 + 10.1
-
-> **Worker** : 4 correctifs indépendants. Chacun est petit. L'ensemble rend l'UI fonctionnelle.
+# add.md — P0-cleanup : 10.1 + 16.51 + 16.52
 
 ---
 
-## Contexte
+## Fix 1 — 10.1 : Unicode cassé dans `detection.py`
 
-Le scheduler↔bridge est unifié (8.1 ✅). Mais quand on clique sur un bouton dans la TUI, deux choses se passent :
-- MountsScreen émet `mount.request` → aucun intent enregistré → ticket en pending éternel
-- DetectionScreen émet `pool.import` → aucun intent → idem
-- `detection.py` affiche `2705` au lieu de ✅
+**Fichier** : `fsdeploy/lib/ui/screens/detection.py`
 
-Ces 4 fixes rendent la boucle scheduler visible de bout en bout.
+**Problème** : les constantes `CHECK`, `CROSS`, `WARN`, `ARROW` contiennent des codepoints Unicode sous forme de texte brut (`"2705"`, `"274c"`, `"26a0Fe0f"`, `"2192"`) au lieu d'échappements `\uXXXX`. La TUI affiche littéralement `2705` au lieu de ✅.
 
----
-
-## Fix 1 — 16.20 : Intent `mount.request` manquant
-
-### Fichier à modifier : `fsdeploy/lib/intents/detection_intent.py`
-
-MountsScreen fait `bridge.emit("mount.request", dataset="...", mountpoint="...")`. Il n'existe aucun `@register_intent("mount.request")`.
-
-**Ajouter** à la fin du fichier (ou dans un nouveau `mount_intent.py` importé par `intents/__init__.py`) :
-
-```python
-@register_intent("mount.request")
-class MountRequestIntent(Intent):
-    """Event: mount.request -> DatasetMountTask"""
-    def build_tasks(self):
-        from function.mount.manager import DatasetMountTask
-        return [DatasetMountTask(
-            id="mount_request",
-            params=self.params,
-            context=self.context,
-        )]
-```
-
-**Note** : si `DatasetMountTask` n'existe pas dans `function/mount/manager.py`, utiliser le `MountVerifyTask` existant ou créer un intent léger qui appelle `run_cmd("mount -t zfs {dataset} {mountpoint}")` directement. L'important est que l'event ait un handler.
-
-Vérifier aussi que `mount.verify` et `mount.umount` ont des intents — ils sont documentés dans `api_reference.md` mais doivent être vérifiés dans le code.
+**Ce qu'il faut** : utiliser la syntaxe `\uXXXX` (convention du projet : ASCII dans le source, Unicode via escape). Tous les autres écrans le font correctement — voir `mounts.py` (`"\u2705"`), `zbm.py`/`presets.py`/`initramfs.py` (littéraux `"✅"`), `welcome.py` (littéraux). Aligner `detection.py` sur le même style.
 
 ---
 
-## Fix 2 — 16.21 : Intent `pool.import` manquant
+## Fix 2 — 16.51 : `boot_intent.py` est une copie de `detection_intent.py`
 
-### Fichier à modifier : `fsdeploy/lib/intents/detection_intent.py`
+**Fichiers** : `fsdeploy/lib/intents/boot_intent.py`, `fsdeploy/lib/intents/detection_intent.py`
 
-DetectionScreen fait `bridge.emit("pool.import", pool="nom_pool")` pour importer un seul pool. Seul `pool.import_all` existe.
+**Problème** : `boot_intent.py` contient exactement le même code que `detection_intent.py` — même docstring (`fsdeploy.intents.detection_intent`), mêmes tasks (`PoolImportAllTask`, `DatasetProbeTask`, etc.), mêmes intents (`pool.import_all`, `pool.import`, `mount.request`, `detection.start`, etc.). Le dernier importé par `intents/__init__.py` écrase silencieusement le premier.
 
-**Ajouter** :
+**Ce qu'il faut** : `boot_intent.py` devrait contenir uniquement les intents liés au boot/ZBM (qui ne sont PAS dans `detection_intent.py`). Les intents boot/ZBM pertinents sont dans `kernel_intent.py` (`boot.init.generate`, `zbm.validate`) et `system_intent.py` (`zbm.install`, `zbm.status`). 
 
-```python
-@register_intent("pool.import")
-class PoolImportIntent(Intent):
-    """Event: pool.import -> importe un seul pool par nom."""
-    def build_tasks(self):
-        pool_name = self.params.get("pool", "")
-        if not pool_name:
-            return []
+Donc soit :
+- Vider `boot_intent.py` et y mettre uniquement les intents boot spécifiques qui ne sont pas déjà ailleurs (s'il y en a)
+- Soit supprimer `boot_intent.py` entièrement si tous ses intents légitimes sont déjà couverts par d'autres fichiers, et retirer l'import de `intents/__init__.py`
 
-        class PoolImportSingleTask(Task):
-            def run(self_task):
-                r = self_task.run_cmd(
-                    f"zpool import -f -N -o cachefile=none {pool_name}",
-                    sudo=True, check=False, timeout=30,
-                )
-                return {
-                    "pool": pool_name,
-                    "success": r.success,
-                    "error": r.stderr if not r.success else "",
-                }
-
-        return [PoolImportSingleTask(
-            id=f"pool_import_{pool_name}",
-            params=self.params,
-            context=self.context,
-        )]
-```
-
-**Alternative plus propre** : si `PoolImportAllTask` sait importer un seul pool via un param, réutiliser cette task avec `params={"pool": pool_name}`.
+Le contenu dupliqué (pool/mount/detection) doit rester **uniquement** dans `detection_intent.py`.
 
 ---
 
-## Fix 3 — 16.50 : Doublon `config.snapshot.*`
+## Fix 3 — 16.52 : Doublon `init.config.detect`
 
-### Fichiers concernés :
-- `fsdeploy/lib/intents/system_intent.py` — définit `config.snapshot.save`, `config.snapshot.restore`, `config.snapshot.list`
-- `fsdeploy/lib/intents/config_intent.py` — définit les **mêmes** trois intents
+**Fichiers** : `fsdeploy/lib/intents/init_intent.py`, `fsdeploy/lib/intents/init_config_intent.py`
 
-Le dernier importé par `intents/__init__.py` écrase le premier dans `INTENT_REGISTRY`. Résultat imprévisible.
+**Problème** : `init.config.detect` est enregistré via `@register_intent` dans les deux fichiers. Le second écrase le premier.
 
-**Fix** : supprimer les trois `@register_intent("config.snapshot.*")` de **`config_intent.py`** (garder ceux de `system_intent.py` qui sont le canonical). 
-
-Si `config_intent.py` ne contient plus rien après suppression, supprimer le fichier et retirer l'import dans `intents/__init__.py` :
-```python
-# Supprimer :
-try:
-    from intents.config_intent import *
-except ImportError:
-    pass
-```
-
----
-
-## Fix 4 — 10.1 : Escape Unicode dans `detection.py`
-
-### Fichier : `fsdeploy/lib/ui/screens/detection.py`
-
-Lignes actuelles (en haut du fichier) :
-```python
-CHECK = "[OK]" if IS_FB else "2705"
-CROSS = "[!!]" if IS_FB else "274c"
-WARN  = "[??]" if IS_FB else "26a0Fe0f"
-ARROW = "->" if IS_FB else "2192"
-```
-
-Affiche littéralement `2705` dans la TUI au lieu de ✅.
-
-**Fix** :
-```python
-CHECK = "[OK]" if IS_FB else "\u2705"
-CROSS = "[!!]" if IS_FB else "\u274c"
-WARN  = "[??]" if IS_FB else "\u26a0\ufe0f"
-ARROW = "->" if IS_FB else "\u2192"
-```
-
-Ou plus simple, utiliser les littéraux directement :
-```python
-CHECK = "[OK]" if IS_FB else "✅"
-CROSS = "[!!]" if IS_FB else "❌"
-WARN  = "[??]" if IS_FB else "⚠️"
-ARROW = "->" if IS_FB else "→"
-```
-
-(Le fichier a le header `# -*- coding: utf-8 -*-` donc les littéraux UTF-8 sont safe. MAIS attention : le projet utilise la convention "pure ASCII content, Unicode via escape sequences" pour éviter les problèmes `textual serve`. Préférer `\uXXXX`.)
+**Ce qu'il faut** : garder la définition dans `init_intent.py` (c'est là que tous les autres intents `init.*` sont définis). Supprimer le `@register_intent("init.config.detect")` de `init_config_intent.py`. Si le fichier est vide après, le supprimer et retirer son import de `intents/__init__.py`.
 
 ---
 
 ## Critères d'acceptation
 
-1. **16.20** : `bridge.emit("mount.request", dataset="test", mountpoint="/mnt/test")` → le ticket passe en `completed` ou `failed` (plus de pending éternel)
-
-2. **16.21** : `bridge.emit("pool.import", pool="test_pool")` → idem
-
-3. **16.50** : `python3 -c "from scheduler.core.registry import INTENT_REGISTRY; print('config.snapshot.save' in INTENT_REGISTRY)"` → `True`, et un seul handler (pas deux)
-
-4. **10.1** : lancer la TUI → DetectionScreen affiche ✅ / ❌ / ⚠️ au lieu de `2705` / `274c` / `26a0Fe0f`
-
-5. **Tests existants** : `cd lib && python3 test_run.py` → 3/3 pass
-
----
-
-## Après ce batch
-
-Prochaines priorités :
-1. **10.2 + 10.4 + 10.5** — imports uniformes, welcome.py lazy, doublons écrans
-2. **11.1-11.3** — overlay sécurisé (OverlayProfile + MountsScreen)
-3. **17.1-17.4** — sécurité (auth web, hostid, cleanup, confirmation)
+1. DetectionScreen affiche ✅ / ❌ / ⚠️ / → (pas de texte brut `2705`)
+2. `boot_intent.py` ne contient plus les mêmes classes que `detection_intent.py`
+3. `grep -r "init.config.detect" fsdeploy/lib/intents/` → une seule occurrence dans `init_intent.py`
+4. `cd fsdeploy/lib && python3 test_run.py` → 3/3 pass
