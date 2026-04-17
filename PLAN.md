@@ -1,202 +1,147 @@
-# PLAN.md — fsdeploy (branche `dev`)
+# add.md — Tâche 8.1b : Finaliser unification scheduler
 
-> **Dernière mise à jour** : 2026-04-17
-> **Tâche active** : **8.1** — Unification scheduler ↔ bridge global
-> **Worker** : `worker.py` consomme `add.md`
+> **Worker** : charger les fichiers listés, appliquer les changements décrits.
 
 ---
 
-## Conventions
+## Ce qui a été fait (8.1a ✅)
 
-ID stable · `⏳` `🚧` `✅` `⏸️` `❌` · P0-P3 · un seul `🚧` à la fois
+- `Scheduler.set_global_instance()` ajouté
+- `daemon._init_scheduler()` appelle `set_global_instance` + log
+- `daemon._register_all_intents()` utilise `_make_handler()` avec propagation `_bridge_ticket`
+- `bridge.py` : `BridgeEvent`, `submit_event()` avec ticket, `poll()` cherche dans `context` ET `params`
+- `model/event.py` : `BridgeEvent` + `register_bridge_event_handler()`
+- `model/runtime.py` : `get_global_runtime()` singleton
 
----
+## Ce qui reste cassé (3 problèmes)
 
-## 🚧 Tâche active — 8.1
+### Problème 1 : Import path faux
 
-Unification scheduler ↔ bridge global — voir `add.md`.
+`scheduler.py global_instance()` fait :
+```python
+from fsdeploy.lib.scheduler.runtime import Runtime
+```
+Ce module n'existe pas comme ça. `Runtime` est dans `scheduler.core.runtime` (quand `lib/` est dans sys.path) ou `fsdeploy.lib.scheduler.core.runtime` (en absolute). Le même bug est reproduit dans le nouveau `fsdeploy/__main__.py`.
 
----
+### Problème 2 : Deux `__main__.py` concurrents
 
-## 📋 Phase 8 — Scheduler
+1. **`fsdeploy/__main__.py`** (NOUVEAU, argparse) — crée `Scheduler(Resolver(), Executor(), runtime)` **sans SecurityResolver**, **sans bus**, **sans intent registration**, **sans daemon**. Bypass total de l'architecture.
+2. **`fsdeploy/fsdeploy/__main__.py`** (typer) — appelle `FsDeployDaemon` qui fait l'init propre avec SecurityResolver, bus, intents, TUI avec restart.
 
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 8.1 | Unification scheduler ↔ bridge (`_global_instance`, `_bridge_ticket` propagation) | P0 | 🚧 |
-| 8.2 | Réveil immédiat `event_queue.put` (`_wakeup` Event) | P1 | ⏳ |
-| 8.3 | `_process_waiting` event-driven (après `release_locks` uniquement) | P2 | ⏳ |
-| 8.4 | Renommer `Intent.resolve()` → `Intent.expand()` | P2 | ⏳ |
+`python3 -m fsdeploy` résout vers le **premier** (package `fsdeploy/`), pas le deuxième. Donc le chemin daemon (le bon) n'est jamais appelé.
 
----
+### Problème 3 : `pyproject.toml` entry point faux
 
-## 📋 Phase 9 — launch.sh
-
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 9.1 | `_is_live()` retirer heuristique fstab, exiger ≥ 2 indicateurs | P0 | ⏳ |
-| 9.2 | Support APT deb822 (`debian.sources`) + Python `live/setup.py` | P0 | ⏳ |
-| 9.3 | `_wait_dkms()` matcher `$(uname -r)` strictement | P1 | ⏳ |
-| 9.4 | Sudoers filtrés `command -v` | P1 | ⏳ |
-| 9.5 | `trap ERR` + restauration `sources.list.bak` | P1 | ⏳ |
-| 9.6 | Défaut `RUN_AFTER=0` | P2 | ⏳ |
-| 9.7 | ACL venv `setfacl -d` | P2 | ⏳ |
-| 9.8 | `--update` régénérer wrappers | P1 | ⏳ |
-| 9.9 | `--update` vérifier exit pip avant `exec` | P1 | ⏳ |
-| 9.10 | Vérif espace disque (512 Mo min) | P2 | ⏳ |
-| 9.11 | Lock concurrent `flock` | P2 | ⏳ |
+```toml
+[project.scripts]
+fsdeploy = "lib.__main__:main"
+```
+`lib` n'est pas un package importable — ça ne résout pas.
 
 ---
 
-## 📋 Phase 10 — UI correctifs critiques
+## Fichiers à charger
 
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 10.1 | Escape Unicode `detection.py` `"2705"` → `"\u2705"` | P0 | ⏳ |
-| 10.2 | Uniformiser imports écrans, supprimer `ui/screens/__init__.py` racine | P0 | ⏳ |
-| 10.3 | `DummyBridge` log warning | P0 | ⏳ |
-| 10.4 | `welcome.py` imports lazy (pas top-level) | P0 | ⏳ |
-| 10.5 | Supprimer doublons (`multiarch*`, `graph*`, `security*`) | P0 | ⏳ |
-| 10.6 | `MultiArchScreen` bridge class attr → `@property` | P1 | ⏳ |
-| 10.7 | `ConfigSnapshotScreen` via bridge.emit | P1 | ⏳ |
-| 10.8 | `NavigationScreen` enregistrer ou supprimer | P2 | ⏳ |
-| 10.9 | Bindings `e/l/u/z` manquants | P1 | ⏳ |
-| 10.10 | `_refresh_from_store` erreurs uniquement | P1 | ⏳ |
+### 1. `fsdeploy/lib/scheduler/core/scheduler.py`
 
----
+**Fix** : dans `global_instance()`, remplacer :
+```python
+from fsdeploy.lib.scheduler.runtime import Runtime
+```
+par :
+```python
+from scheduler.core.runtime import Runtime
+```
+(Cohérent avec le reste du fichier qui utilise `scheduler.*` relatif, car `lib/` est dans sys.path via daemon.)
 
-## 📋 Phase 11 — Overlay sécurisé
+L'import `fsdeploy.lib.scheduler.security.resolver` doit aussi devenir `scheduler.security.resolver` pour cohérence.
 
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 11.1 | `OverlayProfile` dataclass + `.fsdeploy-overlay-meta` (MD5 lower, kernel, timestamps) | P0 | ⏳ |
-| 11.2 | `OverlayValidator` task (meta↔lower MD5, `work/` propre, modules↔kernel) | P0 | ⏳ |
-| 11.3 | MountsScreen section overlay (profils, associations, anti-mélange) | P0 | ⏳ |
-| 11.4 | CoherenceScreen check overlay profil | P1 | ⏳ |
-| 11.5 | `work/` cleanup avant remontage | P1 | ⏳ |
-| 11.6 | Multi-système (N presets = N profils, pas de croisement) | P2 | ⏳ |
+### 2. `fsdeploy/__main__.py` (le NOUVEAU, argparse)
 
----
+**Option A (recommandée)** : SUPPRIMER ce fichier. Il bypass daemon, n'a pas de SecurityResolver, pas de bus, pas d'intent registration. C'est une copie dégradée de ce que `fsdeploy/fsdeploy/__main__.py` fait déjà via `FsDeployDaemon`.
 
-## 📋 Phase 12 — Bus
+**Option B** : Le réécrire pour simplement déléguer à `fsdeploy/fsdeploy/__main__.py` :
+```python
+#!/usr/bin/env python3
+"""Redirecteur vers le vrai entry point."""
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "fsdeploy"))
+from fsdeploy.__main__ import app
+if __name__ == "__main__":
+    app()
+```
 
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 12.1 | Éliminer bypass security (`message_bus.emit` → `event_queue.put`) | P1 | ⏳ |
-| 12.2 | InotifySource : surveiller `boot_mount` config, pas `/boot` | P1 | ⏳ |
-| 12.3 | Intents pour `timer.coherence_check` / `timer.scrub_check` | P1 | ⏳ |
-| 12.4 | SocketSource validation taille/timeout | P2 | ⏳ |
-| 12.5 | `_event_queue_ref` → attribut instance | P2 | ⏳ |
+**Option C** : Le garder mais le faire passer par `FsDeployDaemon` comme le typer :
+```python
+from fsdeploy.lib.daemon import FsDeployDaemon
+daemon = FsDeployDaemon(config=cfg)
+daemon.run(mode="tui")
+```
 
----
+**Le worker doit choisir Option A ou B.** L'Option C nécessite de recâbler tous les args argparse → config daemon, c'est trop pour cette tâche.
 
-## 📋 Phase 13 — Logs
+### 3. `pyproject.toml`
 
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 13.1 | Supprimer `lib/util/logging.py` doublon | P1 | ⏳ |
-| 13.2 | `HuffmanStore` persistence disque (flush) | P1 | ⏳ |
-| 13.3 | Daemon passer `log_dir` à `setup_logging` | P1 | ⏳ |
-| 13.4 | `RotatingFileHandler` dans `lib/log.py` | P2 | ⏳ |
+**Fix** : l'entry point doit pointer vers le vrai point d'entrée. Si on supprime le nouveau `__main__.py` (Option A) :
+```toml
+[project.scripts]
+fsdeploy = "fsdeploy.__main__:app"
+```
 
----
+Ou si le package est structuré `fsdeploy/fsdeploy/` :
+```toml
+[project.scripts]
+fsdeploy = "fsdeploy.fsdeploy.__main__:app"
+```
 
-## 📋 Phase 14 — Config
+**Note** : le `[tool.hatch.build.targets.wheel] packages = ["lib"]` est aussi faux — doit être `["fsdeploy"]` pour que le package soit installable.
 
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 14.1 | `DEBIAN_PACKAGES` : `linux-headers-amd64` → dynamique | P1 | ⏳ |
-| 14.2 | `live/setup.py` parser deb822 (unifier avec 9.2) | P1 | ⏳ |
-| 14.3 | Thread-safety `FsDeployConfig` (Lock sur `set/save`) | P2 | ⏳ |
+### 4. `fsdeploy/lib/ui/bridge.py`
 
----
-
-## 📋 Phase 15 — UI fonctionnalités spec
-
-| ID | Description | Prio | Statut |
-|----|-------------|------|--------|
-| 15.1 | Écran Network | P2 | ⏳ |
-| 15.2 | Hot-switch kernel/rootfs (kexec) | P2 | ⏳ |
-| 15.3 | InitramfsScreen toggle Python stream | P2 | ⏳ |
-| 15.4 | CoherenceScreen simulation boot | P3 | ⏳ |
-| 15.5 | ZBMScreen bouton reboot | P3 | ⏳ |
-
----
-
-## 📋 Phase 16 — Câblage lib ↔ UI (intents manquants / écrans stubs)
-
-**Constat** : 18 intents enregistrés ne sont jamais émis depuis l'UI, 6 events UI n'ont pas d'intent, 7 tasks n'ont ni intent ni chemin UI, 5 écrans sont des stubs vides, 1 doublon d'intent.
-
-### A — Intents existants à câbler dans les écrans
-
-| ID | Intent | Écran cible | Action UI à ajouter | Prio | Statut |
-|----|--------|-------------|---------------------|------|--------|
-| 16.1 | `kernel.registry.scan` | KernelScreen | Bouton « Scanner tous les datasets » | P1 | ⏳ |
-| 16.2 | `kernel.provision` | KernelScreen | Bouton « Provisionner » sur kernel sélectionné | P1 | ⏳ |
-| 16.3 | `kernel.unprovision` | KernelScreen | Bouton « Retirer » sur kernel provisionné | P1 | ⏳ |
-| 16.4 | `kernel.mainline.detect` | KernelScreen | Bouton « Détecter kernel mainline » | P2 | ⏳ |
-| 16.5 | `zbm.validate` | ZBMScreen | Bouton « Preflight check » (standalone, pas inline coherence) | P1 | ⏳ |
-| 16.6 | `coherence.quick` | CoherenceScreen | Bouton « Vérif rapide » à côté de « Vérif complète » | P2 | ⏳ |
-| 16.7 | `scheduler.verify` | DebugScreen | Bouton « Vérifier scheduler » | P1 | ⏳ |
-| 16.8 | `security.status` | SecurityScreen | Remplacer table hardcodée par `bridge.emit("security.status")` | P1 | ⏳ |
-| 16.9 | `init.detect` | WelcomeScreen | Appeler via bridge au lieu du code local `_detect_init_system()` | P2 | ⏳ |
-| 16.10 | `kernel.module.detect` | ModuleRegistryScreen | Bouton « Scanner modules » remplace table hardcodée | P1 | ⏳ |
-| 16.11 | `kernel.module.integrate` | ModuleRegistryScreen | Bouton « Intégrer dans initramfs » | P1 | ⏳ |
-| 16.12 | `integration.test` | DebugScreen | Bouton « Test intégration » | P2 | ⏳ |
-| 16.13 | `init.boot.config` | (nouveau InitConfigScreen ou dans Config) | Éditer params boot init (modules, cmdline) | P2 | ⏳ |
-| 16.14 | `init.upstart_sysv.install` / `test` | (nouveau InitServiceScreen ou dans Config) | Installer/tester service init | P2 | ⏳ |
-| 16.15 | `zfsbootmenu.integrate` | ZBMScreen | Bouton « Intégration complète ZBM » (full workflow) | P2 | ⏳ |
-| 16.16 | `config.snapshot.*` | ConfigSnapshotScreen | Remplacer import direct par `bridge.emit` (= 10.7) | P1 | ⏳ |
-
-### B — Events UI sans intent — créer les intents manquants
-
-| ID | Event UI | Écran source | Intent à créer | Prio | Statut |
-|----|----------|-------------|----------------|------|--------|
-| 16.20 | `mount.request` | MountsScreen | `@register_intent("mount.request")` → `DatasetMountTask` | P0 | ⏳ |
-| 16.21 | `pool.import` (un seul pool) | DetectionScreen | `@register_intent("pool.import")` → `PoolImportTask` | P0 | ⏳ |
-| 16.22 | `module_registry.load` | ModuleRegistryScreen | `@register_intent("module_registry.load")` → `ModuleRegistryLoadTask` (ou câbler via 16.10) | P1 | ⏳ |
-| 16.23 | `partition.detect` | PartitionDetectionScreen | `@register_intent("partition.detect")` → `PartitionDetectTask` (existe déjà dans `detection_intent.py`, juste manque le binding event name) | P1 | ⏳ |
-| 16.24 | `multiarch.sync` / `multiarch.list` | MultiArchScreen | Soit créer les intents, soit convertir l'écran en bridge vers `kernel.registry.scan` filtré par arch | P2 | ⏳ |
-
-### C — Tasks orphelines — créer intents + câbler UI
-
-| ID | Task | Intent à créer | Écran cible | Prio | Statut |
-|----|------|----------------|-------------|------|--------|
-| 16.30 | `RootfsSwitchTask` | `rootfs.switch` | MountsScreen (mode booted) ou OverlayScreen (Phase 11) | P1 | ⏳ |
-| 16.31 | `RootfsMountTask` | `rootfs.mount` | MountsScreen section overlay | P1 | ⏳ |
-| 16.32 | `RootfsUpdateTask` | `rootfs.update` | MountsScreen (rebuild squashfs) | P2 | ⏳ |
-| 16.33 | `NetworkSetupTask` | `network.setup` | NetworkScreen (Phase 15.1) | P2 | ⏳ |
-| 16.34 | `LiveSetupTask` | `live.setup` | WelcomeScreen (mode deploy, bouton « Setup live ») | P2 | ⏳ |
-| 16.35 | `EnvironmentDetectTask` | `environment.detect` | WelcomeScreen (remplacer code local) | P2 | ⏳ |
-| 16.36 | `ServiceInstallTask` | `service.install` | ConfigScreen ou InitServiceScreen | P2 | ⏳ |
-
-### D — Écrans stubs à compléter ou supprimer
-
-| ID | Écran | Action | Prio | Statut |
-|----|-------|--------|------|--------|
-| 16.40 | `CrossCompileScreen` | Câbler vers `kernel.compile` avec params cross-compile (`arch`, `toolchain`) ou supprimer | P2 | ⏳ |
-| 16.41 | `MultiArchScreen` (simple) | Fusionner avec `multiarch_screen.py` ; câbler vers `kernel.registry.scan` filtré par arch | P2 | ⏳ |
-| 16.42 | `ModuleRegistryScreen` | Câbler vers `kernel.module.detect` + `kernel.module.integrate` (16.10/16.11) | P1 | ⏳ |
-| 16.43 | `PartitionDetectionScreen` | Câbler vers `partition.detect` intent (16.23) | P1 | ⏳ |
-| 16.44 | `NavigationScreen` | Supprimer (code mort, jamais atteignable) | P1 | ⏳ |
-
-### E — Doublon intent
-
-| ID | Problème | Fix | Prio | Statut |
-|----|----------|-----|------|--------|
-| 16.50 | `config.snapshot.*` défini dans `system_intent.py` ET `config_intent.py` | Supprimer de l'un des deux (garder `system_intent.py`, supprimer `config_intent.py` ou l'inverse) | P0 | ⏳ |
+**Vérifier** que le triple fallback a été nettoyé. Si le code fait encore :
+```python
+if self._global_bridge is None:
+    self._global_bridge = GlobalBridge(runtime=..., store=...)
+```
+→ remplacer par :
+```python
+if self._global_bridge is None:
+    from log import get_logger
+    log = get_logger("ui.bridge")
+    log.error("scheduler_bridge_unavailable")
+    # DummyBridge loggué
+    class LoggedDummyBridge:
+        def emit(self, event_name, *a, **kw):
+            log.warning("dummy_bridge_emit", event=event_name)
+            return "dummy-ticket"
+        def poll(self): return []
+        def __getattr__(self, name):
+            return lambda *a, **kw: None
+    self._global_bridge = LoggedDummyBridge()
+```
 
 ---
 
-## ✅ Historique
+## Critères d'acceptation
 
-Phase 7 (terminée 2026-04-15) · Phases 1-6 (terminées avant 2026-04-09)
+1. **Un seul entry point fonctionne** : `python3 -m fsdeploy --debug` démarre via `FsDeployDaemon`, loggue `scheduler_global_instance_set`, affiche la TUI.
 
-## Journal
+2. **Import test** : `cd lib && python3 -c "from scheduler.core.scheduler import Scheduler; s = Scheduler.global_instance(); print(type(s.runtime))"` → `<class 'scheduler.core.runtime.Runtime'>` sans erreur.
 
-| Date | Événement |
-|------|-----------|
-| 2026-04-09 | Début Phase 1 |
-| 2026-04-15 | Phase 7 clôturée (v1.0.0) |
-| 2026-04-16 | Phases 8-10 définies |
-| 2026-04-17 | Phases 11-15 (overlay, bus, logs, config, UI spec) |
-| 2026-04-17 | Phase 16 : audit lib↔UI — 18 intents non câblés, 6 events sans intent, 7 tasks orphelines, 5 écrans stubs, 1 doublon |
+3. **`cd lib && python3 test_run.py`** → 3/3 pass.
+
+4. **`pip install -e .`** fonctionne depuis la racine du repo (si pyproject.toml est corrigé).
+
+5. **Le nouveau `fsdeploy/__main__.py` (argparse)** est soit supprimé, soit redirige vers le daemon.
+
+---
+
+## Ne pas toucher
+
+- Bus, logs, config → Phases 12-14
+- Overlay → Phase 11
+- Screens UI → Phase 10
+- launch.sh → Phase 9
+- Sécurité → Phase 17
+- Câblage lib↔UI → Phase 16
