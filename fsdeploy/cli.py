@@ -17,7 +17,8 @@ from fsdeploy.lib.intents.init_upstart_sysv_intent import (
 )
 from fsdeploy.lib.intents.init_boot_config_intent import InitBootConfigIntent
 from fsdeploy.lib.intents.integration_intent import IntegrationTestIntent
-from fsdeploy.lib.intents.system_intent import InitDetectIntent, CoherenceCheckIntent
+from fsdeploy.lib.intents.init_intent import InitDetectIntent
+from fsdeploy.lib.intents.system_intent import CoherenceCheckIntent
 from fsdeploy.lib.intents.kernel_mainline_intent import KernelMainlineDetectIntent
 # Ajoutez ici d'autres intents au besoin
 
