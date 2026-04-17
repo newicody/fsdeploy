@@ -1,46 +1,40 @@
-# add.md — P0-cleanup : 10.1 + 16.51 + 16.52
+# add.md — 16.53 + 10.4
+
+Deux correctifs simples. L'un est une suppression de 5 lignes, l'autre un déplacement d'imports.
 
 ---
 
-## Fix 1 — 10.1 : Unicode cassé dans `detection.py`
+## Fix 1 — 16.53 : Supprimer `init.detect` doublon de `system_intent.py`
 
-**Fichier** : `fsdeploy/lib/ui/screens/detection.py`
+**Fichier** : `fsdeploy/lib/intents/system_intent.py`
 
-**Problème** : les constantes `CHECK`, `CROSS`, `WARN`, `ARROW` contiennent des codepoints Unicode sous forme de texte brut (`"2705"`, `"274c"`, `"26a0Fe0f"`, `"2192"`) au lieu d'échappements `\uXXXX`. La TUI affiche littéralement `2705` au lieu de ✅.
+**Problème** : `@register_intent("init.detect")` et sa classe `InitDetectIntent` sont définis dans ce fichier. Mais le même intent est déjà défini dans `init_intent.py` (le fichier dédié aux intents `init.*`). Le dernier importé écrase l'autre silencieusement.
 
-**Ce qu'il faut** : utiliser la syntaxe `\uXXXX` (convention du projet : ASCII dans le source, Unicode via escape). Tous les autres écrans le font correctement — voir `mounts.py` (`"\u2705"`), `zbm.py`/`presets.py`/`initramfs.py` (littéraux `"✅"`), `welcome.py` (littéraux). Aligner `detection.py` sur le même style.
-
----
-
-## Fix 2 — 16.51 : `boot_intent.py` est une copie de `detection_intent.py`
-
-**Fichiers** : `fsdeploy/lib/intents/boot_intent.py`, `fsdeploy/lib/intents/detection_intent.py`
-
-**Problème** : `boot_intent.py` contient exactement le même code que `detection_intent.py` — même docstring (`fsdeploy.intents.detection_intent`), mêmes tasks (`PoolImportAllTask`, `DatasetProbeTask`, etc.), mêmes intents (`pool.import_all`, `pool.import`, `mount.request`, `detection.start`, etc.). Le dernier importé par `intents/__init__.py` écrase silencieusement le premier.
-
-**Ce qu'il faut** : `boot_intent.py` devrait contenir uniquement les intents liés au boot/ZBM (qui ne sont PAS dans `detection_intent.py`). Les intents boot/ZBM pertinents sont dans `kernel_intent.py` (`boot.init.generate`, `zbm.validate`) et `system_intent.py` (`zbm.install`, `zbm.status`). 
-
-Donc soit :
-- Vider `boot_intent.py` et y mettre uniquement les intents boot spécifiques qui ne sont pas déjà ailleurs (s'il y en a)
-- Soit supprimer `boot_intent.py` entièrement si tous ses intents légitimes sont déjà couverts par d'autres fichiers, et retirer l'import de `intents/__init__.py`
-
-Le contenu dupliqué (pool/mount/detection) doit rester **uniquement** dans `detection_intent.py`.
+**Ce qu'il faut** : supprimer la classe `InitDetectIntent` et son décorateur `@register_intent("init.detect")` de `system_intent.py`. Ne toucher à rien d'autre dans ce fichier. L'intent reste dans `init_intent.py`.
 
 ---
 
-## Fix 3 — 16.52 : Doublon `init.config.detect`
+## Fix 2 — 10.4 : `welcome.py` — rendre les imports d'écrans lazy
 
-**Fichiers** : `fsdeploy/lib/intents/init_intent.py`, `fsdeploy/lib/intents/init_config_intent.py`
+**Fichier** : `fsdeploy/lib/ui/screens/welcome.py`
 
-**Problème** : `init.config.detect` est enregistré via `@register_intent` dans les deux fichiers. Le second écrase le premier.
+**Problème** : en haut du fichier, 4 imports top-level :
+```
+from .security import SecurityScreen
+from .graph import GraphScreen
+from .intentlog import IntentLogScreen
+from .metrics import MetricsScreen
+```
 
-**Ce qu'il faut** : garder la définition dans `init_intent.py` (c'est là que tous les autres intents `init.*` sont définis). Supprimer le `@register_intent("init.config.detect")` de `init_config_intent.py`. Si le fichier est vide après, le supprimer et retirer son import de `intents/__init__.py`.
+Si un seul de ces fichiers a un import cassé, welcome.py ne charge pas et la TUI ne démarre plus du tout.
+
+**Ce qu'il faut** : déplacer ces 4 imports dans la méthode `_switch_to_screen` qui les utilise, avec un try/except par écran. Le `screen_map` dans cette méthode doit construire ses valeurs au moment de l'appel, pas au chargement du module. L'app utilise déjà des imports lazy dans `app.py screen_map` — même principe ici.
 
 ---
 
 ## Critères d'acceptation
 
-1. DetectionScreen affiche ✅ / ❌ / ⚠️ / → (pas de texte brut `2705`)
-2. `boot_intent.py` ne contient plus les mêmes classes que `detection_intent.py`
-3. `grep -r "init.config.detect" fsdeploy/lib/intents/` → une seule occurrence dans `init_intent.py`
+1. `grep -c "init.detect" fsdeploy/lib/intents/system_intent.py` → `0`
+2. `grep -c "init.detect" fsdeploy/lib/intents/init_intent.py` → `1` ou plus
+3. `python3 -c "from fsdeploy.lib.ui.screens.welcome import WelcomeScreen; print('OK')"` → `OK` même si `graph.py` est temporairement cassé
 4. `cd fsdeploy/lib && python3 test_run.py` → 3/3 pass
