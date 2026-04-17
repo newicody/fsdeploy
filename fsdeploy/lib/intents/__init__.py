@@ -50,7 +50,3 @@ try:
 except ImportError:
     pass
 
-try:
-    from intents.init_config_intent import *
-except ImportError:
-    pass

@@ -21,10 +21,10 @@ from textual.widgets import (
 )
 
 IS_FB = os.environ.get("TERM") == "linux"
-CHECK = "[OK]" if IS_FB else "2705"
-CROSS = "[!!]" if IS_FB else "274c"
-WARN  = "[??]" if IS_FB else "26a0Fe0f"
-ARROW = "->" if IS_FB else "2192"
+CHECK = "[OK]" if IS_FB else "\u2705"
+CROSS = "[!!]" if IS_FB else "\u274c"
+WARN  = "[??]" if IS_FB else "\u26a0\ufe0f"
+ARROW = "->" if IS_FB else "\u2192"
 
 
 class DetectionScreen(Screen):
