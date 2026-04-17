@@ -1,61 +1,75 @@
-# add.md — Tâche 8.1 : Unification scheduler ↔ bridge global
+# add.md — Tâche 8.1b : Fix import path `scheduler.core.runtime`
 
-> **Worker** : charger les fichiers listés, appliquer uniquement les changements décrits.
-
----
-
-## Contexte
-
-Le bridge TUI et le scheduler daemon sont deux instances séparées. Toutes les `bridge.emit()` partent dans le vide. C'est le blocage #1 — tant que ce n'est pas fixé, aucune fonctionnalité UI ne peut être testée ni aucun câblage vérifié (Phase 16).
+> **Worker** : un seul fichier à modifier, un seul fix.
 
 ---
 
-## Fichiers à charger
+## Ce qui a été fait (tout OK ✅)
 
-### 1. `fsdeploy/lib/scheduler/core/scheduler.py`
+- `fsdeploy/__main__.py` → redirecteur vers typer ✅
+- `pyproject.toml` → `fsdeploy.__main__:app` + `packages = ["fsdeploy"]` ✅
+- `ui/bridge.py` → `LoggedDummyBridge` avec warning ✅
 
-**Bug** : `global_instance()` → imports cassés (`scheduler.runtime` n'existe pas), `Resolver()` sans security_resolver, `Executor()` sans runtime.
+## Ce qui reste (1 fix)
 
-**Fix** :
-- Imports : `scheduler.core.runtime.Runtime`, `scheduler.security.resolver.SecurityResolver`
-- Construction : `rt = Runtime()` → `Executor(runtime=rt)` → `Resolver(security_resolver=SecurityResolver())` → `Scheduler(...)`
-- Ajouter `set_global_instance(cls, instance)` classmethod
+### Fichier : `fsdeploy/lib/scheduler/core/scheduler.py`
 
-### 2. `fsdeploy/lib/daemon.py`
-
-**Fix `_init_scheduler()`** : après construction, appeler `Scheduler.set_global_instance(self._scheduler)`
-
-**Fix `_register_all_intents()`** : remplacer la lambda par factory qui propage `_bridge_ticket` :
+Dans `global_instance()`, ligne :
 ```python
-def _make_handler(cls, shared_ctx):
-    def handler(event):
-        ctx = dict(shared_ctx)
-        ticket = event.params.get("_bridge_ticket")
-        if ticket:
-            ctx["_bridge_ticket"] = ticket
-        return [cls(params=event.params, context=ctx)]
-    return handler
+from fsdeploy.lib.scheduler.runtime import Runtime
 ```
 
-### 3. `fsdeploy/lib/scheduler/bridge.py`
+**Le module `fsdeploy.lib.scheduler.runtime` est un répertoire** contenant `state.py` et `monitor.py`. Il n'exporte PAS `Runtime`. La classe `Runtime` (avec `event_queue`, `intent_queue`, `state`) est dans `fsdeploy.lib.scheduler.core.runtime`.
 
-**Fix** : `default()`/`global_instance()` doit accéder au runtime via `Scheduler.global_instance().runtime`. Dans `poll()`, chercher `_bridge_ticket` dans `task.context` ET `task.params` (fallback).
+**Fix** — remplacer par :
+```python
+from fsdeploy.lib.scheduler.core.runtime import Runtime
+```
 
-### 4. `fsdeploy/lib/ui/bridge.py`
+**Contexte** : les trois autres imports dans la même méthode utilisent déjà le bon préfixe `fsdeploy.lib.scheduler.core.*` :
+```python
+from fsdeploy.lib.scheduler.core.resolver import Resolver      # ← .core. ✅
+from fsdeploy.lib.scheduler.core.executor import Executor       # ← .core. ✅
+from fsdeploy.lib.scheduler.runtime import Runtime              # ← manque .core. ❌
+from fsdeploy.lib.scheduler.security.resolver import SecurityResolver  # ✅
+```
 
-**Fix** : si `GlobalBridge.default()` échoue, ne pas créer d'instance locale silencieuse. Logger `"scheduler_bridge_unavailable"` et assigner un DummyBridge loggué.
+**Note** : le daemon (`lib/daemon.py`) et les tests (`lib/test_run.py`) utilisent le style relatif `from scheduler.core.runtime import Runtime` (car `lib/` est dans sys.path). Les deux styles fonctionnent tant qu'ils sont cohérents. Le style absolute `fsdeploy.lib.scheduler.core.*` est celui choisi dans `global_instance()` — il faut juste ajouter le `.core.` manquant.
 
 ---
 
-## Critères d'acceptation
+## Critère d'acceptation
 
-1. `python3 -c "from scheduler.core.scheduler import Scheduler; Scheduler.global_instance()"` → pas d'erreur (depuis `lib/`)
-2. `python3 -m fsdeploy --debug` → log `scheduler_global_instance_set`
-3. `cd lib && python3 test_run.py` → 3/3 tests pass
-4. `bridge.poll()` retrouve les tickets via `task.context["_bridge_ticket"]`
+```bash
+cd fsdeploy/lib && python3 -c "
+from scheduler.core.scheduler import Scheduler
+s = Scheduler.global_instance()
+print(type(s.runtime))
+print(type(s.runtime.event_queue))
+print('OK')
+"
+```
+
+Doit afficher :
+```
+<class 'scheduler.core.runtime.Runtime'>
+<class 'scheduler.queue.event_queue.EventQueue'>
+OK
+```
+
+Et toujours :
+```bash
+cd fsdeploy/lib && python3 test_run.py
+```
+→ 3/3 pass.
 
 ---
 
-## Ne pas toucher
+## Après 8.1b — quelle tâche suivante ?
 
-Phases 9-16 sont toutes bloquées par 8.1. Une fois 8.1 fait, on peut tester le câblage existant et mesurer les gaps Phase 16 en live.
+Une fois 8.1b ✅, le scheduler↔bridge est unifié. Les tâches P0 restantes par ordre d'impact :
+
+1. **16.20 + 16.21** (créer intents `mount.request` et `pool.import`) — sans ça MountsScreen et DetectionScreen crashent dès qu'on clique un bouton
+2. **10.1** (escape Unicode detection.py) — affichage cassé
+3. **16.50** (doublon `config.snapshot.*`) — intent écrasé silencieusement
+4. **10.5** (supprimer doublons écrans) — confusion graph/security/multiarch
