@@ -389,13 +389,6 @@ class SecurityStatusIntent(Intent):
                                    context=self.context)]
 
 
-@register_intent("init.detect")
-class InitDetectIntent(Intent):
-    """Détecte le système d'initialisation en cours."""
-    def build_tasks(self):
-        from ..function.init_check import InitDetectTask
-        return [InitDetectTask(id="init_detect", params=self.params,
-                               context=self.context)]
 
 @register_intent("health.check")
 class HealthCheckIntent(Intent):
