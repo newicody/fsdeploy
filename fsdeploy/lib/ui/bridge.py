@@ -31,6 +31,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 from uuid import uuid4
+from fsdeploy.lib.log import get_logger
 
 
 @dataclass
@@ -99,6 +100,10 @@ class SchedulerBridge:
             except (TypeError, Exception):
                 # Sinon, essayer un constructeur sans arguments
                 self._global_bridge = GlobalBridge()
+            # Logguer l'absence de bridge global
+            log = get_logger("ui.bridge")
+            log.warning("scheduler_bridge_unavailable",
+                        msg="Global bridge unavailable, using standalone instance.")
 
     # ═══════════════════════════════════════════════════════════════
     # EMISSION — la seule methode que la TUI utilise

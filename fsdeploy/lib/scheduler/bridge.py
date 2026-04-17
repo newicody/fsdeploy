@@ -82,8 +82,8 @@ class SchedulerBridge:
     def _get_runtime_state(self):
         """Retourne le RuntimeState du scheduler."""
         scheduler = self._get_scheduler()
-        if scheduler is not None and hasattr(scheduler, 'runtime_state'):
-            return scheduler.runtime_state
+        if scheduler is not None and hasattr(scheduler, 'runtime'):
+            return scheduler.runtime
         # Fallback: essayer d'importer le runtime global
         try:
             from fsdeploy.lib.scheduler.model.runtime import get_global_runtime
@@ -335,7 +335,9 @@ class SchedulerBridge:
             if task is None:
                 continue
             ctx = getattr(task, 'context', {})
-            if ctx.get('_bridge_ticket') == ticket.id:
+            params = getattr(task, 'params', {})
+            ticket_id_from_task = ctx.get('_bridge_ticket') or params.get('_bridge_ticket')
+            if ticket_id_from_task == ticket.id:
                 with self._lock:
                     ticket.status = "completed"
                     ticket.result = result
@@ -354,7 +356,9 @@ class SchedulerBridge:
             if task is None:
                 continue
             ctx = getattr(task, 'context', {})
-            if ctx.get('_bridge_ticket') == ticket.id:
+            params = getattr(task, 'params', {})
+            ticket_id_from_task = ctx.get('_bridge_ticket') or params.get('_bridge_ticket')
+            if ticket_id_from_task == ticket.id:
                 with self._lock:
                     ticket.status = "failed"
                     ticket.error = str(error if error is not None else 'unknown')

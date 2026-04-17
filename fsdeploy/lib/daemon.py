@@ -164,6 +164,8 @@ class FsDeployDaemon:
         )
         self._scheduler._tick_interval = tick
         log.info("scheduler_ready", tick_interval=tick)
+        Scheduler.set_global_instance(self._scheduler)
+        log.info("scheduler_global_instance_set")
 
     def _register_all_intents(self) -> None:
         from scheduler.core.registry import INTENT_REGISTRY
@@ -200,11 +202,17 @@ class FsDeployDaemon:
             "dry_run": dry_run,
             "mount_manager": self._mount_manager,
         }
+        def _make_handler(cls, shared_ctx):
+            def handler(event):
+                ctx = dict(shared_ctx)
+                ticket = event.params.get("_bridge_ticket")
+                if ticket:
+                    ctx["_bridge_ticket"] = ticket
+                return [cls(params=event.params, context=ctx)]
+            return handler
+
         for event_name, intent_class in INTENT_REGISTRY.items():
-            # Création d'un handler qui capture la classe et le contexte
-            handler = lambda event, cls=intent_class, ctx=shared_context: [
-                cls(params=event.params, context=ctx)
-            ]
+            handler = _make_handler(intent_class, shared_context)
             intent_queue.register_handler(event_name, handler)
 
     def _connect_message_bus(self) -> None:

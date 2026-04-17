@@ -90,8 +90,17 @@ class Scheduler:
             from fsdeploy.lib.scheduler.core.resolver import Resolver
             from fsdeploy.lib.scheduler.core.executor import Executor
             from fsdeploy.lib.scheduler.runtime import Runtime
-            cls._global_instance = cls(Resolver(), Executor(), Runtime())
+            from fsdeploy.lib.scheduler.security.resolver import SecurityResolver
+            security_resolver = SecurityResolver()
+            rt = Runtime()
+            resolver = Resolver(security_resolver=security_resolver)
+            executor = Executor(runtime=rt)
+            cls._global_instance = cls(resolver, executor, rt)
         return cls._global_instance
+
+    @classmethod
+    def set_global_instance(cls, instance):
+        cls._global_instance = instance
 
     @classmethod
     def default(cls):
