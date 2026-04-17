@@ -1,75 +1,159 @@
-# add.md — Tâche 8.1b : Fix import path `scheduler.core.runtime`
+# add.md — Batch P0 : 16.20 + 16.21 + 16.50 + 10.1
 
-> **Worker** : un seul fichier à modifier, un seul fix.
-
----
-
-## Ce qui a été fait (tout OK ✅)
-
-- `fsdeploy/__main__.py` → redirecteur vers typer ✅
-- `pyproject.toml` → `fsdeploy.__main__:app` + `packages = ["fsdeploy"]` ✅
-- `ui/bridge.py` → `LoggedDummyBridge` avec warning ✅
-
-## Ce qui reste (1 fix)
-
-### Fichier : `fsdeploy/lib/scheduler/core/scheduler.py`
-
-Dans `global_instance()`, ligne :
-```python
-from fsdeploy.lib.scheduler.runtime import Runtime
-```
-
-**Le module `fsdeploy.lib.scheduler.runtime` est un répertoire** contenant `state.py` et `monitor.py`. Il n'exporte PAS `Runtime`. La classe `Runtime` (avec `event_queue`, `intent_queue`, `state`) est dans `fsdeploy.lib.scheduler.core.runtime`.
-
-**Fix** — remplacer par :
-```python
-from fsdeploy.lib.scheduler.core.runtime import Runtime
-```
-
-**Contexte** : les trois autres imports dans la même méthode utilisent déjà le bon préfixe `fsdeploy.lib.scheduler.core.*` :
-```python
-from fsdeploy.lib.scheduler.core.resolver import Resolver      # ← .core. ✅
-from fsdeploy.lib.scheduler.core.executor import Executor       # ← .core. ✅
-from fsdeploy.lib.scheduler.runtime import Runtime              # ← manque .core. ❌
-from fsdeploy.lib.scheduler.security.resolver import SecurityResolver  # ✅
-```
-
-**Note** : le daemon (`lib/daemon.py`) et les tests (`lib/test_run.py`) utilisent le style relatif `from scheduler.core.runtime import Runtime` (car `lib/` est dans sys.path). Les deux styles fonctionnent tant qu'ils sont cohérents. Le style absolute `fsdeploy.lib.scheduler.core.*` est celui choisi dans `global_instance()` — il faut juste ajouter le `.core.` manquant.
+> **Worker** : 4 correctifs indépendants. Chacun est petit. L'ensemble rend l'UI fonctionnelle.
 
 ---
 
-## Critère d'acceptation
+## Contexte
 
-```bash
-cd fsdeploy/lib && python3 -c "
-from scheduler.core.scheduler import Scheduler
-s = Scheduler.global_instance()
-print(type(s.runtime))
-print(type(s.runtime.event_queue))
-print('OK')
-"
-```
+Le scheduler↔bridge est unifié (8.1 ✅). Mais quand on clique sur un bouton dans la TUI, deux choses se passent :
+- MountsScreen émet `mount.request` → aucun intent enregistré → ticket en pending éternel
+- DetectionScreen émet `pool.import` → aucun intent → idem
+- `detection.py` affiche `2705` au lieu de ✅
 
-Doit afficher :
-```
-<class 'scheduler.core.runtime.Runtime'>
-<class 'scheduler.queue.event_queue.EventQueue'>
-OK
-```
-
-Et toujours :
-```bash
-cd fsdeploy/lib && python3 test_run.py
-```
-→ 3/3 pass.
+Ces 4 fixes rendent la boucle scheduler visible de bout en bout.
 
 ---
 
-## Après 8.1b — quelle tâche suivante ?
+## Fix 1 — 16.20 : Intent `mount.request` manquant
 
-Une fois 8.1b ✅, le scheduler↔bridge est unifié. Les tâches P0 restantes par ordre d'impact :
+### Fichier à modifier : `fsdeploy/lib/intents/detection_intent.py`
 
-1. **16.20 + 16.21** (créer intents `mount.request` et `pool.import`) — sans ça MountsScreen et DetectionScreen crashent dès qu'on clique un bouton
-2. **10.1** (escape Unicode detection.py) — affichage cassé
-3. **16.50** (doublon `config.snapshot.*`) — intent écrasé silencieusement
-4. **10.5** (supprimer doublons écrans) — confusion graph/security/multiarch
+MountsScreen fait `bridge.emit("mount.request", dataset="...", mountpoint="...")`. Il n'existe aucun `@register_intent("mount.request")`.
+
+**Ajouter** à la fin du fichier (ou dans un nouveau `mount_intent.py` importé par `intents/__init__.py`) :
+
+```python
+@register_intent("mount.request")
+class MountRequestIntent(Intent):
+    """Event: mount.request -> DatasetMountTask"""
+    def build_tasks(self):
+        from function.mount.manager import DatasetMountTask
+        return [DatasetMountTask(
+            id="mount_request",
+            params=self.params,
+            context=self.context,
+        )]
+```
+
+**Note** : si `DatasetMountTask` n'existe pas dans `function/mount/manager.py`, utiliser le `MountVerifyTask` existant ou créer un intent léger qui appelle `run_cmd("mount -t zfs {dataset} {mountpoint}")` directement. L'important est que l'event ait un handler.
+
+Vérifier aussi que `mount.verify` et `mount.umount` ont des intents — ils sont documentés dans `api_reference.md` mais doivent être vérifiés dans le code.
+
+---
+
+## Fix 2 — 16.21 : Intent `pool.import` manquant
+
+### Fichier à modifier : `fsdeploy/lib/intents/detection_intent.py`
+
+DetectionScreen fait `bridge.emit("pool.import", pool="nom_pool")` pour importer un seul pool. Seul `pool.import_all` existe.
+
+**Ajouter** :
+
+```python
+@register_intent("pool.import")
+class PoolImportIntent(Intent):
+    """Event: pool.import -> importe un seul pool par nom."""
+    def build_tasks(self):
+        pool_name = self.params.get("pool", "")
+        if not pool_name:
+            return []
+
+        class PoolImportSingleTask(Task):
+            def run(self_task):
+                r = self_task.run_cmd(
+                    f"zpool import -f -N -o cachefile=none {pool_name}",
+                    sudo=True, check=False, timeout=30,
+                )
+                return {
+                    "pool": pool_name,
+                    "success": r.success,
+                    "error": r.stderr if not r.success else "",
+                }
+
+        return [PoolImportSingleTask(
+            id=f"pool_import_{pool_name}",
+            params=self.params,
+            context=self.context,
+        )]
+```
+
+**Alternative plus propre** : si `PoolImportAllTask` sait importer un seul pool via un param, réutiliser cette task avec `params={"pool": pool_name}`.
+
+---
+
+## Fix 3 — 16.50 : Doublon `config.snapshot.*`
+
+### Fichiers concernés :
+- `fsdeploy/lib/intents/system_intent.py` — définit `config.snapshot.save`, `config.snapshot.restore`, `config.snapshot.list`
+- `fsdeploy/lib/intents/config_intent.py` — définit les **mêmes** trois intents
+
+Le dernier importé par `intents/__init__.py` écrase le premier dans `INTENT_REGISTRY`. Résultat imprévisible.
+
+**Fix** : supprimer les trois `@register_intent("config.snapshot.*")` de **`config_intent.py`** (garder ceux de `system_intent.py` qui sont le canonical). 
+
+Si `config_intent.py` ne contient plus rien après suppression, supprimer le fichier et retirer l'import dans `intents/__init__.py` :
+```python
+# Supprimer :
+try:
+    from intents.config_intent import *
+except ImportError:
+    pass
+```
+
+---
+
+## Fix 4 — 10.1 : Escape Unicode dans `detection.py`
+
+### Fichier : `fsdeploy/lib/ui/screens/detection.py`
+
+Lignes actuelles (en haut du fichier) :
+```python
+CHECK = "[OK]" if IS_FB else "2705"
+CROSS = "[!!]" if IS_FB else "274c"
+WARN  = "[??]" if IS_FB else "26a0Fe0f"
+ARROW = "->" if IS_FB else "2192"
+```
+
+Affiche littéralement `2705` dans la TUI au lieu de ✅.
+
+**Fix** :
+```python
+CHECK = "[OK]" if IS_FB else "\u2705"
+CROSS = "[!!]" if IS_FB else "\u274c"
+WARN  = "[??]" if IS_FB else "\u26a0\ufe0f"
+ARROW = "->" if IS_FB else "\u2192"
+```
+
+Ou plus simple, utiliser les littéraux directement :
+```python
+CHECK = "[OK]" if IS_FB else "✅"
+CROSS = "[!!]" if IS_FB else "❌"
+WARN  = "[??]" if IS_FB else "⚠️"
+ARROW = "->" if IS_FB else "→"
+```
+
+(Le fichier a le header `# -*- coding: utf-8 -*-` donc les littéraux UTF-8 sont safe. MAIS attention : le projet utilise la convention "pure ASCII content, Unicode via escape sequences" pour éviter les problèmes `textual serve`. Préférer `\uXXXX`.)
+
+---
+
+## Critères d'acceptation
+
+1. **16.20** : `bridge.emit("mount.request", dataset="test", mountpoint="/mnt/test")` → le ticket passe en `completed` ou `failed` (plus de pending éternel)
+
+2. **16.21** : `bridge.emit("pool.import", pool="test_pool")` → idem
+
+3. **16.50** : `python3 -c "from scheduler.core.registry import INTENT_REGISTRY; print('config.snapshot.save' in INTENT_REGISTRY)"` → `True`, et un seul handler (pas deux)
+
+4. **10.1** : lancer la TUI → DetectionScreen affiche ✅ / ❌ / ⚠️ au lieu de `2705` / `274c` / `26a0Fe0f`
+
+5. **Tests existants** : `cd lib && python3 test_run.py` → 3/3 pass
+
+---
+
+## Après ce batch
+
+Prochaines priorités :
+1. **10.2 + 10.4 + 10.5** — imports uniformes, welcome.py lazy, doublons écrans
+2. **11.1-11.3** — overlay sécurisé (OverlayProfile + MountsScreen)
+3. **17.1-17.4** — sécurité (auth web, hostid, cleanup, confirmation)
