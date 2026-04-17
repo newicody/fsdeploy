@@ -1,47 +1,29 @@
-# add.md — 10.5 + 10.2
+# add.md — 10.5 : Supprimer 3 fichiers doublons
 
 ---
 
-## Fix 1 — 10.5 : Supprimer les doublons d'écrans
+## Quoi
 
-**Fichiers** dans `fsdeploy/lib/ui/screens/` :
+Supprimer 3 fichiers qui sont des doublons inutilisés :
 
-Il y a des paires quasi-identiques :
-- `graph.py` (GraphScreen) ET `graph_enhanced.py` (GraphEnhancedScreen)
-- `security.py` (SecurityScreen) ET `security_enhanced.py` (SecurityEnhancedScreen)
-- `multiarch.py` (MultiArchScreen) ET `multiarch_screen.py` (si existant)
+1. **`fsdeploy/lib/ui/screens/graph_enhanced.py`** — doublon de `graph.py`. Jamais référencé dans `app.py screen_map`.
+2. **`fsdeploy/lib/ui/screens/security_enhanced.py`** — doublon de `security.py`. Jamais référencé dans `app.py screen_map`.
+3. **`fsdeploy/lib/ui/screens/navigation.py`** — code mort. Importe les deux fichiers ci-dessus. Pas dans `app.py screen_map`, pas de binding, inaccessible.
 
-Et `navigation.py` importe les versions `_enhanced` au top-level — même problème que welcome.py avait.
+## Pourquoi
 
-**Ce qu'il faut** :
-- Pour chaque paire, garder un seul fichier. Garder celui qui utilise le bridge (`@property def bridge`) et qui n'est pas hardcodé. En général c'est la version simple (`graph.py`, `security.py`) car les `_enhanced` sont des prototypes avec animation qui ne sont connectés à rien.
-- Supprimer `graph_enhanced.py` et `security_enhanced.py`.
-- Supprimer `navigation.py` — c'est du code mort qui importe les fichiers supprimés et qui n'est enregistré nulle part dans `screen_map` de `app.py`.
-- Si `multiarch_screen.py` existe en doublon de `multiarch.py`, supprimer l'un des deux.
-- Mettre à jour `app.py screen_map` si nécessaire (normalement déjà correct car il pointe vers les versions simples).
+Ces fichiers ne sont utilisés nulle part dans l'app. `app.py screen_map` pointe vers `graph.py` (GraphScreen) et `security.py` (SecurityScreen) — les versions simples. Les versions `_enhanced` et `navigation.py` sont des prototypes jamais câblés qui créent de la confusion.
 
----
+## Nettoyage des références
 
-## Fix 2 — 10.2 : Uniformiser les imports dans les écrans
+Après suppression, vérifier et corriger tout fichier qui les importe :
 
-**Fichiers** : tous les fichiers dans `fsdeploy/lib/ui/screens/*.py`
+- **`test_integration_7_17.py`** importe `NavigationScreen` — supprimer cette ligne et retirer `NavigationScreen` de la liste testée.
+- **`remove_duplicates.sh`** (créé par le worker précédent) — peut être supprimé aussi, il est obsolète.
+- Si d'autres fichiers importent `graph_enhanced`, `security_enhanced`, ou `NavigationScreen` → supprimer ces imports.
 
-**Problème** : trois styles d'import coexistent :
-- `from fsdeploy.lib.ui.screens.X import Y` (absolu complet)
-- `from .X import Y` (relatif)
-- `from ui.screens.X import Y` (dépend de sys.path)
+## Critères
 
-Le troisième style casse si `lib/` n'est pas dans sys.path. Les deux premiers fonctionnent.
-
-**Ce qu'il faut** : dans les fichiers `screens/*.py`, le style relatif `from .X import Y` est le plus robuste (fonctionne quel que soit le sys.path). Dans `app.py`, le style `importlib.import_module("fsdeploy.lib.ui.screens.X")` est déjà utilisé et correct. Uniformiser les écrans restants qui utilisent le style absolu avec chemin complet de `fsdeploy.lib.ui.screens`.
-
-Note : ne pas toucher aux imports des modules `scheduler.*`, `function.*`, `bus.*` — ceux-là dépendent de `lib/` dans sys.path et c'est voulu.
-
----
-
-## Critères d'acceptation
-
-1. `ls fsdeploy/lib/ui/screens/graph_enhanced.py fsdeploy/lib/ui/screens/security_enhanced.py fsdeploy/lib/ui/screens/navigation.py 2>/dev/null` → aucun fichier trouvé
-2. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" fsdeploy/lib/ui/screens/*.py` → aucun résultat
+1. Les 3 fichiers n'existent plus
+2. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" fsdeploy/ --include="*.py"` → aucun résultat
 3. `cd fsdeploy/lib && python3 test_run.py` → 3/3 pass
-4. `python3 -c "from fsdeploy.lib.ui.app import FsDeployApp; print('OK')"` → OK
