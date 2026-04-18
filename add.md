@@ -18,12 +18,22 @@ Ces fichiers ne sont utilisés nulle part dans l'app. `app.py screen_map` pointe
 
 Après suppression, vérifier et corriger tout fichier qui les importe :
 
-- **`test_integration_7_17.py`** importe `NavigationScreen` — supprimer cette ligne et retirer `NavigationScreen` de la liste testée.
-- **`remove_duplicates.sh`** (créé par le worker précédent) — peut être supprimé aussi, il est obsolète.
-- Si d'autres fichiers importent `graph_enhanced`, `security_enhanced`, ou `NavigationScreen` → supprimer ces imports.
+- **`tests/ui/test_screens_integration.py`** importe `GraphEnhancedScreen`, `SecurityEnhancedScreen`, et `NavigationScreen` — supprimer ces imports et retirer ces classes des tests.
+- **`remove_duplicates.sh`** (si présent) — peut être supprimé aussi, il est obsolète.
+- Tout autre fichier référençant `graph_enhanced`, `security_enhanced`, ou `NavigationScreen` → supprimer ces imports.
 
-## Critères
+## Critères de complétion
 
 1. Les 3 fichiers n'existent plus
 2. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" fsdeploy/ --include="*.py"` → aucun résultat
-3. `cd fsdeploy/lib && python3 test_run.py` → 3/3 pass
+3. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" tests/ --include="*.py"` → aucun résultat
+4. `cd fsdeploy/lib && python3 -c "from fsdeploy.lib.ui.app import FsDeployApp"` → pas d'erreur d'import
+
+---
+
+## Prochaine tâche après 10.5
+
+**10.2** — Audit Textual 8.x compatibilité sur tous les écrans :
+- Vérifier qu'aucun écran n'assigne `self.name = "..."` dans `__init__`
+- Vérifier `Select.NULL` (pas `Select.BLANK`)
+- Vérifier `on_data_table_row_highlighted` (pas `on_data_table_row_selected`)
