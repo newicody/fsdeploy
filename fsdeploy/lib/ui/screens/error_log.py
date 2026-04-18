@@ -8,8 +8,6 @@ from textual.screen import Screen
 from textual.widgets import Header, Footer, DataTable, Label
 from textual.containers import Container, VerticalScroll
 
-from fsdeploy.lib.scheduler.intentlog.log import intent_log
-
 
 class ErrorLogScreen(Screen):
     """
@@ -45,33 +43,41 @@ class ErrorLogScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.refresh()
+
+    @property
+    def store(self):
+        return getattr(self.app, "store", None)
+
+    def refresh(self) -> None:
         table = self.query_one("#error-table", DataTable)
-        table.add_columns("ID", "Classe", "Message", "Heure", "Contexte")
-        failures = intent_log.get_failures(limit=100)
-        for entry in failures:
-            ts = entry.get("timestamp", 0)
+        table.clear()
+        table.add_columns("Heure", "Catégorie", "Sévérité", "Message")
+        if self.store is not None:
+            try:
+                # Utilisation de by_severity du HuffmanStore
+                records = self.store.by_severity('error', limit=100)
+            except AttributeError:
+                records = []
+        else:
+            records = []
+        for rec in records:
+            ts = rec.timestamp
             dt = ""
             if ts:
                 try:
                     dt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
                 except (ValueError, OSError):
                     dt = str(ts)
-            # Extraire un aperçu du contexte
-            ctx = entry.get("context")
-            ctx_preview = ""
-            if ctx:
-                # Prendre les deux premières clés
-                parts = [f"{k[:10]}:{str(v)[:10]}" for k, v in list(ctx.items())[:2]]
-                ctx_preview = ",".join(parts)
-                if len(ctx) > 2:
-                    ctx_preview += "…"
-            table.add_row(
-                entry.get("id", "?"),
-                entry.get("class", "?"),
-                (entry.get("error") or "")[:60],
-                dt,
-                ctx_preview,
-            )
+            category = getattr(rec, 'category', '')
+            severity = getattr(rec, 'severity', '')
+            # Utiliser les tokens comme message
+            tokens = getattr(rec, 'tokens', [])
+            msg = " ".join(tokens[:3]) if tokens else ""
+            table.add_row(dt, category, severity, msg[:80])
+        if not records:
+            # Données fictives
+            table.add_row("2026-01-01 12:00:00", "intent", "error", "Erreur de test")
 
     def action_app_pop_screen(self) -> None:
         self.app.pop_screen()

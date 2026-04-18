@@ -12,8 +12,6 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Label
 from textual.containers import Vertical
 
-from fsdeploy.lib.scheduler.intentlog.log import intent_log
-
 
 class HistoryScreen(Screen):
     BINDINGS = [
@@ -35,25 +33,29 @@ class HistoryScreen(Screen):
     def on_mount(self) -> None:
         self.refresh()
 
+    @property
+    def store(self):
+        return getattr(self.app, "store", None)
+
     def action_refresh(self) -> None:
         table = self.query_one("#table", DataTable)
         table.clear(columns=True)
         table.add_columns("Heure", "Catégorie", "Action", "Données")
-        store = intent_log.store
-        records = []
-        if store is not None:
-            # Si c'est un HuffmanStore (ou a un attribut events)
-            if hasattr(store, "events"):
-                records = store.events.last(100)
-            elif hasattr(store, "last"):
-                records = store.last(100)
-            for rec in records:
-                dt = datetime.fromtimestamp(rec.timestamp).strftime("%H:%M:%S")
-                tokens = " ".join(rec.tokens[:3]) if hasattr(rec, 'tokens') else ""
-                category = getattr(rec, 'category', '')
-                action = getattr(rec, 'action', '')
-                table.add_row(dt, category, action, tokens)
+        if self.store is not None:
+            try:
+                # Utilisation de la méthode last du HuffmanStore
+                records = self.store.last(100)
+            except AttributeError:
+                records = []
         else:
+            records = []
+        for rec in records:
+            dt = datetime.fromtimestamp(rec.timestamp).strftime("%H:%M:%S")
+            tokens = " ".join(rec.tokens[:3]) if hasattr(rec, 'tokens') else ""
+            category = getattr(rec, 'category', '')
+            action = getattr(rec, 'action', '')
+            table.add_row(dt, category, action, tokens)
+        if not records:
             # Données fictives pour démonstration
             for i in range(5):
                 ts = time.time() - i*10
