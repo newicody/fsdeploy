@@ -60,6 +60,6 @@ class HistoryScreen(Screen):
                 dt = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
                 table.add_row(dt, "event", "test", f"token{i}")
 
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         # Option: afficher plus de détails
         self.app.bell()
