@@ -1,17 +1,19 @@
-# add.md — 19.2b : Câbler GraphScreen au bridge (scheduler state live)
+# add.md — 19.2d : Câbler monitoring.py au bridge
 
-## Fichier : `fsdeploy/lib/ui/screens/graph.py`
+## Fichier à modifier : `fsdeploy/lib/ui/screens/monitoring.py`
 
-L'écran affiche des données fictives. Le bridge expose `bridge.get_scheduler_state()` qui retourne events, intents, tasks, completed, active_task, recent_tasks. Il faut afficher ces données avec un timer de rafraîchissement.
+**Seule violation architecture restante dans les écrans.**
+
+Ligne 12 : `from ...scheduler.metrics import get_task_metrics, get_performance_stats` → supprimer cet import et utiliser `bridge.get_scheduler_state()` à la place (comme `graph.py` et `metrics.py`).
 
 ## Réécrire le fichier complet :
 
 ```python
 # -*- coding: utf-8 -*-
 """
-fsdeploy.ui.screens.graph
-===========================
-Ecran GraphView : etat temps reel du scheduler.
+fsdeploy.ui.screens.monitoring
+=================================
+Tableau de bord de monitoring des taches.
 Compatible : Textual >=8.2.1
 """
 
@@ -20,9 +22,9 @@ from typing import Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical
+from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Label, ProgressBar, Static
+from textual.widgets import DataTable, Footer, Header, Label, Static
 
 IS_FB = os.environ.get("TERM") == "linux"
 ICONS = {
@@ -30,11 +32,10 @@ ICONS = {
     "running": "[>]" if IS_FB else "\U0001f504",
     "completed": "[+]" if IS_FB else "\u2705",
     "failed": "[X]" if IS_FB else "\u274c",
-    "arrow": "->" if IS_FB else "\u2192",
 }
 
 
-class GraphScreen(Screen):
+class MonitoringScreen(Screen):
 
     BINDINGS = [
         Binding("r", "refresh", "Rafraichir", show=True),
@@ -43,15 +44,12 @@ class GraphScreen(Screen):
     ]
 
     DEFAULT_CSS = """
-    GraphScreen { layout: vertical; }
-    #graph-header { height: auto; padding: 1 2; text-style: bold; }
-    #pipeline { height: 3; padding: 0 2; text-style: bold; }
-    #task-detail { height: auto; min-height: 4; margin: 0 1;
-                   border: solid $accent; padding: 1 2; }
-    #history-section { height: 1fr; margin: 0 1;
-                       border: solid $primary; padding: 0 1; }
+    MonitoringScreen { layout: vertical; }
+    #mon-header { height: auto; padding: 1 2; text-style: bold; }
+    #mon-stats { height: 2; padding: 0 2; }
+    #task-section { height: 1fr; margin: 0 1; border: solid $primary; padding: 0 1; }
     .table-title { text-style: bold; height: 1; }
-    #status-bar { dock: bottom; height: 1; background: $primary-background;
+    #mon-status { dock: bottom; height: 1; background: $primary-background;
                   color: $text-muted; padding: 0 2; }
     """
 
@@ -66,20 +64,19 @@ class GraphScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static("Pipeline Scheduler", id="graph-header")
-        yield Static("", id="pipeline")
-        yield Static("Aucune tache active", id="task-detail")
-        with Vertical(id="history-section"):
+        yield Static("Monitoring", id="mon-header")
+        yield Static("", id="mon-stats")
+        with Vertical(id="task-section"):
             yield Label("Taches recentes", classes="table-title")
-            yield DataTable(id="history-table")
-        yield Static("Mode : LIVE | Pause : Space", id="status-bar")
+            yield DataTable(id="task-table")
+        yield Static("Mode : LIVE | Pause : Space", id="mon-status")
         yield Footer()
 
     def on_mount(self) -> None:
-        table = self.query_one("#history-table", DataTable)
+        table = self.query_one("#task-table", DataTable)
         table.add_columns("Statut", "Tache", "Duree")
         table.cursor_type = "row"
-        self._timer = self.set_interval(1.0, self._update_data)
+        self._timer = self.set_interval(5.0, self._update_data)
         self._update_data()
 
     def on_unmount(self) -> None:
@@ -88,12 +85,13 @@ class GraphScreen(Screen):
 
     def action_refresh(self) -> None:
         self._update_data()
+        self.notify("Monitoring actualise", timeout=2)
 
     def action_toggle_pause(self) -> None:
         self._paused = not self._paused
         mode = "PAUSED" if self._paused else "LIVE"
         try:
-            self.query_one("#status-bar", Static).update(
+            self.query_one("#mon-status", Static).update(
                 f"Mode : {mode} | Pause : Space"
             )
         except Exception:
@@ -105,56 +103,35 @@ class GraphScreen(Screen):
         if not self.bridge:
             return
         state = self.bridge.get_scheduler_state()
-        self._update_pipeline(state)
-        self._update_task_detail(state)
-        self._update_history(state)
+        self._update_stats(state)
+        self._update_table(state)
 
-    def _update_pipeline(self, state: dict) -> None:
-        arrow = ICONS["arrow"]
-        p = ICONS["pending"]
-        r = ICONS["running"]
-        d = ICONS["completed"]
+    def _update_stats(self, state: dict) -> None:
         ec = state.get("event_count", 0)
         ic = state.get("intent_count", 0)
         tc = state.get("task_count", 0)
         cc = state.get("completed_count", 0)
         text = (
-            f"  [{p} Events: {ec}] {arrow} "
-            f"[{p} Intents: {ic}] {arrow} "
-            f"[{r} Tasks: {tc}] {arrow} "
-            f"[{d} Done: {cc}]"
+            f"  Events: {ec} | Intents: {ic} | "
+            f"Tasks actives: {tc} | Completees: {cc}"
         )
         try:
-            self.query_one("#pipeline", Static).update(text)
+            self.query_one("#mon-stats", Static).update(text)
         except Exception:
             pass
 
-    def _update_task_detail(self, state: dict) -> None:
-        active = state.get("active_task")
-        if not active:
-            text = "  Aucune tache active"
-        else:
-            name = active.get("name", active.get("id", "?"))
-            status = active.get("status", "?")
-            progress = active.get("progress", 0)
-            duration = active.get("duration", 0)
-            icon = ICONS.get(status, "[?]")
-            text = (
-                f"  {icon} {name}\n"
-                f"  Statut: {status} ({progress}%) | Duree: {duration:.1f}s"
-            )
-        try:
-            self.query_one("#task-detail", Static).update(text)
-        except Exception:
-            pass
-
-    def _update_history(self, state: dict) -> None:
+    def _update_table(self, state: dict) -> None:
         recent = state.get("recent_tasks", [])
+        active = state.get("active_task")
         try:
-            table = self.query_one("#history-table", DataTable)
+            table = self.query_one("#task-table", DataTable)
             table.clear()
+            if active:
+                name = active.get("name", active.get("id", "?"))
+                duration = active.get("duration", 0)
+                table.add_row(ICONS["running"], name, f"{duration:.1f}s")
             for task in recent[-10:]:
-                status = task.get("status", "?")
+                status = task.get("status", "completed")
                 icon = ICONS.get(status, "[?]")
                 name = task.get("name", task.get("id", "?"))
                 duration = task.get("duration", 0)
@@ -168,7 +145,6 @@ class GraphScreen(Screen):
 
 ## Critères
 
-1. `grep "get_scheduler_state" fsdeploy/lib/ui/screens/graph.py` → présent
-2. `grep "set_interval" fsdeploy/lib/ui/screens/graph.py` → timer 1s présent
-3. Aucune donnée fictive (`pool.boot`, `dataset.home`) dans le fichier
-4. Pipeline affiche events → intents → tasks → completed en temps réel
+1. `grep "from.*scheduler" fsdeploy/lib/ui/screens/monitoring.py` → aucun résultat
+2. `grep "get_scheduler_state" fsdeploy/lib/ui/screens/monitoring.py` → présent
+3. Aucun import relatif `from ...` dans le fichier
