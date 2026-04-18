@@ -27,6 +27,7 @@
 | 17.7 | pyproject.toml |
 | Phase 1-6 | Stabilisation TUI, robustesse, init/, tests, nettoyage |
 | 7.0 | launch.sh branche dev |
+| 20.1 | Supprimer 6 scripts racine orphelins + résoudre double nesting fsdeploy/fsdeploy/ |
 
 ---
 
@@ -46,7 +47,6 @@ Aucune tâche bloquante restante.
 
 | ID | Description |
 |----|-------------|
-| **20.1** | Supprimer 6 scripts racine orphelins + résoudre double nesting fsdeploy/fsdeploy/ |
 | **19.1** | Implémenter 2 vrais task stubs : `snapshot/destroy.py` (class pass), `dataset/create.py` (class pass). Les 14 autres sont des re-exports valides (7) ou modules désactivés volontairement (7). |
 | **19.2** | Câbler 13 écrans au bridge : config, config_snapshot, crosscompile, debug, error_log, graph, history, intentlog, metrics, monitoring, multiarch, security, welcome |
 | **11.1** | SquashFS mount/overlay |
