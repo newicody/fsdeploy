@@ -37,6 +37,12 @@ class Executor:
             max_workers=max_workers,
             thread_name_prefix="fsdeploy-task",
         )
+        self.resolver = None
+        try:
+            from fsdeploy.lib.scheduler.security.resolver import SecurityResolver
+            self.resolver = SecurityResolver(config=getattr(runtime, 'config', None))
+        except ImportError:
+            pass
         self._futures: dict[str, Future] = {}  # task.id → Future
         self._lock = threading.Lock()           # protège _futures
         self._on_complete: list[Callable] = []  # hooks post-exécution
@@ -63,6 +69,16 @@ class Executor:
 
         if hasattr(task, "set_runtime"):
             task.set_runtime(self.runtime)
+
+        # Security check
+        if self.resolver is not None:
+            ctx = {"dry_run": getattr(self.runtime, "dry_run", False)}
+            allowed, reason = self.resolver.check(task, ctx)
+            if not allowed:
+                self.runtime.state.release_locks(locks)
+                self.runtime.state.fail(task, Exception(reason))
+                self._emit_completion_event(task, error=reason)
+                return
 
         # Marquer la task comme running
         self.runtime.state.start(task)

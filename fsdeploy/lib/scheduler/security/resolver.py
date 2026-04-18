@@ -16,6 +16,7 @@ class SecurityResolver:
     """
     Vérifie les droits et produit les locks/ressources pour une task.
     """
+    SECURITY_LEVELS = ("allow", "deny", "require_sudo", "dry_run_only")
 
     def __init__(self, policies: list[Callable] | None = None,
                  config: Any = None, bypass: bool = False):
@@ -118,29 +119,39 @@ class SecurityResolver:
     def _check_config_rules(self, sec_path: str, task, context: dict) -> tuple[bool, str | None]:
         """
         Vérifie les règles dans configobj.
-        Section [security] avec des clés comme :
-            dataset.snapshot.allowed = true
-            dataset.destroy.require_confirm = true
+        Cherche la règle correspondant au security_path ou à un parent.
+        Les niveaux possibles : allow, deny, require_sudo, dry_run_only.
         """
         if not self.config:
             return True, None
-
         try:
             security_section = self.config.get("security", {})
-            rule = security_section.get(sec_path, {})
+            rule = None
+            parts = sec_path.split(".")
+            for i in range(len(parts), 0, -1):
+                key = ".".join(parts[:i])
+                if key in security_section:
+                    rule = security_section[key]
+                    break
+            if rule is None:
+                return True, None  # pas de règle = allow
 
+            # Normaliser
             if isinstance(rule, dict):
-                if rule.get("allowed") == "false":
-                    return False, f"Disabled by config: {sec_path}"
-                if rule.get("require_confirm") == "true":
-                    # La confirmation est gérée par la TUI, pas ici
-                    pass
+                level = rule.get("level", "allow")
+            else:
+                level = str(rule).strip().lower()
 
-            elif isinstance(rule, str):
-                if rule == "false" or rule == "deny":
-                    return False, f"Denied by config: {sec_path}"
-
+            if level == "deny":
+                return False, f"Denied by config: {sec_path}"
+            elif level == "require_sudo":
+                if not self._check_privilege():
+                    return False, f"Requires sudo: {sec_path}"
+            elif level == "dry_run_only":
+                dry_run = context.get("dry_run", False)
+                if not dry_run:
+                    return False, f"Allowed only in dry-run mode: {sec_path}"
+            # "allow" ou inconnu = autorise
         except Exception:
             pass
-
         return True, None
