@@ -1,39 +1,50 @@
-# add.md — 10.5 : Supprimer 3 fichiers doublons
+# add.md — 10.5b : Nettoyage écrans orphelins + fix Textual 8.x
 
 ---
 
 ## Quoi
 
-Supprimer 3 fichiers qui sont des doublons inutilisés :
+3 actions groupées, toutes P0 :
 
-1. **`fsdeploy/lib/ui/screens/graph_enhanced.py`** — doublon de `graph.py`. Jamais référencé dans `app.py screen_map`.
-2. **`fsdeploy/lib/ui/screens/security_enhanced.py`** — doublon de `security.py`. Jamais référencé dans `app.py screen_map`.
-3. **`fsdeploy/lib/ui/screens/navigation.py`** — code mort. Importe les deux fichiers ci-dessus. Pas dans `app.py screen_map`, pas de binding, inaccessible.
+### A. Nettoyer `fsdeploy/tests/ui/test_screens_integration.py`
 
-## Pourquoi
+10.5a a supprimé `graph_enhanced.py`, `security_enhanced.py`, `navigation.py` mais le fichier test les importe encore → crash import.
 
-Ces fichiers ne sont utilisés nulle part dans l'app. `app.py screen_map` pointe vers `graph.py` (GraphScreen) et `security.py` (SecurityScreen) — les versions simples. Les versions `_enhanced` et `navigation.py` sont des prototypes jamais câblés qui créent de la confusion.
+- Supprimer l'import `from fsdeploy.lib.ui.screens.graph_enhanced import GraphEnhancedScreen`
+- Supprimer l'import `from fsdeploy.lib.ui.screens.security_enhanced import SecurityEnhancedScreen`
+- Supprimer l'import `from fsdeploy.lib.ui.screens.partition_detection import PartitionDetectionScreen` (fichier supprimé en C)
+- Supprimer les fonctions `test_graph_screen()`, `test_security_screen_load_rules()`, `test_partition_screen_scan()`
+- Garder les 3 tests restants (`test_crosscompile_screen`, `test_multiarch_screen`, `test_moduleregistry_screen`)
 
-## Nettoyage des références
+### B. Fix Textual 8.x dans `fsdeploy/lib/ui/screens/history.py`
 
-Après suppression, vérifier et corriger tout fichier qui les importe :
+Ligne 63 : `on_data_table_row_selected` → `on_data_table_row_highlighted`
+Même ligne : `DataTable.RowSelected` → `DataTable.RowHighlighted`
 
-- **`tests/ui/test_screens_integration.py`** importe `GraphEnhancedScreen`, `SecurityEnhancedScreen`, et `NavigationScreen` — supprimer ces imports et retirer ces classes des tests.
-- **`remove_duplicates.sh`** (si présent) — peut être supprimé aussi, il est obsolète.
-- Tout autre fichier référençant `graph_enhanced`, `security_enhanced`, ou `NavigationScreen` → supprimer ces imports.
+### C. Supprimer 5 fichiers orphelins
 
-## Critères de complétion
+Aucun n'est référencé dans `app.py screen_map` :
 
-1. Les 3 fichiers n'existent plus
-2. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" fsdeploy/ --include="*.py"` → aucun résultat
-3. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" tests/ --include="*.py"` → aucun résultat
-4. `cd fsdeploy/lib && python3 -c "from fsdeploy.lib.ui.app import FsDeployApp"` → pas d'erreur d'import
+1. `fsdeploy/lib/ui/screens/multiarch_screen.py` (93L) — doublon de `multiarch.py`
+2. `fsdeploy/lib/ui/screens/livegraph.py` (143L) — pas dans screen_map
+3. `fsdeploy/lib/ui/screens/partition_detection.py` (113L) — pas dans screen_map, utilise `on_data_table_row_selected`
+4. `fsdeploy/ui/screens/__init__.py` (95L) — ancien emplacement hors `lib/`
+5. `fsdeploy/ui/screens/graph.py` (403L) — vieille version hors `lib/`
+
+Après suppression, supprimer le dossier `fsdeploy/ui/screens/` (et `fsdeploy/ui/` s'il est vide).
 
 ---
 
-## Prochaine tâche après 10.5
+## Critères
 
-**10.2** — Audit Textual 8.x compatibilité sur tous les écrans :
-- Vérifier qu'aucun écran n'assigne `self.name = "..."` dans `__init__`
-- Vérifier `Select.NULL` (pas `Select.BLANK`)
-- Vérifier `on_data_table_row_highlighted` (pas `on_data_table_row_selected`)
+1. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" --include="*.py" .` → aucun résultat
+2. `grep -rn "on_data_table_row_selected" fsdeploy/lib/ --include="*.py"` → uniquement des commentaires (compat.py, snapshots.py docstring)
+3. Les 5 fichiers orphelins n'existent plus
+4. `fsdeploy/ui/screens/` n'existe plus
+5. Les 3 tests restants dans `test_screens_integration.py` importent correctement
+
+---
+
+## Prochaine tâche après 10.5b
+
+**9.1** — `fsdeploy/lib/function/live/setup.py` : remplacer `linux-headers-amd64` hardcodé par détection dynamique via `uname -r`.
