@@ -1,19 +1,163 @@
-# add.md — 19.2d : Câbler monitoring.py au bridge
+# add.md — 19.2f : Câbler crosscompile + multiarch (derniers stubs)
 
-## Fichier à modifier : `fsdeploy/lib/ui/screens/monitoring.py`
+Ces 2 écrans affichent des données fictives codées en dur. Les intents existent déjà.
 
-**Seule violation architecture restante dans les écrans.**
+---
 
-Ligne 12 : `from ...scheduler.metrics import get_task_metrics, get_performance_stats` → supprimer cet import et utiliser `bridge.get_scheduler_state()` à la place (comme `graph.py` et `metrics.py`).
+## A. Réécrire `fsdeploy/lib/ui/screens/crosscompile.py`
 
-## Réécrire le fichier complet :
+Intent disponible : `kernel.compile` (params: architecture, toolchain, config)
 
 ```python
 # -*- coding: utf-8 -*-
 """
-fsdeploy.ui.screens.monitoring
-=================================
-Tableau de bord de monitoring des taches.
+fsdeploy.ui.screens.crosscompile
+===================================
+Cross-compilation kernel pour autres architectures.
+Compatible : Textual >=8.2.1
+"""
+
+import os
+from typing import Any
+
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
+from textual.screen import Screen
+from textual.widgets import Button, DataTable, Footer, Header, Label, Log, Static
+from textual import on
+
+IS_FB = os.environ.get("TERM") == "linux"
+CHECK = "[OK]" if IS_FB else "\u2705"
+CROSS_ICON = "[!!]" if IS_FB else "\u274c"
+
+ARCHITECTURES = [
+    ("aarch64", "gcc-aarch64-linux-gnu"),
+    ("riscv64", "gcc-riscv64-linux-gnu"),
+    ("armhf", "gcc-arm-linux-gnueabihf"),
+    ("mips64el", "gcc-mips64el-linux-gnuabi64"),
+]
+
+
+class CrossCompileScreen(Screen):
+
+    BINDINGS = [
+        Binding("r", "refresh", "Rafraichir", show=True),
+        Binding("escape", "app.pop_screen", "Retour", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    CrossCompileScreen { layout: vertical; }
+    #cc-header { height: auto; padding: 1 2; text-style: bold; }
+    #cc-status { padding: 0 2; height: 1; color: $text-muted; }
+    #arch-section { height: 1fr; margin: 0 1; border: solid $primary; padding: 0 1; }
+    .table-title { text-style: bold; height: 1; }
+    #button-bar { height: 3; padding: 0 2; layout: horizontal; }
+    #button-bar Button { margin: 0 1; }
+    #command-log { height: 6; margin: 0 1; border: solid $primary-background; padding: 0 1; }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Static("Cross-compilation kernel", id="cc-header")
+        yield Static("", id="cc-status")
+        with Vertical(id="arch-section"):
+            yield Label("Architectures", classes="table-title")
+            yield DataTable(id="arch-table")
+        with Horizontal(id="button-bar"):
+            yield Button("Compiler", variant="success", id="btn-compile")
+            yield Button("Rafraichir", variant="primary", id="btn-refresh")
+        yield Log(id="command-log", highlight=True, auto_scroll=True)
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one("#arch-table", DataTable)
+        table.add_columns("Architecture", "Toolchain", "Statut")
+        table.cursor_type = "row"
+        self.action_refresh()
+
+    def action_refresh(self) -> None:
+        if not self.bridge:
+            self._set_status("Bridge indisponible")
+            return
+        self._log("-> kernel.registry.scan")
+        self.bridge.emit("kernel.registry.scan", callback=self._on_scan_done)
+
+    def _on_scan_done(self, ticket) -> None:
+        table = self.query_one("#arch-table", DataTable)
+        table.clear()
+        if ticket.status == "failed":
+            self._safe_log(f"{CROSS_ICON} Erreur : {ticket.error}")
+            for arch, tc in ARCHITECTURES:
+                table.add_row(arch, tc, "inconnu")
+        else:
+            result = ticket.result or {}
+            kernels = result.get("kernels", {})
+            for arch, tc in ARCHITECTURES:
+                found = any(k.get("arch") == arch for k in kernels.values()) if isinstance(kernels, dict) else False
+                status = f"{CHECK} disponible" if found else "absent"
+                table.add_row(arch, tc, status)
+            self._safe_log(f"{CHECK} Scan termine")
+        self._set_status(f"{len(ARCHITECTURES)} architectures")
+
+    @on(Button.Pressed, "#btn-compile")
+    def handle_compile(self) -> None:
+        if not self.bridge:
+            return
+        table = self.query_one("#arch-table", DataTable)
+        idx = table.cursor_row
+        if idx is None or idx >= len(ARCHITECTURES):
+            self.notify("Selectionnez une architecture", severity="warning")
+            return
+        arch, toolchain = ARCHITECTURES[idx]
+        self._log(f"-> kernel.compile (arch={arch})")
+        self.bridge.emit("kernel.compile", architecture=arch, toolchain=toolchain, callback=self._on_compile_done)
+
+    def _on_compile_done(self, ticket) -> None:
+        if ticket.status == "failed":
+            self._safe_log(f"{CROSS_ICON} Compilation echouee : {ticket.error}")
+        else:
+            self._safe_log(f"{CHECK} Compilation terminee")
+
+    @on(Button.Pressed, "#btn-refresh")
+    def handle_refresh_btn(self) -> None:
+        self.action_refresh()
+
+    def _log(self, msg):
+        try: self.query_one("#command-log", Log).write_line(msg)
+        except Exception: pass
+
+    def _safe_log(self, msg):
+        try: self.call_from_thread(self._log, msg)
+        except RuntimeError: self._log(msg)
+
+    def _set_status(self, text):
+        try: self.query_one("#cc-status", Static).update(text)
+        except Exception: pass
+
+    def update_from_snapshot(self, s: Any) -> None:
+        pass
+```
+
+---
+
+## B. Réécrire `fsdeploy/lib/ui/screens/multiarch.py`
+
+Intent disponible : `kernel.list` (retourne les kernels disponibles par architecture)
+
+```python
+# -*- coding: utf-8 -*-
+"""
+fsdeploy.ui.screens.multiarch
+================================
+Support multi-architecture.
 Compatible : Textual >=8.2.1
 """
 
@@ -24,39 +168,31 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Label, Static
+from textual.widgets import DataTable, Footer, Header, Label, Log, Static
 
 IS_FB = os.environ.get("TERM") == "linux"
-ICONS = {
-    "pending": "[.]" if IS_FB else "\u23f3",
-    "running": "[>]" if IS_FB else "\U0001f504",
-    "completed": "[+]" if IS_FB else "\u2705",
-    "failed": "[X]" if IS_FB else "\u274c",
-}
+CHECK = "[OK]" if IS_FB else "\u2705"
+CROSS_ICON = "[!!]" if IS_FB else "\u274c"
 
 
-class MonitoringScreen(Screen):
+class MultiArchScreen(Screen):
 
     BINDINGS = [
         Binding("r", "refresh", "Rafraichir", show=True),
-        Binding("space", "toggle_pause", "Pause", show=True),
         Binding("escape", "app.pop_screen", "Retour", show=False),
     ]
 
     DEFAULT_CSS = """
-    MonitoringScreen { layout: vertical; }
-    #mon-header { height: auto; padding: 1 2; text-style: bold; }
-    #mon-stats { height: 2; padding: 0 2; }
-    #task-section { height: 1fr; margin: 0 1; border: solid $primary; padding: 0 1; }
+    MultiArchScreen { layout: vertical; }
+    #ma-header { height: auto; padding: 1 2; text-style: bold; }
+    #ma-status { padding: 0 2; height: 1; color: $text-muted; }
+    #kernel-section { height: 1fr; margin: 0 1; border: solid $primary; padding: 0 1; }
     .table-title { text-style: bold; height: 1; }
-    #mon-status { dock: bottom; height: 1; background: $primary-background;
-                  color: $text-muted; padding: 0 2; }
+    #command-log { height: 6; margin: 0 1; border: solid $primary-background; padding: 0 1; }
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._paused = False
-        self._timer = None
 
     @property
     def bridge(self):
@@ -64,87 +200,68 @@ class MonitoringScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static("Monitoring", id="mon-header")
-        yield Static("", id="mon-stats")
-        with Vertical(id="task-section"):
-            yield Label("Taches recentes", classes="table-title")
-            yield DataTable(id="task-table")
-        yield Static("Mode : LIVE | Pause : Space", id="mon-status")
+        yield Static("Multi-architecture", id="ma-header")
+        yield Static("", id="ma-status")
+        with Vertical(id="kernel-section"):
+            yield Label("Kernels par architecture", classes="table-title")
+            yield DataTable(id="kernel-table")
+        yield Log(id="command-log", highlight=True, auto_scroll=True)
         yield Footer()
 
     def on_mount(self) -> None:
-        table = self.query_one("#task-table", DataTable)
-        table.add_columns("Statut", "Tache", "Duree")
+        table = self.query_one("#kernel-table", DataTable)
+        table.add_columns("Architecture", "Kernel", "Initramfs", "Boot")
         table.cursor_type = "row"
-        self._timer = self.set_interval(5.0, self._update_data)
-        self._update_data()
-
-    def on_unmount(self) -> None:
-        if self._timer:
-            self._timer.stop()
+        self.action_refresh()
 
     def action_refresh(self) -> None:
-        self._update_data()
-        self.notify("Monitoring actualise", timeout=2)
-
-    def action_toggle_pause(self) -> None:
-        self._paused = not self._paused
-        mode = "PAUSED" if self._paused else "LIVE"
-        try:
-            self.query_one("#mon-status", Static).update(
-                f"Mode : {mode} | Pause : Space"
-            )
-        except Exception:
-            pass
-
-    def _update_data(self) -> None:
-        if self._paused:
-            return
         if not self.bridge:
+            self._set_status("Bridge indisponible")
             return
-        state = self.bridge.get_scheduler_state()
-        self._update_stats(state)
-        self._update_table(state)
+        self._log("-> kernel.list")
+        self.bridge.emit("kernel.list", callback=self._on_list_done)
 
-    def _update_stats(self, state: dict) -> None:
-        ec = state.get("event_count", 0)
-        ic = state.get("intent_count", 0)
-        tc = state.get("task_count", 0)
-        cc = state.get("completed_count", 0)
-        text = (
-            f"  Events: {ec} | Intents: {ic} | "
-            f"Tasks actives: {tc} | Completees: {cc}"
-        )
-        try:
-            self.query_one("#mon-stats", Static).update(text)
-        except Exception:
-            pass
+    def _on_list_done(self, ticket) -> None:
+        table = self.query_one("#kernel-table", DataTable)
+        table.clear()
+        if ticket.status == "failed":
+            self._safe_log(f"{CROSS_ICON} Erreur : {ticket.error}")
+            self._set_status("Erreur")
+            return
+        result = ticket.result or {}
+        kernels = result.get("kernels", [])
+        if isinstance(kernels, dict):
+            kernels = list(kernels.values())
+        for k in kernels:
+            arch = k.get("arch", "amd64")
+            version = k.get("version", k.get("name", "?"))
+            initramfs = k.get("initramfs", "?")
+            boot = k.get("boot_type", "?")
+            table.add_row(arch, version, initramfs, boot)
+        self._safe_log(f"{CHECK} {len(kernels)} kernel(s)")
+        self._set_status(f"{len(kernels)} kernel(s) trouves")
 
-    def _update_table(self, state: dict) -> None:
-        recent = state.get("recent_tasks", [])
-        active = state.get("active_task")
-        try:
-            table = self.query_one("#task-table", DataTable)
-            table.clear()
-            if active:
-                name = active.get("name", active.get("id", "?"))
-                duration = active.get("duration", 0)
-                table.add_row(ICONS["running"], name, f"{duration:.1f}s")
-            for task in recent[-10:]:
-                status = task.get("status", "completed")
-                icon = ICONS.get(status, "[?]")
-                name = task.get("name", task.get("id", "?"))
-                duration = task.get("duration", 0)
-                table.add_row(icon, name, f"{duration:.1f}s")
-        except Exception:
-            pass
+    def _log(self, msg):
+        try: self.query_one("#command-log", Log).write_line(msg)
+        except Exception: pass
 
-    def update_from_snapshot(self, snapshot: Any) -> None:
+    def _safe_log(self, msg):
+        try: self.call_from_thread(self._log, msg)
+        except RuntimeError: self._log(msg)
+
+    def _set_status(self, text):
+        try: self.query_one("#ma-status", Static).update(text)
+        except Exception: pass
+
+    def update_from_snapshot(self, s: Any) -> None:
         pass
 ```
 
+---
+
 ## Critères
 
-1. `grep "from.*scheduler" fsdeploy/lib/ui/screens/monitoring.py` → aucun résultat
-2. `grep "get_scheduler_state" fsdeploy/lib/ui/screens/monitoring.py` → présent
-3. Aucun import relatif `from ...` dans le fichier
+1. `grep "bridge.emit" fsdeploy/lib/ui/screens/crosscompile.py` → présent (kernel.registry.scan, kernel.compile)
+2. `grep "bridge.emit" fsdeploy/lib/ui/screens/multiarch.py` → présent (kernel.list)
+3. Aucune donnée fictive codée en dur (pas de `add_row("aarch64"...` sans provenance bridge)
+4. Les 2 écrans suivent le pattern callback comme les autres
