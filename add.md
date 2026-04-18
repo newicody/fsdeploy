@@ -1,17 +1,17 @@
-# add.md — 19.2a : Câbler SecurityScreen au bridge
+# add.md — 19.2b : Câbler GraphScreen au bridge (scheduler state live)
 
-## Fichier : `fsdeploy/lib/ui/screens/security.py`
+## Fichier : `fsdeploy/lib/ui/screens/graph.py`
 
-L'écran affiche actuellement des données fictives codées en dur. L'intent `security.status` et la task `SecurityStatusTask` existent déjà et retournent les vraies règles. Il faut câbler l'écran pour utiliser `bridge.emit()`.
+L'écran affiche des données fictives. Le bridge expose `bridge.get_scheduler_state()` qui retourne events, intents, tasks, completed, active_task, recent_tasks. Il faut afficher ces données avec un timer de rafraîchissement.
 
 ## Réécrire le fichier complet :
 
 ```python
 # -*- coding: utf-8 -*-
 """
-fsdeploy.ui.screens.security
-===============================
-Ecran Security : regles de securite et decorateurs.
+fsdeploy.ui.screens.graph
+===========================
+Ecran GraphView : etat temps reel du scheduler.
 Compatible : Textual >=8.2.1
 """
 
@@ -20,34 +20,45 @@ from typing import Any
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Label, Log, Static
+from textual.widgets import DataTable, Footer, Header, Label, ProgressBar, Static
 
 IS_FB = os.environ.get("TERM") == "linux"
-CHECK = "[OK]" if IS_FB else "\u2705"
-CROSS = "[!!]" if IS_FB else "\u274c"
+ICONS = {
+    "pending": "[.]" if IS_FB else "\u23f3",
+    "running": "[>]" if IS_FB else "\U0001f504",
+    "completed": "[+]" if IS_FB else "\u2705",
+    "failed": "[X]" if IS_FB else "\u274c",
+    "arrow": "->" if IS_FB else "\u2192",
+}
 
 
-class SecurityScreen(Screen):
+class GraphScreen(Screen):
 
     BINDINGS = [
         Binding("r", "refresh", "Rafraichir", show=True),
+        Binding("space", "toggle_pause", "Pause", show=True),
         Binding("escape", "app.pop_screen", "Retour", show=False),
     ]
 
     DEFAULT_CSS = """
-    SecurityScreen { layout: vertical; }
-    #security-header { height: auto; padding: 1 2; text-style: bold; }
-    #security-status { padding: 0 2; height: 1; color: $text-muted; }
-    #rules-section { height: 1fr; margin: 0 1; border: solid $primary; padding: 0 1; }
+    GraphScreen { layout: vertical; }
+    #graph-header { height: auto; padding: 1 2; text-style: bold; }
+    #pipeline { height: 3; padding: 0 2; text-style: bold; }
+    #task-detail { height: auto; min-height: 4; margin: 0 1;
+                   border: solid $accent; padding: 1 2; }
+    #history-section { height: 1fr; margin: 0 1;
+                       border: solid $primary; padding: 0 1; }
     .table-title { text-style: bold; height: 1; }
-    #command-log { height: 6; margin: 0 1; border: solid $primary-background; padding: 0 1; }
+    #status-bar { dock: bottom; height: 1; background: $primary-background;
+                  color: $text-muted; padding: 0 2; }
     """
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._rules: list[tuple[str, str, str]] = []
+        self._paused = False
+        self._timer = None
 
     @property
     def bridge(self):
@@ -55,72 +66,99 @@ class SecurityScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static("Securite", id="security-header")
-        yield Static("Statut : en attente", id="security-status")
-        with Vertical(id="rules-section"):
-            yield Label("Regles de securite", classes="table-title")
-            yield DataTable(id="rules-table")
-        yield Log(id="command-log", highlight=True, auto_scroll=True)
+        yield Static("Pipeline Scheduler", id="graph-header")
+        yield Static("", id="pipeline")
+        yield Static("Aucune tache active", id="task-detail")
+        with Vertical(id="history-section"):
+            yield Label("Taches recentes", classes="table-title")
+            yield DataTable(id="history-table")
+        yield Static("Mode : LIVE | Pause : Space", id="status-bar")
         yield Footer()
 
     def on_mount(self) -> None:
-        table = self.query_one("#rules-table", DataTable)
-        table.add_columns("Type", "Chemin", "Valeur")
+        table = self.query_one("#history-table", DataTable)
+        table.add_columns("Statut", "Tache", "Duree")
         table.cursor_type = "row"
-        self.action_refresh()
+        self._timer = self.set_interval(1.0, self._update_data)
+        self._update_data()
+
+    def on_unmount(self) -> None:
+        if self._timer:
+            self._timer.stop()
 
     def action_refresh(self) -> None:
+        self._update_data()
+
+    def action_toggle_pause(self) -> None:
+        self._paused = not self._paused
+        mode = "PAUSED" if self._paused else "LIVE"
+        try:
+            self.query_one("#status-bar", Static).update(
+                f"Mode : {mode} | Pause : Space"
+            )
+        except Exception:
+            pass
+
+    def _update_data(self) -> None:
+        if self._paused:
+            return
         if not self.bridge:
-            self._set_status("Bridge indisponible")
             return
-        self._set_status("Chargement...")
-        self._log("-> security.status")
-        self.bridge.emit("security.status", callback=self._on_security_done)
+        state = self.bridge.get_scheduler_state()
+        self._update_pipeline(state)
+        self._update_task_detail(state)
+        self._update_history(state)
 
-    def _on_security_done(self, ticket) -> None:
-        if ticket.status == "failed":
-            self._safe_log(f"{CROSS} Erreur : {ticket.error}")
-            self._set_status("Erreur")
-            return
-        result = ticket.result or {}
-        rules = result.get("rules", {})
-        decorators = result.get("registered_decorators", [])
-        config_path = result.get("config_path", "?")
-
-        self._rules = []
-        for key, val in rules.items():
-            self._rules.append(("regle", key, str(val)))
-        for dec in decorators:
-            self._rules.append(("decorateur", dec, "actif"))
-
-        self._refresh_table()
-        self._safe_log(f"{CHECK} {len(rules)} regles, {len(decorators)} decorateurs")
-        self._set_status(f"Config : {config_path} - {len(self._rules)} entrees")
-
-    def _refresh_table(self) -> None:
+    def _update_pipeline(self, state: dict) -> None:
+        arrow = ICONS["arrow"]
+        p = ICONS["pending"]
+        r = ICONS["running"]
+        d = ICONS["completed"]
+        ec = state.get("event_count", 0)
+        ic = state.get("intent_count", 0)
+        tc = state.get("task_count", 0)
+        cc = state.get("completed_count", 0)
+        text = (
+            f"  [{p} Events: {ec}] {arrow} "
+            f"[{p} Intents: {ic}] {arrow} "
+            f"[{r} Tasks: {tc}] {arrow} "
+            f"[{d} Done: {cc}]"
+        )
         try:
-            table = self.query_one("#rules-table", DataTable)
+            self.query_one("#pipeline", Static).update(text)
+        except Exception:
+            pass
+
+    def _update_task_detail(self, state: dict) -> None:
+        active = state.get("active_task")
+        if not active:
+            text = "  Aucune tache active"
+        else:
+            name = active.get("name", active.get("id", "?"))
+            status = active.get("status", "?")
+            progress = active.get("progress", 0)
+            duration = active.get("duration", 0)
+            icon = ICONS.get(status, "[?]")
+            text = (
+                f"  {icon} {name}\n"
+                f"  Statut: {status} ({progress}%) | Duree: {duration:.1f}s"
+            )
+        try:
+            self.query_one("#task-detail", Static).update(text)
+        except Exception:
+            pass
+
+    def _update_history(self, state: dict) -> None:
+        recent = state.get("recent_tasks", [])
+        try:
+            table = self.query_one("#history-table", DataTable)
             table.clear()
-            for row in self._rules:
-                table.add_row(*row)
-        except Exception:
-            pass
-
-    def _log(self, msg: str) -> None:
-        try:
-            self.query_one("#command-log", Log).write_line(msg)
-        except Exception:
-            pass
-
-    def _safe_log(self, msg: str) -> None:
-        try:
-            self.call_from_thread(self._log, msg)
-        except RuntimeError:
-            self._log(msg)
-
-    def _set_status(self, text: str) -> None:
-        try:
-            self.query_one("#security-status", Static).update(text)
+            for task in recent[-10:]:
+                status = task.get("status", "?")
+                icon = ICONS.get(status, "[?]")
+                name = task.get("name", task.get("id", "?"))
+                duration = task.get("duration", 0)
+                table.add_row(icon, name, f"{duration:.1f}s")
         except Exception:
             pass
 
@@ -130,7 +168,7 @@ class SecurityScreen(Screen):
 
 ## Critères
 
-1. `grep "bridge.emit" fsdeploy/lib/ui/screens/security.py` → contient `security.status`
-2. Aucune donnée fictive codée en dur
-3. Le pattern callback (`_on_security_done`) suit le même modèle que `detection.py`
-4. Aucun import depuis `lib/` (hors ui/)
+1. `grep "get_scheduler_state" fsdeploy/lib/ui/screens/graph.py` → présent
+2. `grep "set_interval" fsdeploy/lib/ui/screens/graph.py` → timer 1s présent
+3. Aucune donnée fictive (`pool.boot`, `dataset.home`) dans le fichier
+4. Pipeline affiche events → intents → tasks → completed en temps réel
