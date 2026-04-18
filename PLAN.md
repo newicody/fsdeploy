@@ -1,9 +1,9 @@
 # PLAN.md — fsdeploy (branche `dev`)
 
 > **Dernière mise à jour** : 2026-04-18
-> **Itération worker** : 83
-> **Codebase** : ~23 550 lignes Python, 62 intents, 23 écrans
-> **Tâche active** : **20.1** — voir `add.md`
+> **Itération worker** : 87
+> **Codebase** : ~23 160 lignes Python, 62 intents, 23 écrans
+> **Tâche active** : **19.2a** — voir `add.md`
 
 ---
 
@@ -11,27 +11,17 @@
 
 | ID | Description |
 |----|-------------|
-| — | Daemon, Scheduler Event→Intent→Task, Bridge tickets, Config 19 sections, Logging structlog, Bus sources, RuntimeState, IntentLog Huffman, Metrics, TaskGraph DAG |
-| — | 62 intents @register_intent (pool, detection, mount, kernel, initramfs, presets, coherence, snapshots, stream, zbm, init, config, module, boot, health, security, scheduler, debug, log, integration) |
-| — | 34 task implementations réelles (80+ lignes) |
-| — | 10 écrans câblés bridge : detection, mounts, initramfs, kernel, presets, coherence, snapshots, stream, zbm, module_registry |
-| — | launch.sh complet, multi-init, tests bridge, docs |
-| 8.1a+b | Scheduler↔bridge unifié |
-| 10.1 | Unicode detection.py |
-| 10.3 | LoggedDummyBridge |
-| 10.4 | welcome.py lazy imports |
-| 10.5a | 3 doublons supprimés (graph_enhanced, security_enhanced, navigation) |
-| 10.5b | Refs test nettoyées, 5 orphelins supprimés (multiarch_screen, livegraph, partition_detection, fsdeploy/ui/), fix history.py Textual 8.x |
-| 9.1 | live/setup.py linux-headers dynamique (déjà implémenté : `_install_packages()` détecte via `uname -r`) |
-| 16.20-54 | Intents mount/pool + doublons + cli.py |
-| 17.7 | pyproject.toml |
-| Phase 1-6 | Stabilisation TUI, robustesse, init/, tests, nettoyage |
-| 7.0 | launch.sh branche dev |
-| 20.1 | Supprimer 6 scripts racine orphelins + résoudre double nesting fsdeploy/fsdeploy/ |
+| — | Daemon, Scheduler, Bridge, Config, Logging, Bus, Runtime, IntentLog, Metrics, TaskGraph |
+| — | 62 intents, 34 task implementations, 10 écrans câblés bridge |
+| 21.1 | Fix debug.py import cassé, SnapshotDestroyTask implémenté, DatasetCreateTask re-exporté |
+| 20.1 | Scripts racine orphelins + double nesting supprimés |
+| 10.5a+b | Doublons/orphelins UI, fix Textual 8.x |
+| 9.1 | live/setup.py linux-headers dynamique |
+| 8.1, 16.20-54, 17.7, 7.0, Phase 1-6 | Infrastructure, intents, config, launch.sh |
 
 ---
 
-## 🚧 Tâche active — 20.1
+## 🚧 Tâche active — 19.2a
 
 Voir `add.md`.
 
@@ -39,40 +29,52 @@ Voir `add.md`.
 
 ## ⏳ Restant
 
-### P0
-
-Aucune tâche bloquante restante.
-
-### P1 — Fonctionnalité
+### P1
 
 | ID | Description |
 |----|-------------|
-| **19.1** | Implémenter 2 vrais task stubs : `snapshot/destroy.py` (class pass), `dataset/create.py` (class pass). Les 14 autres sont des re-exports valides (7) ou modules désactivés volontairement (7). |
-| **19.2** | Câbler 13 écrans au bridge : config, config_snapshot, crosscompile, debug, error_log, graph, history, intentlog, metrics, monitoring, multiarch, security, welcome |
+| **19.2a** | Câbler `security.py` au bridge (template pour les autres écrans) |
+| **19.2b** | Câbler `graph.py` au bridge (scheduler state live) |
+| **19.2c** | Câbler `metrics.py`, `monitoring.py`, `intentlog.py`, `history.py`, `error_log.py` |
+| **19.2d** | Câbler `config_snapshot.py`, `crosscompile.py`, `multiarch.py` |
 | **11.1** | SquashFS mount/overlay |
-| **11.2** | Switch rootfs à chaud (task rootfs/switch.py 178L existe, UI non câblée) |
+| **11.2** | Switch rootfs à chaud |
 
-### P2 — Qualité
+### P2
 
 | ID | Description |
 |----|-------------|
-| **20.3** | Fusionner docs bridge doublons (bridge-ui-scheduler.md vs bridge_ui_scheduler.md) |
-| **20.4** | Supprimer tests/contrib/ (duplique fsdeploy/contrib/) |
+| **20.3** | Fusionner docs bridge doublons |
+| **20.4** | Supprimer tests/contrib/ |
 | **17.1** | SecurityResolver complet |
-| **18.1-3** | Tests unitaires, intégration, TUI Pilot |
-| **7.3** | Refresh docs |
+| **18.1-3** | Tests |
 
 ---
 
-## Stats
+## Écrans — État câblage bridge
 
-| Métrique | Valeur |
-|----------|--------|
-| Fichiers Python | ~90 |
-| Lignes Python | ~23 550 |
-| Intents enregistrés | 62 |
-| Écrans TUI | 23 (propres, 0 orphelin) |
-| Écrans câblés bridge | 10 |
-| Écrans non câblés | 13 |
-| Tasks réelles (80+ L) | 34 |
-| Tasks stubs réels | 2 |
+| Écran | Bridge | Notes |
+|-------|--------|-------|
+| detection | ✅ | pool.import_all → pool.status → probe |
+| mounts | ✅ | mount.request |
+| initramfs | ✅ | initramfs.build |
+| kernel | ✅ | kernel.list, kernel.switch |
+| presets | ✅ | preset.save/list/activate |
+| coherence | ✅ | coherence.check |
+| snapshots | ✅ | snapshot.create/list |
+| stream | ✅ | stream.start/stop |
+| zbm | ✅ | zbm.validate/install |
+| module_registry | ✅ | module.list |
+| security | ❌ → **19.2a** | bridge property existe, intent security.status prêt |
+| graph | ❌ | bridge property existe, stub 61L |
+| config | — | Utilise self.app.config directement (normal) |
+| welcome | — | Pas de données dynamiques |
+| debug | — | Appels subprocess directs (acceptable pour debug) |
+| config_snapshot | ❌ | Import direct lib/ (violation) |
+| history | ❌ | Import direct intentlog |
+| intentlog | ❌ | — |
+| metrics | ❌ | — |
+| monitoring | ❌ | — |
+| error_log | ❌ | — |
+| crosscompile | ❌ | — |
+| multiarch | ❌ | — |

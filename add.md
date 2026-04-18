@@ -1,28 +1,136 @@
-# add.md — 20.1 : Nettoyage racine + double nesting
+# add.md — 19.2a : Câbler SecurityScreen au bridge
 
-## A. Supprimer 6 scripts racine orphelins
+## Fichier : `fsdeploy/lib/ui/screens/security.py`
 
-Ces fichiers sont des scripts de maintenance ponctuels, tous obsolètes :
+L'écran affiche actuellement des données fictives codées en dur. L'intent `security.status` et la task `SecurityStatusTask` existent déjà et retournent les vraies règles. Il faut câbler l'écran pour utiliser `bridge.emit()`.
 
-1. `check_imports_7.8.py` (42L) — vérification imports pour tâche 7.8, terminée
-2. `cleanup_contrib.sh` (46L) — script de nettoyage contrib, exécuté
-3. `cleanup_lib_ui.sh` (21L) — script de nettoyage UI, exécuté
-4. `remove_tests_fsdeploy.py` (25L) — suppression tests, exécuté
-5. `test_all.py` (26L) — lanceur de tests ad-hoc, remplacé par pytest
-6. `test_integration_7_17.py` (89L) — test intégration tâche 7.17, terminée
+## Réécrire le fichier complet :
 
-Ne pas supprimer `worker.py` (pipeline de développement actif) ni `STATE.json`.
+```python
+# -*- coding: utf-8 -*-
+"""
+fsdeploy.ui.screens.security
+===============================
+Ecran Security : regles de securite et decorateurs.
+Compatible : Textual >=8.2.1
+"""
 
-## B. Résoudre double nesting `fsdeploy/fsdeploy/`
+import os
+from typing import Any
 
-Le dossier `fsdeploy/fsdeploy/` contient `__init__.py` et `__main__.py` qui dupliquent `fsdeploy/__init__.py` et `fsdeploy/__main__.py`. Ce sous-dossier n'est importé nulle part.
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Vertical
+from textual.screen import Screen
+from textual.widgets import DataTable, Footer, Header, Label, Log, Static
 
-1. Vérifier : `grep -r "fsdeploy.fsdeploy" --include="*.py" .` → doit être vide
-2. Si vide, supprimer `fsdeploy/fsdeploy/` entièrement
+IS_FB = os.environ.get("TERM") == "linux"
+CHECK = "[OK]" if IS_FB else "\u2705"
+CROSS = "[!!]" if IS_FB else "\u274c"
+
+
+class SecurityScreen(Screen):
+
+    BINDINGS = [
+        Binding("r", "refresh", "Rafraichir", show=True),
+        Binding("escape", "app.pop_screen", "Retour", show=False),
+    ]
+
+    DEFAULT_CSS = """
+    SecurityScreen { layout: vertical; }
+    #security-header { height: auto; padding: 1 2; text-style: bold; }
+    #security-status { padding: 0 2; height: 1; color: $text-muted; }
+    #rules-section { height: 1fr; margin: 0 1; border: solid $primary; padding: 0 1; }
+    .table-title { text-style: bold; height: 1; }
+    #command-log { height: 6; margin: 0 1; border: solid $primary-background; padding: 0 1; }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._rules: list[tuple[str, str, str]] = []
+
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Static("Securite", id="security-header")
+        yield Static("Statut : en attente", id="security-status")
+        with Vertical(id="rules-section"):
+            yield Label("Regles de securite", classes="table-title")
+            yield DataTable(id="rules-table")
+        yield Log(id="command-log", highlight=True, auto_scroll=True)
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one("#rules-table", DataTable)
+        table.add_columns("Type", "Chemin", "Valeur")
+        table.cursor_type = "row"
+        self.action_refresh()
+
+    def action_refresh(self) -> None:
+        if not self.bridge:
+            self._set_status("Bridge indisponible")
+            return
+        self._set_status("Chargement...")
+        self._log("-> security.status")
+        self.bridge.emit("security.status", callback=self._on_security_done)
+
+    def _on_security_done(self, ticket) -> None:
+        if ticket.status == "failed":
+            self._safe_log(f"{CROSS} Erreur : {ticket.error}")
+            self._set_status("Erreur")
+            return
+        result = ticket.result or {}
+        rules = result.get("rules", {})
+        decorators = result.get("registered_decorators", [])
+        config_path = result.get("config_path", "?")
+
+        self._rules = []
+        for key, val in rules.items():
+            self._rules.append(("regle", key, str(val)))
+        for dec in decorators:
+            self._rules.append(("decorateur", dec, "actif"))
+
+        self._refresh_table()
+        self._safe_log(f"{CHECK} {len(rules)} regles, {len(decorators)} decorateurs")
+        self._set_status(f"Config : {config_path} - {len(self._rules)} entrees")
+
+    def _refresh_table(self) -> None:
+        try:
+            table = self.query_one("#rules-table", DataTable)
+            table.clear()
+            for row in self._rules:
+                table.add_row(*row)
+        except Exception:
+            pass
+
+    def _log(self, msg: str) -> None:
+        try:
+            self.query_one("#command-log", Log).write_line(msg)
+        except Exception:
+            pass
+
+    def _safe_log(self, msg: str) -> None:
+        try:
+            self.call_from_thread(self._log, msg)
+        except RuntimeError:
+            self._log(msg)
+
+    def _set_status(self, text: str) -> None:
+        try:
+            self.query_one("#security-status", Static).update(text)
+        except Exception:
+            pass
+
+    def update_from_snapshot(self, snapshot: Any) -> None:
+        pass
+```
 
 ## Critères
 
-1. Les 6 fichiers racine n'existent plus
-2. `fsdeploy/fsdeploy/` n'existe plus
-3. `worker.py` et `STATE.json` toujours présents
-4. `python3 -c "import fsdeploy"` fonctionne toujours
+1. `grep "bridge.emit" fsdeploy/lib/ui/screens/security.py` → contient `security.status`
+2. Aucune donnée fictive codée en dur
+3. Le pattern callback (`_on_security_done`) suit le même modèle que `detection.py`
+4. Aucun import depuis `lib/` (hors ui/)
