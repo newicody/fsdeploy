@@ -1,199 +1,176 @@
+# -*- coding: utf-8 -*-
 """
-Écran de gestion des snapshots de configuration.
+fsdeploy.ui.screens.config_snapshot
+======================================
+Gestion des snapshots de configuration via bridge.
+Compatible : Textual >=8.2.1
 """
 
+import os
+import time
 from datetime import datetime
+from typing import Any
+
 from textual.app import ComposeResult
-from textual.screen import Screen
-from textual.widgets import Header, Footer, DataTable, Label, Button
-from textual.containers import Container, VerticalScroll, Horizontal
 from textual.binding import Binding
-from textual.reactive import reactive
+from textual.containers import Horizontal, Vertical
+from textual.screen import Screen
+from textual.widgets import Button, DataTable, Footer, Header, Label, Log, Static
 from textual import on
 
-from fsdeploy.lib.intents.config_intent import (
-    ConfigSnapshotListIntent,
-    ConfigSnapshotSaveIntent,
-    ConfigSnapshotRestoreIntent,
-)
+IS_FB = os.environ.get("TERM") == "linux"
+CHECK = "[OK]" if IS_FB else "\u2705"
+CROSS = "[!!]" if IS_FB else "\u274c"
 
 
 class ConfigSnapshotScreen(Screen):
-    """
-    Affiche et gère les snapshots de configuration.
-    """
 
     BINDINGS = [
-        ("escape", "app.pop_screen", "Retour"),
-        ("r", "refresh", "Rafraîchir"),
-        ("s", "save", "Sauvegarder"),
+        Binding("r", "refresh", "Rafraichir", show=True),
+        Binding("s", "save", "Sauvegarder", show=True),
+        Binding("escape", "app.pop_screen", "Retour", show=False),
     ]
 
     DEFAULT_CSS = """
-    ConfigSnapshotScreen {
-        layout: vertical;
-    }
-
-    #title {
-        height: auto;
-        padding: 1 2;
-        text-style: bold;
-        background: $boost;
-    }
-
-    #snapshot-table {
-        height: 1fr;
-        border: solid $accent;
-    }
-
-    #button-bar {
-        height: auto;
-        padding: 1 2;
-        border-top: solid $panel;
-    }
-
-    #status {
-        height: 1;
-        padding: 0 2;
-        color: $text-muted;
-    }
+    ConfigSnapshotScreen { layout: vertical; }
+    #cs-header { height: auto; padding: 1 2; text-style: bold; }
+    #cs-status { padding: 0 2; height: 1; color: $text-muted; }
+    #snapshot-section { height: 1fr; margin: 0 1; border: solid $primary; padding: 0 1; }
+    .table-title { text-style: bold; height: 1; }
+    #button-bar { height: 3; padding: 0 2; layout: horizontal; }
+    #button-bar Button { margin: 0 1; }
+    #command-log { height: 6; margin: 0 1; border: solid $primary-background; padding: 0 1; }
     """
 
-    snapshots = reactive(list)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._snapshots: list[dict] = []
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._selected = None
+    @property
+    def bridge(self):
+        return getattr(self.app, "bridge", None)
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield VerticalScroll(
-            Label("Snapshots de configuration", id="title"),
-            DataTable(id="snapshot-table"),
-            Horizontal(
-                Button("Rafraîchir", variant="primary", id="refresh"),
-                Button("Sauvegarder", variant="success", id="save"),
-                Button("Restaurer", variant="warning", id="restore"),
-                Button("Retour", variant="default", id="back"),
-                id="button-bar",
-            ),
-            Label("", id="status"),
-        )
+        yield Static("Snapshots de configuration", id="cs-header")
+        yield Static("", id="cs-status")
+        with Vertical(id="snapshot-section"):
+            yield Label("Snapshots", classes="table-title")
+            yield DataTable(id="snapshot-table")
+        with Horizontal(id="button-bar"):
+            yield Button("Rafraichir", variant="primary", id="btn-refresh")
+            yield Button("Sauvegarder", variant="success", id="btn-save")
+            yield Button("Restaurer", variant="warning", id="btn-restore")
+        yield Log(id="command-log", highlight=True, auto_scroll=True)
         yield Footer()
 
     def on_mount(self) -> None:
         table = self.query_one("#snapshot-table", DataTable)
-        table.add_columns("Nom", "Date", "Taille", "Chemin")
-        self.refresh_snapshots()
-
-    def refresh_snapshots(self) -> None:
-        """Met à jour la liste des snapshots via l'intent."""
-        # Pour l'instant, on utilise la tâche directement via l'intent.
-        # Nous allons simuler l'appel, car l'intent doit être exécuté par le scheduler.
-        # Pour simplifier, on va appeler la tâche directement depuis le store compressé
-        # ou bien on va lire le répertoire des snapshots.
-        # Implémentation simplifiée : lire le dossier ~/.config/fsdeploy/snapshots/
-        import os
-        from pathlib import Path
-        config_dir = Path.home() / ".config" / "fsdeploy"
-        snapshots_dir = config_dir / "snapshots"
-        snapshots = []
-        if snapshots_dir.exists():
-            for f in snapshots_dir.glob("*.conf"):
-                stat = f.stat()
-                snapshots.append({
-                    "name": f.stem,
-                    "path": str(f),
-                    "size": stat.st_size,
-                    "mtime": stat.st_mtime,
-                })
-        self.snapshots = snapshots
-        self.update_table()
-
-    def update_table(self) -> None:
-        table = self.query_one("#snapshot-table", DataTable)
-        table.clear()
-        for snap in self.snapshots:
-            dt = datetime.fromtimestamp(snap["mtime"]).strftime("%Y-%m-%d %H:%M")
-            size_kb = snap["size"] / 1024.0
-            table.add_row(
-                snap["name"],
-                dt,
-                f"{size_kb:.1f} KiB",
-                snap["path"],
-            )
-        self.update_status(f"{len(self.snapshots)} snapshot(s)")
-
-    def update_status(self, message: str) -> None:
-        self.query_one("#status", Label).update(message)
-
-    @on(Button.Pressed, "#refresh")
-    def handle_refresh(self) -> None:
-        self.refresh_snapshots()
-        self.notify("Liste rafraîchie", severity="information")
-
-    @on(Button.Pressed, "#save")
-    def handle_save(self) -> None:
-        # Demander un nom via un prompt (simplifié : nom par défaut)
-        from textual.dialog import InputDialog
-        def on_save(name: str) -> None:
-            if not name:
-                return
-            # Créer un intent de sauvegarde
-            intent = ConfigSnapshotSaveIntent(
-                params={"name": name, "description": "Sauvegarde depuis UI"}
-            )
-            # Dans une vraie implémentation, on lancerait l'intent via le bridge.
-            # Pour l'instant, on exécute la tâche directement.
-            from fsdeploy.lib.function.config.snapshot import ConfigSnapshotTask
-            task = ConfigSnapshotTask(
-                id=f"ui_save_{name}",
-                params={"action": "save", "name": name},
-                context={"source": "ui"},
-            )
-            result = task.run()
-            if "error" in result:
-                self.notify(f"Erreur : {result['error']}", severity="error")
-            else:
-                self.notify(f"Snapshot '{name}' sauvegardé", severity="success")
-                self.refresh_snapshots()
-        # Pour l'instant, on utilise un nom généré
-        import time
-        name = f"snap_{int(time.time())}"
-        on_save(name)
-
-    @on(Button.Pressed, "#restore")
-    def handle_restore(self) -> None:
-        table = self.query_one("#snapshot-table", DataTable)
-        if not table.cursor_row:
-            self.notify("Aucun snapshot sélectionné", severity="warning")
-            return
-        idx = table.cursor_row
-        if idx >= len(self.snapshots):
-            return
-        snap = self.snapshots[idx]
-        name = snap["name"]
-        # Confirmation
-        def do_restore() -> None:
-            from fsdeploy.lib.function.config.snapshot import ConfigSnapshotTask
-            task = ConfigSnapshotTask(
-                id=f"ui_restore_{name}",
-                params={"action": "restore", "name": name},
-                context={"source": "ui"},
-            )
-            result = task.run()
-            if "error" in result:
-                self.notify(f"Erreur : {result['error']}", severity="error")
-            else:
-                self.notify(f"Configuration restaurée depuis '{name}'", severity="success")
-        do_restore()
-
-    @on(Button.Pressed, "#back")
-    def handle_back(self) -> None:
-        self.app.pop_screen()
+        table.add_columns("Nom", "Date", "Taille")
+        table.cursor_type = "row"
+        self.action_refresh()
 
     def action_refresh(self) -> None:
-        self.handle_refresh()
+        if not self.bridge:
+            self._set_status("Bridge indisponible")
+            return
+        self._log("-> config.snapshot.list")
+        self.bridge.emit("config.snapshot.list", callback=self._on_list_done)
+
+    def _on_list_done(self, ticket) -> None:
+        if ticket.status == "failed":
+            self._safe_log(f"{CROSS} Erreur : {ticket.error}")
+            self._set_status("Erreur")
+            return
+        result = ticket.result or {}
+        self._snapshots = result.get("snapshots", [])
+        self._refresh_table()
+        self._safe_log(f"{CHECK} {len(self._snapshots)} snapshot(s)")
+        self._set_status(f"{len(self._snapshots)} snapshot(s)")
 
     def action_save(self) -> None:
-        self.handle_save()
+        if not self.bridge:
+            return
+        name = f"snap_{int(time.time())}"
+        self._log(f"-> config.snapshot.save (name={name})")
+        self.bridge.emit(
+            "config.snapshot.save",
+            name=name,
+            description="Sauvegarde depuis UI",
+            callback=self._on_save_done,
+        )
+
+    def _on_save_done(self, ticket) -> None:
+        if ticket.status == "failed":
+            self._safe_log(f"{CROSS} Sauvegarde echouee : {ticket.error}")
+        else:
+            name = ticket.params.get("name", "?")
+            self._safe_log(f"{CHECK} Snapshot '{name}' sauvegarde")
+            self.action_refresh()
+
+    @on(Button.Pressed, "#btn-restore")
+    def handle_restore(self) -> None:
+        if not self.bridge:
+            return
+        table = self.query_one("#snapshot-table", DataTable)
+        idx = table.cursor_row
+        if idx is None or idx >= len(self._snapshots):
+            self.notify("Aucun snapshot selectionne", severity="warning")
+            return
+        snap = self._snapshots[idx]
+        name = snap.get("name", "?")
+        self._log(f"-> config.snapshot.restore (name={name})")
+        self.bridge.emit(
+            "config.snapshot.restore",
+            name=name,
+            callback=self._on_restore_done,
+        )
+
+    def _on_restore_done(self, ticket) -> None:
+        if ticket.status == "failed":
+            self._safe_log(f"{CROSS} Restauration echouee : {ticket.error}")
+        else:
+            self._safe_log(f"{CHECK} Configuration restauree")
+            self.action_refresh()
+
+    @on(Button.Pressed, "#btn-refresh")
+    def handle_refresh_btn(self) -> None:
+        self.action_refresh()
+
+    @on(Button.Pressed, "#btn-save")
+    def handle_save_btn(self) -> None:
+        self.action_save()
+
+    def _refresh_table(self) -> None:
+        try:
+            table = self.query_one("#snapshot-table", DataTable)
+            table.clear()
+            for snap in self._snapshots:
+                mtime = snap.get("mtime", 0)
+                dt = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M") if mtime else "?"
+                size = snap.get("size", 0)
+                size_kb = f"{size / 1024:.1f} KiB" if size else "?"
+                table.add_row(snap.get("name", "?"), dt, size_kb)
+        except Exception:
+            pass
+
+    def _log(self, msg: str) -> None:
+        try:
+            self.query_one("#command-log", Log).write_line(msg)
+        except Exception:
+            pass
+
+    def _safe_log(self, msg: str) -> None:
+        try:
+            self.call_from_thread(self._log, msg)
+        except RuntimeError:
+            self._log(msg)
+
+    def _set_status(self, text: str) -> None:
+        try:
+            self.query_one("#cs-status", Static).update(text)
+        except Exception:
+            pass
+
+    def update_from_snapshot(self, snapshot: Any) -> None:
+        pass
