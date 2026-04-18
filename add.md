@@ -1,50 +1,28 @@
-# add.md — 10.5b : Nettoyage écrans orphelins + fix Textual 8.x
+# add.md — 20.1 : Nettoyage racine + double nesting
 
----
+## A. Supprimer 6 scripts racine orphelins
 
-## Quoi
+Ces fichiers sont des scripts de maintenance ponctuels, tous obsolètes :
 
-3 actions groupées, toutes P0 :
+1. `check_imports_7.8.py` (42L) — vérification imports pour tâche 7.8, terminée
+2. `cleanup_contrib.sh` (46L) — script de nettoyage contrib, exécuté
+3. `cleanup_lib_ui.sh` (21L) — script de nettoyage UI, exécuté
+4. `remove_tests_fsdeploy.py` (25L) — suppression tests, exécuté
+5. `test_all.py` (26L) — lanceur de tests ad-hoc, remplacé par pytest
+6. `test_integration_7_17.py` (89L) — test intégration tâche 7.17, terminée
 
-### A. Nettoyer `fsdeploy/tests/ui/test_screens_integration.py`
+Ne pas supprimer `worker.py` (pipeline de développement actif) ni `STATE.json`.
 
-10.5a a supprimé `graph_enhanced.py`, `security_enhanced.py`, `navigation.py` mais le fichier test les importe encore → crash import.
+## B. Résoudre double nesting `fsdeploy/fsdeploy/`
 
-- Supprimer l'import `from fsdeploy.lib.ui.screens.graph_enhanced import GraphEnhancedScreen`
-- Supprimer l'import `from fsdeploy.lib.ui.screens.security_enhanced import SecurityEnhancedScreen`
-- Supprimer l'import `from fsdeploy.lib.ui.screens.partition_detection import PartitionDetectionScreen` (fichier supprimé en C)
-- Supprimer les fonctions `test_graph_screen()`, `test_security_screen_load_rules()`, `test_partition_screen_scan()`
-- Garder les 3 tests restants (`test_crosscompile_screen`, `test_multiarch_screen`, `test_moduleregistry_screen`)
+Le dossier `fsdeploy/fsdeploy/` contient `__init__.py` et `__main__.py` qui dupliquent `fsdeploy/__init__.py` et `fsdeploy/__main__.py`. Ce sous-dossier n'est importé nulle part.
 
-### B. Fix Textual 8.x dans `fsdeploy/lib/ui/screens/history.py`
-
-Ligne 63 : `on_data_table_row_selected` → `on_data_table_row_highlighted`
-Même ligne : `DataTable.RowSelected` → `DataTable.RowHighlighted`
-
-### C. Supprimer 5 fichiers orphelins
-
-Aucun n'est référencé dans `app.py screen_map` :
-
-1. `fsdeploy/lib/ui/screens/multiarch_screen.py` (93L) — doublon de `multiarch.py`
-2. `fsdeploy/lib/ui/screens/livegraph.py` (143L) — pas dans screen_map
-3. `fsdeploy/lib/ui/screens/partition_detection.py` (113L) — pas dans screen_map, utilise `on_data_table_row_selected`
-4. `fsdeploy/ui/screens/__init__.py` (95L) — ancien emplacement hors `lib/`
-5. `fsdeploy/ui/screens/graph.py` (403L) — vieille version hors `lib/`
-
-Après suppression, supprimer le dossier `fsdeploy/ui/screens/` (et `fsdeploy/ui/` s'il est vide).
-
----
+1. Vérifier : `grep -r "fsdeploy.fsdeploy" --include="*.py" .` → doit être vide
+2. Si vide, supprimer `fsdeploy/fsdeploy/` entièrement
 
 ## Critères
 
-1. `grep -r "graph_enhanced\|security_enhanced\|NavigationScreen" --include="*.py" .` → aucun résultat
-2. `grep -rn "on_data_table_row_selected" fsdeploy/lib/ --include="*.py"` → uniquement des commentaires (compat.py, snapshots.py docstring)
-3. Les 5 fichiers orphelins n'existent plus
-4. `fsdeploy/ui/screens/` n'existe plus
-5. Les 3 tests restants dans `test_screens_integration.py` importent correctement
-
----
-
-## Prochaine tâche après 10.5b
-
-**9.1** — `fsdeploy/lib/function/live/setup.py` : remplacer `linux-headers-amd64` hardcodé par détection dynamique via `uname -r`.
+1. Les 6 fichiers racine n'existent plus
+2. `fsdeploy/fsdeploy/` n'existe plus
+3. `worker.py` et `STATE.json` toujours présents
+4. `python3 -c "import fsdeploy"` fonctionne toujours
