@@ -174,15 +174,44 @@ class Executor:
         Raises:
             Toute exception levée par before_run/run/after_run.
         """
-        if hasattr(task, "before_run"):
-            task.before_run()
+        cgroup = None
 
-        result = task.run()
+        # Setup cgroup si demande par le decorator
+        sec_opts = getattr(task.__class__, '_security_options', {})
+        cg_cpu = sec_opts.get('cgroup_cpu', 0)
+        cg_mem = sec_opts.get('cgroup_mem', 0)
+        if cg_cpu or cg_mem:
+            try:
+                from fsdeploy.lib.scheduler.core.isolation import CgroupLimits
+                if CgroupLimits.available():
+                    cgroup = CgroupLimits(
+                        name=f"task-{task.id}",
+                        cpu_percent=int(cg_cpu) if cg_cpu else 100,
+                        mem_max_mb=int(cg_mem) if cg_mem else 0,
+                    )
+                    cgroup.create()
+                    task._cgroup = cgroup
+            except Exception:
+                pass  # cgroup optionnel, on continue sans
 
-        if hasattr(task, "after_run"):
-            task.after_run()
+        try:
+            if hasattr(task, "before_run"):
+                task.before_run()
 
-        return result
+            result = task.run()
+
+            if hasattr(task, "after_run"):
+                task.after_run()
+
+            return result
+        finally:
+            # Cleanup cgroup
+            if cgroup is not None:
+                try:
+                    cgroup.cleanup()
+                except Exception:
+                    pass
+                task._cgroup = None
 
     # ═════════════════════════════════════════════════════════════════
     # INTROSPECTION

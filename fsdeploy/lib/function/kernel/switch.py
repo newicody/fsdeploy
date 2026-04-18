@@ -14,6 +14,7 @@ ZERO chemin en dur : tout est pilote par config/preset/params.
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -223,7 +224,7 @@ class KernelInstallTask(Task):
                 "installed": True, "boot_path": str(boot_path)}
 
 
-@security.kernel.compile(require_root=True)
+@security.kernel.compile(require_root=True, cgroup_cpu=50, cgroup_mem=4096)
 class KernelCompileTask(Task):
     """
     Compile un noyau depuis les sources.
@@ -258,8 +259,28 @@ class KernelCompileTask(Task):
         elif not (source_dir / ".config").exists():
             self.run_cmd("make defconfig", cwd=source_dir)
 
-        # Compile
-        self.run_cmd(f"make -j{jobs}", cwd=source_dir, timeout=3600)
+        # Compile avec attachement cgroup si disponible
+        cmd = ["make", f"-j{jobs}"]
+        proc = None
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=source_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if hasattr(self, '_cgroup') and self._cgroup:
+                self._cgroup.attach(proc.pid)
+            stdout, stderr = proc.communicate(timeout=3600)
+            if proc.returncode != 0:
+                raise RuntimeError(
+                    f"make failed with code {proc.returncode}: {stderr.decode()[:500]}"
+                )
+        except subprocess.TimeoutExpired:
+            if proc:
+                proc.kill()
+                proc.communicate()
+            raise TimeoutError(f"make timed out after 3600 seconds")
         self.run_cmd(
             "make modules_install", cwd=source_dir, sudo=True, timeout=600)
         self.run_cmd(
