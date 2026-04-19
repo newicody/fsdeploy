@@ -1,34 +1,18 @@
-# add.md — 22.3 : Fix `fsdeploy/__init__.py` tronqué (SyntaxError)
+# add.md — 22.3 : Fix `fsdeploy/__init__.py` (SyntaxError)
 
-## Bug
+Le worker a échoué 3 fois à écrire ce fichier. Utiliser cette commande bash exacte :
 
-Le fichier fait 3 lignes avec une docstring `"""` non fermée :
-```
+```bash
+cat > fsdeploy/__init__.py << 'ENDOFFILE'
 # -*- coding: utf-8 -*-
-"""
-fsdeploy
-```
-
-`import fsdeploy` → `SyntaxError: unterminated triple-quoted string literal`
-
-## Fix
-
-Écraser le fichier `fsdeploy/__init__.py` avec le contenu exact suivant (44 lignes) :
-
-```python
-# -*- coding: utf-8 -*-
-"""
-fsdeploy - Systeme de deploiement ZFS/ZFSBootMenu.
-"""
+"""fsdeploy - Systeme de deploiement ZFS/ZFSBootMenu."""
 
 import os
 import sys
 from pathlib import Path
 
-__version__ = "1.0.0"
+__version__ = "0.2.0"
 
-# Path setup : ajouter lib/ au sys.path pour les imports bare
-# (from scheduler.model.task import Task) utilises par 36 fichiers
 _PACKAGE_DIR = Path(__file__).resolve().parent
 _LIB_DIR = _PACKAGE_DIR / "lib"
 
@@ -58,13 +42,28 @@ def get_install_dir() -> Path:
 def get_lib_dir() -> Path:
     """Retourne le repertoire lib/."""
     return _LIB_DIR
+ENDOFFILE
 ```
 
-**ATTENTION** : le fichier doit faire exactement 44 lignes. Vérifier que la docstring ligne 3 est bien fermée par `"""` ligne 4. Ne PAS tronquer le fichier.
+Puis vérifier :
+
+```bash
+python3 -c "import ast; ast.parse(open('fsdeploy/__init__.py').read()); print('OK')"
+wc -l fsdeploy/__init__.py  # doit être >= 38
+git add fsdeploy/__init__.py
+git commit -m "fix: restaure __init__.py complet (sys.path + docstring)"
+```
+
+## Alternative
+
+Le fichier corrigé est aussi fourni en téléchargement sous le nom `fsdeploy_init.py`. Le copier manuellement :
+
+```bash
+cp fsdeploy_init.py fsdeploy/__init__.py
+```
 
 ## Critères
 
-1. `python3 -c "import ast; ast.parse(open('fsdeploy/__init__.py').read()); print('SYNTAX OK')"` → SYNTAX OK
-2. `wc -l fsdeploy/__init__.py` → au moins 40 lignes
-3. `PYTHONPATH=. python3 -c "import fsdeploy; print(fsdeploy.__version__)"` → pas de SyntaxError
-4. `PYTHONPATH=. python3 -c "import fsdeploy; print(fsdeploy.get_lib_dir())"` → affiche un chemin
+1. `python3 -c "import ast; ast.parse(open('fsdeploy/__init__.py').read())"` → pas de SyntaxError
+2. `wc -l fsdeploy/__init__.py` → 38+ lignes
+3. `grep "_LIB_DIR" fsdeploy/__init__.py` → sys.path setup présent

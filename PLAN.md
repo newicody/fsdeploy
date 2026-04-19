@@ -11,25 +11,19 @@
 
 | ID | Description |
 |----|-------------|
-| 22.2 (partiel) | `__main__.py` corrigé (parent + lib/ dans sys.path) |
+| 22.2 (partiel) | `__main__.py` OK. `__init__.py` TOUJOURS CASSÉ (3 lignes, docstring ouverte) |
 | 18.1 | Tests SecurityResolver + Isolation (19 tests) |
-| 11.1-2 | SquashFS/overlay tasks + intents + UI mounts |
+| 11.1-2 | SquashFS/overlay tasks + intents + UI |
 | 23.1-2 | Isolation + cgroups executor |
 | 19.2 | 23 écrans câblés |
-| 17.1 | SecurityResolver 4 niveaux + executor |
+| 17.1 | SecurityResolver + executor |
 | Tout le reste | 20.1-3, 21.1, 10.5, 9.1, 8.1, 16.x, 17.7, 7.0, Phase 1-6 |
 
 ---
 
-## 🚧 Tâche active — 22.3
+## 🚧 P0 — CLI cassée
 
-Voir `add.md`.
-
----
-
-## P0 — CLI toujours cassée
-
-`fsdeploy/__init__.py` = 3 lignes avec docstring non fermée → `SyntaxError` à l'import. Le commit `28e6d75` a tronqué le fichier au lieu de le corriger.
+`fsdeploy/__init__.py` = SyntaxError. Le fichier corrigé `fsdeploy_init.py` est fourni séparément. Voir `add.md`.
 
 ---
 
