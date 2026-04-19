@@ -56,9 +56,6 @@ if __name__ == "__main__":
 Restaurer le setup sys.path pour `lib/` qui a été perdu en 20.1 :
 
 ```python
-# -*- coding: utf-8 -*-
-"""
-fsdeploy
 ========
 Systeme de deploiement ZFS/ZFSBootMenu depuis Debian Live.
 
