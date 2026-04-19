@@ -44,6 +44,8 @@ class MountsScreen(Screen):
         Binding("e", "edit_mountpoint", "Modifier", show=True),
         Binding("a", "mount_all", "Tout monter", show=True),
         Binding("v", "verify_all", "Verifier", show=True),
+        Binding("o", "overlay_mount", "Overlay", show=True),
+        Binding("t", "overlay_teardown", "Teardown", show=True),
         Binding("enter", "next_step", "Suivant", show=True),
         Binding("escape", "app.pop_screen", "Retour", show=False),
     ]
@@ -94,6 +96,8 @@ class MountsScreen(Screen):
         with Horizontal(id="action-buttons"):
             yield Button("Tout monter", variant="primary", id="btn-mount-all")
             yield Button("Verifier", variant="default", id="btn-verify")
+            yield Button("Overlay", variant="warning", id="btn-overlay")
+            yield Button("Teardown", variant="error", id="btn-teardown")
             yield Button(f"Valider {ARROW}", variant="success", id="btn-next")
 
     # ------------------------------------------------------------------
@@ -184,6 +188,10 @@ class MountsScreen(Screen):
             self.action_mount_all()
         elif bid == "btn-verify":
             self.action_verify_all()
+        elif bid == "btn-overlay":
+            self.action_overlay_mount()
+        elif bid == "btn-teardown":
+            self.action_overlay_teardown()
         elif bid == "btn-next":
             self.action_next_step()
         elif bid == "btn-apply-edit":
@@ -331,6 +339,81 @@ class MountsScreen(Screen):
                 pass
         if hasattr(self.app, "navigate_next"):
             self.app.navigate_next()
+
+    # ── Overlay ───────────────────────────────────────────────────────
+
+    def action_overlay_mount(self) -> None:
+        """Monte un squashfs + overlay pour le dataset selectionne."""
+        if not self.bridge:
+            return
+        table = self.query_one("#mounts-table", DataTable)
+        idx = table.cursor_row
+        if idx is None or idx >= len(self._entries):
+            self.notify("Selectionnez un dataset squashfs", severity="warning")
+            return
+        ds = self._entries[idx]
+        dataset = ds.get("dataset", "")
+        role = ds.get("role", "")
+        mountpoint = ds.get("current", "")
+
+        if role != "squashfs" and not dataset.endswith(".squashfs"):
+            self.notify("Ce dataset n'est pas un squashfs", severity="warning")
+            return
+
+        # Determiner les chemins
+        sfs_path = mountpoint if ds.get("mounted") else ""
+        if not sfs_path:
+            self.notify("Mountpoint squashfs requis (montez d'abord le dataset)", severity="warning")
+            return
+
+        merged = f"/mnt/overlay-{dataset.replace('/', '-')}"
+        self._log(f"-> overlay.mount (sfs={sfs_path}, merged={merged})")
+        self.bridge.emit(
+            "overlay.mount",
+            squashfs_path=sfs_path,
+            merged=merged,
+            callback=self._on_overlay_done,
+        )
+
+    def _on_overlay_done(self, ticket) -> None:
+        if ticket.status == "failed":
+            self._slog(f"{CROSS} Overlay echoue : {ticket.error}")
+        else:
+            result = ticket.result or {}
+            merged = result.get("merged", "?")
+            self._slog(f"{CHECK} Overlay monte : {merged}")
+            self.action_refresh_mounts()
+
+    def action_overlay_teardown(self) -> None:
+        """Demonte l'overlay du dataset selectionne."""
+        if not self.bridge:
+            return
+        table = self.query_one("#mounts-table", DataTable)
+        idx = table.cursor_row
+        if idx is None or idx >= len(self._entries):
+            self.notify("Selectionnez un overlay a demonter", severity="warning")
+            return
+        ds = self._entries[idx]
+        mountpoint = ds.get("current", "")
+
+        if not mountpoint or mountpoint in ("-", "none"):
+            self.notify("Pas de mountpoint a demonter", severity="warning")
+            return
+
+        self._log(f"-> overlay.teardown (merged={mountpoint})")
+        self.bridge.emit(
+            "overlay.teardown",
+            merged=mountpoint,
+            cleanup_dirs=True,
+            callback=self._on_teardown_done,
+        )
+
+    def _on_teardown_done(self, ticket) -> None:
+        if ticket.status == "failed":
+            self._slog(f"{CROSS} Teardown echoue : {ticket.error}")
+        else:
+            self._slog(f"{CHECK} Overlay demonte")
+            self.action_refresh_mounts()
 
     def update_from_snapshot(self, s):
         pass
