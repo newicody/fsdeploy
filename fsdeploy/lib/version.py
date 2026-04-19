@@ -1,5 +1,5 @@
 """
-Version du package fsdeploy.
+Version de fsdeploy (lue depuis pyproject.toml à la construction).
 """
 
-__version__ = "1.0.0"
+__version__ = "0.2.0"
