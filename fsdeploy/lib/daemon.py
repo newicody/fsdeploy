@@ -169,6 +169,7 @@ class FsDeployDaemon:
 
     def _register_all_intents(self) -> None:
         from scheduler.core.registry import INTENT_REGISTRY
+        from fsdeploy.lib.intents import overlay_intent  # noqa
 
         intent_modules = [
             "intents.detection_intent",
