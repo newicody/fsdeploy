@@ -1,66 +1,24 @@
-# add.md — 22.2 : Fix CLI cassée (sys.path régression 20.1)
+# add.md — 22.3 : Fix `fsdeploy/__init__.py` tronqué (SyntaxError)
 
-## Diagnostic
+## Bug
 
-`python3 -m fsdeploy` → "Erreur : impossible de trouver fsdeploy.cli"
-
-Deux causes :
-1. `__main__.py` ajoute `fsdeploy/` au sys.path au lieu du parent → `from fsdeploy.cli` cherche `fsdeploy/fsdeploy/cli.py` (supprimé en 20.1)
-2. `__init__.py` ne met plus `lib/` dans sys.path → 36 fichiers avec des imports bare (`from scheduler.model.task import Task`) cassent
-
-## A. Réécrire `fsdeploy/__main__.py`
-
-```python
-#!/usr/bin/env python3
+Le fichier fait 3 lignes avec une docstring `"""` non fermée :
+```
 # -*- coding: utf-8 -*-
 """
-fsdeploy.__main__
-==================
-Point d'entree : python3 -m fsdeploy [OPTIONS] [COMMAND]
-"""
-import sys
-import os
-from pathlib import Path
-
-
-def main():
-    # Ajouter le PARENT de fsdeploy/ au sys.path
-    # pour que 'from fsdeploy.cli import app' fonctionne
-    _package_dir = Path(__file__).resolve().parent
-    _parent_dir = _package_dir.parent
-    _lib_dir = _package_dir / "lib"
-
-    if str(_parent_dir) not in sys.path:
-        sys.path.insert(0, str(_parent_dir))
-
-    # Ajouter lib/ pour les imports bare (from scheduler.model.task import Task)
-    # Utilise par 36 fichiers dans lib/
-    if _lib_dir.is_dir() and str(_lib_dir) not in sys.path:
-        sys.path.insert(0, str(_lib_dir))
-
-    try:
-        from fsdeploy.cli import app
-    except ImportError as e:
-        print(f"Erreur import CLI : {e}")
-        sys.exit(1)
-
-    sys.exit(app())
-
-
-if __name__ == "__main__":
-    main()
+fsdeploy
 ```
 
-## B. Réécrire `fsdeploy/__init__.py`
+`import fsdeploy` → `SyntaxError: unterminated triple-quoted string literal`
 
-Restaurer le setup sys.path pour `lib/` qui a été perdu en 20.1 :
+## Fix
+
+Écraser le fichier `fsdeploy/__init__.py` avec le contenu exact suivant (44 lignes) :
 
 ```python
-========
-Systeme de deploiement ZFS/ZFSBootMenu depuis Debian Live.
-
-Point d'entree : python3 -m fsdeploy
-Le code metier vit dans lib/ — ce package gere le bootstrap.
+# -*- coding: utf-8 -*-
+"""
+fsdeploy - Systeme de deploiement ZFS/ZFSBootMenu.
 """
 
 import os
@@ -69,19 +27,14 @@ from pathlib import Path
 
 __version__ = "1.0.0"
 
-# ── Path setup ────────────────────────────────────────────────────────
-# Les modules scheduler/, function/, intents/, bus/ vivent dans lib/.
-# On ajoute lib/ au sys.path pour que les imports bare fonctionnent :
-#   from scheduler.core.scheduler import Scheduler
-#   from bus import TimerSource
-
+# Path setup : ajouter lib/ au sys.path pour les imports bare
+# (from scheduler.model.task import Task) utilises par 36 fichiers
 _PACKAGE_DIR = Path(__file__).resolve().parent
 _LIB_DIR = _PACKAGE_DIR / "lib"
 
 if _LIB_DIR.is_dir() and str(_LIB_DIR) not in sys.path:
     sys.path.insert(0, str(_LIB_DIR))
 
-# ── Version ───────────────────────────────────────────────────────────
 try:
     from fsdeploy.lib.version import __version__ as _v
     __version__ = _v
@@ -90,10 +43,12 @@ except (ImportError, AttributeError):
 
 
 def get_version() -> str:
+    """Retourne la version courante."""
     return __version__
 
 
 def get_install_dir() -> Path:
+    """Retourne le repertoire d'installation."""
     env_dir = os.environ.get("FSDEPLOY_INSTALL_DIR")
     if env_dir:
         return Path(env_dir)
@@ -101,13 +56,15 @@ def get_install_dir() -> Path:
 
 
 def get_lib_dir() -> Path:
+    """Retourne le repertoire lib/."""
     return _LIB_DIR
 ```
 
+**ATTENTION** : le fichier doit faire exactement 44 lignes. Vérifier que la docstring ligne 3 est bien fermée par `"""` ligne 4. Ne PAS tronquer le fichier.
+
 ## Critères
 
-1. `cd /opt/fsdeploy && python3 -m fsdeploy --help` → affiche l'aide typer (pas "Erreur")
-2. `python3 -c "import fsdeploy; print(fsdeploy.get_lib_dir())"` → affiche le chemin lib/
-3. `python3 -c "import fsdeploy; from scheduler.model.task import Task; print('OK')"` → OK (bare import fonctionne)
-4. `grep "dirname.*dirname\|_parent_dir\|_lib_dir" fsdeploy/__main__.py` → parent + lib ajoutés
-5. `grep "_LIB_DIR\|sys.path" fsdeploy/__init__.py` → setup lib/ restauré
+1. `python3 -c "import ast; ast.parse(open('fsdeploy/__init__.py').read()); print('SYNTAX OK')"` → SYNTAX OK
+2. `wc -l fsdeploy/__init__.py` → au moins 40 lignes
+3. `PYTHONPATH=. python3 -c "import fsdeploy; print(fsdeploy.__version__)"` → pas de SyntaxError
+4. `PYTHONPATH=. python3 -c "import fsdeploy; print(fsdeploy.get_lib_dir())"` → affiche un chemin
