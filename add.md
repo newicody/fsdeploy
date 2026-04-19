@@ -1,200 +1,116 @@
-# add.md — 18.1 : Tests SecurityResolver + Executor + Isolation
+# add.md — 22.2 : Fix CLI cassée (sys.path régression 20.1)
 
-## Créer `tests/unit/test_security_resolver.py`
+## Diagnostic
+
+`python3 -m fsdeploy` → "Erreur : impossible de trouver fsdeploy.cli"
+
+Deux causes :
+1. `__main__.py` ajoute `fsdeploy/` au sys.path au lieu du parent → `from fsdeploy.cli` cherche `fsdeploy/fsdeploy/cli.py` (supprimé en 20.1)
+2. `__init__.py` ne met plus `lib/` dans sys.path → 36 fichiers avec des imports bare (`from scheduler.model.task import Task`) cassent
+
+## A. Réécrire `fsdeploy/__main__.py`
 
 ```python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Tests unitaires pour le SecurityResolver et son integration executor."""
+"""
+fsdeploy.__main__
+==================
+Point d'entree : python3 -m fsdeploy [OPTIONS] [COMMAND]
+"""
+import sys
 import os
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-
-from fsdeploy.lib.scheduler.security.resolver import SecurityResolver
-from fsdeploy.lib.scheduler.security.decorator import SecurityDecorator, security
-from fsdeploy.lib.scheduler.model.task import Task
+from pathlib import Path
 
 
-# ── Fixtures ──────────────────────────────────────────────────────────
+def main():
+    # Ajouter le PARENT de fsdeploy/ au sys.path
+    # pour que 'from fsdeploy.cli import app' fonctionne
+    _package_dir = Path(__file__).resolve().parent
+    _parent_dir = _package_dir.parent
+    _lib_dir = _package_dir / "lib"
 
-class DummyTask(Task):
-    def run(self):
-        return {"ok": True}
+    if str(_parent_dir) not in sys.path:
+        sys.path.insert(0, str(_parent_dir))
 
+    # Ajouter lib/ pour les imports bare (from scheduler.model.task import Task)
+    # Utilise par 36 fichiers dans lib/
+    if _lib_dir.is_dir() and str(_lib_dir) not in sys.path:
+        sys.path.insert(0, str(_lib_dir))
 
-@security.dataset.destroy(require_root=True)
-class ProtectedTask(Task):
-    def run(self):
-        return {"destroyed": True}
+    try:
+        from fsdeploy.cli import app
+    except ImportError as e:
+        print(f"Erreur import CLI : {e}")
+        sys.exit(1)
 
-
-@security.kernel.compile(cgroup_cpu=50, cgroup_mem=4096)
-class CgroupTask(Task):
-    def run(self):
-        return {"compiled": True}
-
-
-# ── SecurityResolver.check() ─────────────────────────────────────────
-
-class TestSecurityResolver:
-
-    def test_bypass_allows_everything(self):
-        resolver = SecurityResolver(bypass=True)
-        task = ProtectedTask(id="t1", params={}, context={})
-        allowed, reason = resolver.check(task)
-        assert allowed is True
-        assert reason is None
-
-    def test_no_config_allows_by_default(self):
-        resolver = SecurityResolver()
-        task = DummyTask(id="t1", params={}, context={})
-        allowed, reason = resolver.check(task)
-        assert allowed is True
-
-    def test_require_root_denied_without_privilege(self):
-        resolver = SecurityResolver()
-        task = ProtectedTask(id="t1", params={}, context={})
-        with patch.object(resolver, '_check_privilege', return_value=False):
-            allowed, reason = resolver.check(task)
-            assert allowed is False
-            assert "root" in reason.lower() or "sudo" in reason.lower()
-
-    def test_require_root_allowed_with_privilege(self):
-        resolver = SecurityResolver()
-        task = ProtectedTask(id="t1", params={}, context={})
-        with patch.object(resolver, '_check_privilege', return_value=True):
-            allowed, reason = resolver.check(task)
-            assert allowed is True
-
-    def test_config_deny_blocks(self):
-        config = Mock()
-        config.get.return_value = {"dataset.destroy": "deny"}
-        resolver = SecurityResolver(config=config)
-        task = ProtectedTask(id="t1", params={}, context={})
-        with patch.object(resolver, '_check_privilege', return_value=True):
-            allowed, reason = resolver.check(task)
-            assert allowed is False
-            assert "deny" in reason.lower() or "denied" in reason.lower()
-
-    def test_config_allow_passes(self):
-        config = Mock()
-        config.get.return_value = {"dataset.destroy": "allow"}
-        resolver = SecurityResolver(config=config)
-        task = ProtectedTask(id="t1", params={}, context={})
-        with patch.object(resolver, '_check_privilege', return_value=True):
-            allowed, reason = resolver.check(task)
-            assert allowed is True
-
-    def test_config_dry_run_only_denied_without_flag(self):
-        config = Mock()
-        config.get.return_value = {"dataset.destroy": "dry_run_only"}
-        resolver = SecurityResolver(config=config)
-        task = ProtectedTask(id="t1", params={}, context={})
-        with patch.object(resolver, '_check_privilege', return_value=True):
-            allowed, reason = resolver.check(task, {"dry_run": False})
-            assert allowed is False
-
-    def test_config_dry_run_only_allowed_with_flag(self):
-        config = Mock()
-        config.get.return_value = {"dataset.destroy": "dry_run_only"}
-        resolver = SecurityResolver(config=config)
-        task = ProtectedTask(id="t1", params={}, context={})
-        with patch.object(resolver, '_check_privilege', return_value=True):
-            allowed, reason = resolver.check(task, {"dry_run": True})
-            assert allowed is True
-
-    def test_custom_policy_blocks(self):
-        def deny_all(task, ctx):
-            return False, "custom deny"
-        resolver = SecurityResolver(policies=[deny_all])
-        task = DummyTask(id="t1", params={}, context={})
-        allowed, reason = resolver.check(task)
-        assert allowed is False
-        assert "custom deny" in reason
-
-
-# ── SecurityDecorator metadata ────────────────────────────────────────
-
-class TestSecurityDecorator:
-
-    def test_decorator_sets_path(self):
-        assert ProtectedTask._security_path == "dataset.destroy"
-
-    def test_decorator_sets_options(self):
-        assert ProtectedTask._security_options.get("require_root") is True
-
-    def test_cgroup_options(self):
-        assert CgroupTask._security_options.get("cgroup_cpu") == 50
-        assert CgroupTask._security_options.get("cgroup_mem") == 4096
-
-    def test_no_decorator_no_path(self):
-        assert not hasattr(DummyTask, '_security_path')
-
-
-# ── resolve_locks ─────────────────────────────────────────────────────
-
-class TestResolveLocks:
-
-    def test_locks_from_task(self):
-        resolver = SecurityResolver()
-        task = Mock()
-        task.__class__ = type('FakeTask', (), {'_security_path': '', '_security_options': {}})
-        task.required_locks = Mock(return_value=[Mock()])
-        locks = resolver.resolve_locks(task)
-        assert len(locks) >= 1
-
-    def test_locks_from_decorator_path(self):
-        resolver = SecurityResolver()
-        task = ProtectedTask(id="t1", params={}, context={})
-        locks = resolver.resolve_locks(task)
-        assert any("dataset.destroy" in str(l) for l in locks)
-
-
-# ── Isolation CgroupLimits ────────────────────────────────────────────
-
-class TestCgroupLimits:
-
-    def test_not_available_without_cgroupfs(self):
-        from fsdeploy.lib.scheduler.core.isolation import CgroupLimits
-        with patch('fsdeploy.lib.scheduler.core.isolation.CGROUP_ROOT') as mock_root:
-            mock_path = Mock()
-            mock_path.__truediv__ = Mock(return_value=Mock(exists=Mock(return_value=False)))
-            # Force unavailable
-            assert isinstance(CgroupLimits.available(), bool)
-
-    def test_context_manager(self):
-        from fsdeploy.lib.scheduler.core.isolation import CgroupLimits
-        cg = CgroupLimits("test-task", cpu_percent=50, mem_max_mb=1024)
-        with patch.object(cg, 'create', return_value=False):
-            with patch.object(cg, 'cleanup'):
-                with cg as ctx:
-                    assert ctx is cg
-                cg.cleanup.assert_called_once()
-
-
-# ── MountIsolation ────────────────────────────────────────────────────
-
-class TestMountIsolation:
-
-    def test_available_checks_unshare(self):
-        from fsdeploy.lib.scheduler.core.isolation import MountIsolation
-        iso = MountIsolation()
-        assert isinstance(iso.available, bool)
-
-    def test_run_returns_dict(self):
-        from fsdeploy.lib.scheduler.core.isolation import MountIsolation
-        iso = MountIsolation(sudo=False)
-        if iso.available:
-            result = iso.run(["echo", "test"], timeout=5)
-            assert isinstance(result, dict)
-            assert "success" in result
+    sys.exit(app())
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    main()
+```
+
+## B. Réécrire `fsdeploy/__init__.py`
+
+Restaurer le setup sys.path pour `lib/` qui a été perdu en 20.1 :
+
+```python
+# -*- coding: utf-8 -*-
+"""
+fsdeploy
+========
+Systeme de deploiement ZFS/ZFSBootMenu depuis Debian Live.
+
+Point d'entree : python3 -m fsdeploy
+Le code metier vit dans lib/ — ce package gere le bootstrap.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+__version__ = "1.0.0"
+
+# ── Path setup ────────────────────────────────────────────────────────
+# Les modules scheduler/, function/, intents/, bus/ vivent dans lib/.
+# On ajoute lib/ au sys.path pour que les imports bare fonctionnent :
+#   from scheduler.core.scheduler import Scheduler
+#   from bus import TimerSource
+
+_PACKAGE_DIR = Path(__file__).resolve().parent
+_LIB_DIR = _PACKAGE_DIR / "lib"
+
+if _LIB_DIR.is_dir() and str(_LIB_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_DIR))
+
+# ── Version ───────────────────────────────────────────────────────────
+try:
+    from fsdeploy.lib.version import __version__ as _v
+    __version__ = _v
+except (ImportError, AttributeError):
+    pass
+
+
+def get_version() -> str:
+    return __version__
+
+
+def get_install_dir() -> Path:
+    env_dir = os.environ.get("FSDEPLOY_INSTALL_DIR")
+    if env_dir:
+        return Path(env_dir)
+    return _PACKAGE_DIR
+
+
+def get_lib_dir() -> Path:
+    return _LIB_DIR
 ```
 
 ## Critères
 
-1. `test -f tests/unit/test_security_resolver.py` → existe
-2. `grep -c "def test_" tests/unit/test_security_resolver.py` → au moins 15 tests
-3. `PYTHONPATH=. python3 -m pytest tests/unit/test_security_resolver.py -v --tb=short 2>&1 | tail -5` → la majorité des tests passent (certains peuvent échouer sans configobj installé)
+1. `cd /opt/fsdeploy && python3 -m fsdeploy --help` → affiche l'aide typer (pas "Erreur")
+2. `python3 -c "import fsdeploy; print(fsdeploy.get_lib_dir())"` → affiche le chemin lib/
+3. `python3 -c "import fsdeploy; from scheduler.model.task import Task; print('OK')"` → OK (bare import fonctionne)
+4. `grep "dirname.*dirname\|_parent_dir\|_lib_dir" fsdeploy/__main__.py` → parent + lib ajoutés
+5. `grep "_LIB_DIR\|sys.path" fsdeploy/__init__.py` → setup lib/ restauré
