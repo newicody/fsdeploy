@@ -4,6 +4,8 @@ Interface en ligne de commande pour fsdeploy.
 import json
 import sys
 import typer
+from typing import Optional
+from pathlib import Path
 
 # Import des classes Intent disponibles
 from fsdeploy.lib.intents.zfsbootmenu_intent import ZFSBootMenuIntegrateIntent
@@ -22,7 +24,7 @@ from fsdeploy.lib.intents.system_intent import CoherenceCheckIntent
 from fsdeploy.lib.intents.kernel_mainline_intent import KernelMainlineDetectIntent
 # Ajoutez ici d'autres intents au besoin
 
-app = typer.Typer()
+app = typer.Typer(help="fsdeploy — Système de déploiement ZFS/ZBM")
 
 # Mapping des noms d'intents vers les classes
 _INTENT_MAP = {
@@ -37,6 +39,47 @@ _INTENT_MAP = {
     "coherence.check": CoherenceCheckIntent,
     "kernel.mainline.detect": KernelMainlineDetectIntent,
 }
+
+@app.command(name="start")
+def start(
+    mode: str = typer.Option(
+        "tui", 
+        "--mode", "-m", 
+        help="Modes: tui (interface), daemon (service), stream (web), bare (minimal)"
+    ),
+    config: Optional[Path] = typer.Option(
+        None, "--config", "-c", 
+        help="Chemin vers un fichier de configuration JSON spécifique",
+        exists=True, file_okay=True, dir_okay=False, readable=True
+    ),
+):
+    """
+    Lance l'orchestrateur fsdeploy.
+    Cette commande est isolée pour éviter tout conflit avec les 'intents' directs.
+    """
+    try:
+        # Import local pour éviter de charger Textual/Rich si on utilise juste --help
+        from fsdeploy.daemon import FsDeployDaemon
+        
+        # Initialisation propre avec dictionnaire de config
+        daemon_config = {"mode": mode}
+        if config:
+            daemon_config["config_path"] = str(config)
+
+        # On lance le moteur
+        # Le daemon gère lui-même la séparation Thread UI / Thread Scheduler
+        daemon = FsDeployDaemon(config=daemon_config)
+        
+        # Bloquant jusqu'à la fermeture de l'interface ou du service
+        daemon.run(mode=mode)
+        
+    except ImportError as e:
+        typer.secho(f"❌ Dépendance manquante : {e}", fg="red", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.secho(f"💥 Erreur critique au démarrage : {e}", fg="red", err=True)
+        raise typer.Exit(1)
+
 
 @app.command()
 def run_intent(
