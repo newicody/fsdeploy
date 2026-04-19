@@ -2,8 +2,8 @@
 
 > **Dernière mise à jour** : 2026-04-19
 > **Itération worker** : 87
-> **Codebase** : ~23 794 lignes Python, 67 intents, 23 écrans
-> **Tâche active** : **23.2** — voir `add.md`
+> **Codebase** : ~23 844 lignes Python, 67 intents, 23 écrans
+> **Tâche active** : **11.1** — voir `add.md`
 
 ---
 
@@ -13,28 +13,17 @@
 |----|-------------|
 | — | Daemon, Scheduler, Bridge, Config, Logging, Bus, Runtime, IntentLog, Metrics, TaskGraph |
 | — | 67 intents, 33 tasks réelles, launch.sh, multi-init |
-| 23.1 | `isolation.py` créé — MountIsolation + CgroupLimits (285L) |
+| 23.1-2 | Isolation : isolation.py + cgroups intégrés executor |
 | 22.1 | Fix __main__.py |
-| 19.2 | 23 écrans câblés — 0 violation |
-| 17.1 | SecurityResolver 4 niveaux + intégration executor |
+| 19.2 | 23 écrans câblés |
+| 17.1 | SecurityResolver 4 niveaux + executor |
 | 20.1-3, 21.1, 10.5, 9.1, 8.1, 16.x, 17.7, 7.0, Phase 1-6 | Tout le reste |
 
 ---
 
-## 🚧 Tâche active — 23.2
+## 🚧 Tâche active — 11.1
 
 Voir `add.md`.
-
----
-
-## Phase 23 : Isolation — Progression
-
-| ID | Description | État |
-|----|-------------|------|
-| 23.1 | Créer `isolation.py` (MountIsolation + CgroupLimits) | ✅ |
-| **23.2** | Intégrer cgroups dans executor + decorator DSL | En cours |
-| 23.3 | Mount namespace pour DatasetProbeTask (multiprocessing + os.unshare) | À faire |
-| 23.4 | Options isolation dans security decorator | À faire |
 
 ---
 
@@ -44,13 +33,25 @@ Voir `add.md`.
 
 | ID | Description |
 |----|-------------|
-| **23.2** | Cgroups dans executor |
-| **23.3** | Mount namespace pour probe |
-| **11.1** | SquashFS mount/overlay tasks |
-| **11.2** | Switch rootfs à chaud |
+| **11.1** | SquashFS mount + overlay setup (tasks + intents) |
+| **11.2** | Câbler rootfs switch à un écran |
+| **23.3** | Mount namespace pour DatasetProbeTask |
 
 ### P2
 
 | ID | Description |
 |----|-------------|
 | **18.1-3** | Tests |
+
+---
+
+## État rootfs/overlay
+
+| Composant | État |
+|-----------|------|
+| `rootfs/switch.py` (178L) | ✅ `RootfsSwitchTask`, `RootfsMountTask`, `RootfsUpdateTask` — implémentés |
+| `modules/scanner/squashfs.py` | ✅ Scanner + extraction squashfs |
+| `overlay_check.py` | ✅ Vérification overlayfs montés |
+| Detection rôles `squashfs`, `overlay` | ✅ Dans role_patterns.py |
+| **Tasks overlay standalone** | ❌ Pas de mount/setup/teardown indépendant |
+| **Intents overlay** | ❌ Aucun intent `overlay.*` enregistré |
