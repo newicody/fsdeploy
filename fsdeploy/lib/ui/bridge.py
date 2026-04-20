@@ -33,6 +33,11 @@ from typing import Any, Callable, Optional
 from uuid import uuid4
 from fsdeploy.lib.log import get_logger
 
+try:
+    from fsdeploy.lib.scheduler.bridge import SchedulerBridge as GlobalSchedulerBridge
+except ImportError:
+    GlobalSchedulerBridge = None
+
 
 @dataclass
 class Ticket:
@@ -90,23 +95,50 @@ class SchedulerBridge:
         self._tickets: dict[str, Ticket] = {}
         self._history: deque[Ticket] = deque(maxlen=500)
         self._lock = threading.Lock()
+        
+        # Obtenir l'instance globale du bridge du scheduler
+        if GlobalSchedulerBridge is not None:
+            self._global_bridge = GlobalSchedulerBridge.default()
+        else:
+            # Fallback: créer un bridge local (ne devrait pas arriver)
+            self._global_bridge = None
 
     # ═══════════════════════════════════════════════════════════════
     # EMISSION — la seule methode que la TUI utilise
     # ═══════════════════════════════════════════════════════════════
-    def _log_ticket(self, action: str, ticket: Ticket, **extra):
-        """Émet un événement de log sans erreur de signature."""
-        if self._event_bus is None:
-            return
-        # Correction : On passe un dictionnaire unique pour éviter le TypeError
-        data = {
-            "ticket_id": ticket.id,
-            "event_name": ticket.event_name,
-            "status": ticket.status
-        }
-        data.update(extra)
-        self._event_bus.emit("bridge.ticket." + action, data)
-
+    def submit_event(self, event_name: str, priority: int | None = None, **params) -> str:
+        """Soumet un événement au scheduler via le bridge global."""
+        if self._global_bridge is None:
+            # Fallback: générer un ticket local immédiatement terminé
+            ticket_id = str(uuid4())
+            ticket = Ticket(
+                id=ticket_id,
+                event_name=event_name,
+                params=params,
+                submitted_at=time.time(),
+                status="completed",
+                result=None
+            )
+            with self._lock:
+                self._tickets[ticket_id] = ticket
+                self._history.append(ticket)
+            self._log_ticket("submitted", ticket)
+            return ticket_id
+        # Délégation au bridge global
+        ticket_id = self._global_bridge.submit_event(event_name, priority=priority, **params)
+        # Créer un ticket local pour le suivi
+        ticket = Ticket(
+            id=ticket_id,
+            event_name=event_name,
+            params=params,
+            submitted_at=time.time(),
+            status="pending"
+        )
+        with self._lock:
+            self._tickets[ticket_id] = ticket
+            self._history.append(ticket)
+        self._log_ticket("submitted", ticket)
+        return ticket_id
 
     def emit(self, event_name: str, callback: Optional[Callable] = None, 
              priority: Optional[int] = None, **params) -> str:
@@ -303,19 +335,32 @@ class SchedulerBridge:
     # ═══════════════════════════════════════════════════════════════
 
     @property
+    def pending_tickets(self):
+        """Retourne les tickets en attente via le bridge global."""
+        if self._global_bridge is not None:
+            return self._global_bridge.get_tickets_by_status("pending")
+        with self._lock:
+            return [t for t in self._tickets.values() if t.status == "pending"]
+
+    @property
     def pending_count(self) -> int:
-        return self._global_bridge.pending_count
+        if self._global_bridge is not None:
+            return self._global_bridge.pending_count
+        with self._lock:
+            return sum(1 for t in self._tickets.values() if t.status == "pending")
 
     @property
     def active_events(self) -> list[str]:
         """Noms des events en attente de resultat."""
-        # On utilise pending_tickets du bridge global
-        pending = self._global_bridge.pending_tickets
+        pending = self.pending_tickets
         return [t.event_name for t in pending]
 
     @property
     def history(self) -> list[Ticket]:
-        return self._global_bridge.history
+        if self._global_bridge is not None:
+            return self._global_bridge.history
+        with self._lock:
+            return list(self._history)
 
     def clear_done(self) -> int:
         if self._global_bridge is not None:
