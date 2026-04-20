@@ -95,13 +95,13 @@ class SchedulerBridge:
         """Émet un événement de log pour un ticket."""
         if self._event_bus is None:
             return
-        self._event_bus.emit(
-            "bridge.ticket." + action,
-            ticket_id=ticket.id,
-            event_name=ticket.event_name,
-            status=ticket.status,
-            **extra
-        )
+        data = {
+            "ticket_id": ticket.id,
+            "event_name": ticket.event_name,
+            "status": ticket.status
+        }
+        data.update(extra)
+        self._event_bus.emit("bridge.ticket." + action, data)
 
     # ═══════════════════════════════════════════════════════════════
     # Émission d'événements
