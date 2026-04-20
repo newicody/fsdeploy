@@ -219,6 +219,9 @@ class SchedulerBridge:
             if not t:
                 return
             t.callbacks.append(callback)
+            # Si le ticket est déjà terminé, déclencher immédiatement
+            if t.status in ("completed", "failed"):
+                self._fire(t)
 
     def wait_for_ticket(self, ticket_id: str, timeout: float | None = None) -> bool:
         """
