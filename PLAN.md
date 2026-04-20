@@ -1,9 +1,9 @@
 # PLAN.md — fsdeploy (branche `dev`)
 
-> **Dernière mise à jour** : 2026-04-19
-> **Itération worker** : 104
-> **Codebase** : ~24 273 lignes Python, 71 intents, 23 écrans, 15 tests
-> **Tâche active** : **23.3** — voir `add.md`
+> **Dernière mise à jour** : 2026-04-20
+> **Itération worker** : 105
+> **Codebase** : ~24 273 lignes Python
+> **Tâche active** : **24.1** — Refonte Bridge & Patch Global Screens
 
 ---
 
@@ -24,10 +24,9 @@
 ---
 
 ## 🚧 Tâche active — 24.1
-Correction de la communication UI/Scheduler :
-- Fix des signatures et de l'initialisation dans `bridge.py`.
-- Migration de **tous les écrans (23)** vers le nouveau standard `bridge.emit()`.
-
+Refonte de la communication UI/Scheduler :
+- Correction du constructeur et des signatures de `bridge.py`.
+- Migration des 23 écrans vers le standard `bridge.emit()`.
 Voir `add.md`.
 
 ---

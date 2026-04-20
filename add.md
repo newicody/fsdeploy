@@ -1,48 +1,32 @@
 # add.md — 24.1 : Refonte Bridge & Migration des 23 Écrans
 
 ## Problème
-Incohérence entre `app.py` et `bridge.py` et manque d'une interface d'émission standardisée (`emit`) pour les écrans.
+Le `SchedulerBridge` actuel possède un constructeur `__init__()` sans arguments, alors que `app.py` lui en transmet deux. La méthode `_log_ticket` provoque un `TypeError` avec le `MessageBus`. Enfin, les écrans appellent `bridge.emit()`, méthode inexistante dans la classe actuelle.
 
-## Modifications de l'Architecture
+## Modifications prioritaires
 
 ### 1. `fsdeploy/ui/bridge.py`
-- **Init** : Modifier `__init__(self, runtime=None, store=None)` pour accepter les arguments de l'App.
-- **Méthode `emit`** : Ajouter `emit(self, event_name, callback=None, priority=None, **params)` comme alias de `submit_event`.
-- **Signature Log** : Fixer `_log_ticket` pour envoyer un dictionnaire unique au bus.
+- **Initialisation** : Modifier `__init__(self, runtime=None, store=None)` pour stocker les références.
+- **Méthode `emit`** : Ajouter `emit(self, event_name, callback=None, priority=None, **params)` qui appelle `submit_event` et gère le callback.
+- **Logique de Log** : Dans `_log_ticket`, regrouper les données dans un dictionnaire `data` unique avant d'appeler `self._event_bus.emit` pour éviter les erreurs de signature.
+- **Auto-nettoyage** : Appeler `self.cleanup_old()` à la fin de `poll()` pour éviter la saturation de `_tickets`.
 
 ### 2. `fsdeploy/ui/app.py`
-- **Instanciation** : Passer `self.runtime` et `self.store` au constructeur du Bridge.
+- Mettre à jour l'instanciation : `self.bridge = SchedulerBridge(runtime=self.runtime, store=self.store)`.
 
-## Migration des Écrans (`fsdeploy/lib/ui/screens/`)
+## Patch Global des Écrans (`fsdeploy/lib/ui/screens/`)
 
-Chaque fichier listé ci-dessous doit être modifié pour :
-1. Importer `SchedulerBridge`.
-2. Initialiser `self.bridge = SchedulerBridge.default()` dans `on_mount`.
-3. Remplacer les appels directs au bus/scheduler par `self.bridge.emit(...)`.
+Chaque écran listé doit être modifié pour utiliser `SchedulerBridge.default()` et la nouvelle méthode `emit()`.
 
-### Liste des fichiers à traiter par `aider` :
+### Liste exhaustive des fichiers à traiter :
+- **ZFS & Stockage** : `detection.py`, `pool_list.py`, `dataset_list.py`, `snapshot_manager.py`, `mount_explorer.py`, `scrub_monitor.py`, `quota_manager.py`, `replication_view.py`.
+- **Système & Réseau** : `disk_view.py`, `network_conf.py`, `service_status.py`, `update_manager.py`.
+- **Monitoring & Logs** : `graph_view.py`, `log_streamer.py`, `task_monitor.py`, `dashboard.py`.
+- **Pilotage & Sécurité** : `pilot_main.py`, `config_editor.py`, `security_audit.py`, `user_access.py`, `shell_access.py`, `vms_containers.py`, `help_screen.py`.
 
-* **Gestion Pools/ZFS** :
-    * `detection.py` : Migrer le scan des pools vers `bridge.emit("zfs.detect")`.
-    * `pool_list.py` : Utiliser le bridge pour rafraîchir la liste.
-    * `dataset_list.py` : Migrer les requêtes de propriétés.
-    * `snapshot_manager.py` : Remplacer les créations de snapshots par des tickets.
-* **Système & Stockage** :
-    * `disk_view.py` : Migrer l'inventaire SMART/Disques.
-    * `network_conf.py` : Migrer les changements d'IP/Interfaces.
-    * `service_status.py` : Utiliser le bridge pour start/stop les démons.
-* **Vues Temps Réel** :
-    * `graph_view.py` : Utiliser `bridge.get_scheduler_state()` pour les métriques.
-    * `log_streamer.py` : S'abonner aux flux via le bridge.
-    * `task_monitor.py` : Utiliser `bridge.pending_tickets` pour l'affichage.
-* **Configuration & Pilotage** :
-    * `pilot_main.py` : Centraliser les commandes de pilotage via `emit`.
-    * `config_editor.py` : Sauvegarder via des intents émis par le bridge.
-    * `security_audit.py` : Lancer l'audit via le scheduler bridge.
-* **Autres écrans (Total 23)** :
-    * `dashboard.py`, `help_screen.py`, `mount_explorer.py`, `scrub_monitor.py`, `update_manager.py`, `replication_view.py`, `quota_manager.py`, `user_access.py`, `shell_access.py`, `vms_containers.py`.
-
-## Critères de Validation
-- Aucun `TypeError` à l'init du Bridge.
-- `grep -r "bridge.emit" fsdeploy/lib/ui/screens/` doit retourner des résultats pour chaque fichier.
-- Le suivi des tâches fonctionne via `bridge.poll()`.
+### Logique d'injection (Standard) :
+```python
+def on_mount(self):
+    self.bridge = SchedulerBridge.default()
+    # Remplacer les anciens appels bus par :
+    self.bridge.emit("ui.screen.active", screen=self.__class__.__name__)
