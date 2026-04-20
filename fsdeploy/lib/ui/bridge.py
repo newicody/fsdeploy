@@ -103,6 +103,19 @@ class SchedulerBridge:
             # Fallback: créer un bridge local (ne devrait pas arriver)
             self._global_bridge = None
 
+    def _log_ticket(self, action: str, ticket: Ticket, **extra):
+        """Émet un événement de log sans erreur de signature."""
+        if self._event_bus is None:
+            return
+        # Correction : On passe un dictionnaire unique pour éviter le TypeError
+        data = {
+            "ticket_id": ticket.id,
+            "event_name": ticket.event_name,
+            "status": ticket.status
+        }
+        data.update(extra)
+        self._event_bus.emit("bridge.ticket." + action, data)
+
     # ═══════════════════════════════════════════════════════════════
     # EMISSION — la seule methode que la TUI utilise
     # ═══════════════════════════════════════════════════════════════
