@@ -69,97 +69,52 @@ class SchedulerBridge:
         store:   Store Huffman pour la journalisation (optionnel).
         _global_bridge: Instance du SchedulerBridge global pour la délégation.
     """
+    _instance = None
+    @classmethod
+    def default(cls) -> "SchedulerBridge":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
 
-    def __init__(self, runtime, store=None):
-        """
-        Args:
-            runtime: scheduler.core.runtime.Runtime (la seule ref partagee)
-            store:   intentlog.codec.HuffmanStore (optionnel, pour le log)
-        """
-        self.runtime = runtime
-        self.store = store
+    def __init__(self, runtime=None, store=None):
+        # Accepte désormais les arguments passés par app.py
+        self._scheduler = runtime
+        self._store = store 
+        
+        try:
+            from fsdeploy.lib.bus.event_bus import MessageBus
+            self._event_bus = MessageBus.global_instance()
+        except ImportError:
+            self._event_bus = None
+            
+        self._tickets: dict[str, Ticket] = {}
+        self._history: deque[Ticket] = deque(maxlen=500)
         self._lock = threading.Lock()
-        # Déléguer la gestion des tickets au SchedulerBridge global
-        from fsdeploy.lib.scheduler.bridge import SchedulerBridge as GlobalBridge
-        self._global_bridge = None
-        # Essayer plusieurs méthodes pour obtenir l'instance globale
-        for method_name in ('default', 'global_instance'):
-            try:
-                method = getattr(GlobalBridge, method_name)
-                instance = method()
-                if instance is not None:
-                    self._global_bridge = instance
-                    break
-            except (AttributeError, TypeError):
-                continue
-        # Si aucune méthode n'a fonctionné, créer un dummy bridge loggué
-        if self._global_bridge is None:
-            from fsdeploy.lib.log import get_logger
-            log = get_logger("ui.bridge")
-            log.error("scheduler_bridge_unavailable")
-            # DummyBridge loggué
-            class LoggedDummyBridge:
-                def emit(self, event_name, *a, **kw):
-                    log.warning("dummy_bridge_emit", event=event_name)
-                    return "dummy-ticket"
-                def poll(self): return []
-                def __getattr__(self, name):
-                    return lambda *a, **kw: None
-            self._global_bridge = LoggedDummyBridge()
 
     # ═══════════════════════════════════════════════════════════════
     # EMISSION — la seule methode que la TUI utilise
     # ═══════════════════════════════════════════════════════════════
+    def _log_ticket(self, action: str, ticket: Ticket, **extra):
+        """Émet un événement de log sans erreur de signature."""
+        if self._event_bus is None:
+            return
+        # Correction : On passe un dictionnaire unique pour éviter le TypeError
+        data = {
+            "ticket_id": ticket.id,
+            "event_name": ticket.event_name,
+            "status": ticket.status
+        }
+        data.update(extra)
+        self._event_bus.emit("bridge.ticket." + action, data)
 
-    def emit(self, event_name: str, callback: Callable | None = None,
-             priority: int | None = None, **params) -> str:
-        """
-        Emet un evenement dans le bus du scheduler.
 
-        C'est la SEULE facon pour la TUI de declencher une action.
-        Tout le reste est gere par le scheduler (handlers, intents,
-        tasks, locks, security).
-
-        Args:
-            event_name: Nom de l'evenement.
-                        Ex: "detection.start", "mount.request",
-                            "pool.import", "snapshot.create",
-                            "stream.start", "coherence.check"
-            callback:   Appele quand le resultat est disponible.
-                        Signature: callback(ticket: Ticket)
-            priority:   Priorite de l'evenement (entier). Les valeurs negatives
-                        sont traitees avant les positives. Si None, utilise -100.
-            **params:   Parametres de l'evenement.
-                        Ex: pools=["boot_pool"], dataset="tank/home"
-
-        Returns:
-            ticket_id: str — pour suivre le resultat.
-
-        Exemple dans un ecran :
-            tid = self.app.bridge.emit(
-                "detection.start",
-                pools=["boot_pool", "fast_pool"],
-                callback=self._on_detection_done,
-            )
-        """
-        # Soumettre via le bridge global
-        ticket_id = self._global_bridge.submit_event(
-            event_name,
-            priority=priority,
-            **params
-        )
-        # Ajouter le callback si fourni
+    def emit(self, event_name: str, callback: Optional[Callable] = None, 
+             priority: Optional[int] = None, **params) -> str:
+        """Alias robuste utilisé par les écrans pour soumettre des événements."""
+        # On délègue à submit_event qui gère l'ID et le bus
+        ticket_id = self.submit_event(event_name, priority=priority, **params)
         if callback:
-            self._global_bridge.on_result(ticket_id, callback)
-
-        # Log dans le store
-        if self.store:
-            self.store.log_event(
-                f"tui.emit.{event_name}",
-                source="bridge",
-                ticket=ticket_id,
-            )
-
+            self.on_result(ticket_id, callback)
         return ticket_id
 
     # ═══════════════════════════════════════════════════════════════
