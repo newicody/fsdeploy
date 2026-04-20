@@ -103,6 +103,10 @@ class SchedulerBridge:
         else:
             # Fallback: créer un bridge local (ne devrait pas arriver)
             self._global_bridge = None
+        
+        # Définir l'instance singleton si pas déjà défini
+        if self.__class__._instance is None:
+            self.__class__._instance = self
 
     def _log_ticket(self, action: str, ticket: Ticket, **extra):
         """Émet un événement de log sans erreur de signature."""
@@ -318,8 +322,12 @@ class SchedulerBridge:
                         # Ajouter à l'historique si pas déjà présent
                         if local_ticket not in self._history:
                             self._history.append(local_ticket)
+            # Nettoyage automatique des tickets anciens
+            self.cleanup_old()
             return completed
         # Pour les tickets locaux, rien à faire car ils sont déjà terminés immédiatement
+        # Nettoyage automatique des tickets anciens
+        self.cleanup_old()
         return []
 
     # ═══════════════════════════════════════════════════════════════
