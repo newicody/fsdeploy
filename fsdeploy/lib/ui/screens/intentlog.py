@@ -7,6 +7,7 @@ from textual.screen import Screen
 from textual.widgets import Header, Footer, Static, Label, DataTable
 from textual.binding import Binding
 from textual.containers import Vertical
+from fsdeploy.lib.ui.bridge import SchedulerBridge
 
 
 class IntentLogScreen(Screen):
@@ -57,7 +58,6 @@ class IntentLogScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        from fsdeploy.lib.ui.bridge import SchedulerBridge
         self.bridge = SchedulerBridge.default()
         self.refresh_logs()
 
