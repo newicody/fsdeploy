@@ -221,7 +221,17 @@ class SchedulerBridge:
             t.callbacks.append(callback)
             # Si le ticket est déjà terminé, déclencher immédiatement
             if t.status in ("completed", "failed"):
-                self._fire(t)
+                # Copier les callbacks et les exécuter hors du verrou
+                cbs = list(t.callbacks)
+                t.callbacks.clear()
+            else:
+                cbs = []
+        # Exécuter les callbacks hors du verrou
+        for cb in cbs:
+            try:
+                cb(t)
+            except Exception:
+                pass
 
     def wait_for_ticket(self, ticket_id: str, timeout: float | None = None) -> bool:
         """
