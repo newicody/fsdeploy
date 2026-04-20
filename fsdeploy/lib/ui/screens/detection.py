@@ -66,9 +66,6 @@ class DetectionScreen(Screen):
         self._list_done_count: int = 0
         self._list_expected: int = 0
 
-    @property
-    def bridge(self):
-        return getattr(self.app, "bridge", None)
 
     def compose(self) -> ComposeResult:
         yield Static("Detection du systeme", id="detection-header")
@@ -92,6 +89,7 @@ class DetectionScreen(Screen):
             yield Button("Importer un pool", variant="warning", id="btn-import")
 
     def on_mount(self) -> None:
+        self.bridge = self.app.bridge
         pt = self.query_one("#pools-table", DataTable)
         pt.add_columns("Pool", "Etat", "Taille", "Utilise", "Libre")
         pt.cursor_type = "row"
