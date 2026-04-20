@@ -20,6 +20,8 @@ from textual.widgets import (
     Button, DataTable, Label, Log, ProgressBar, Rule, Static,
 )
 
+from fsdeploy.lib.ui.bridge import SchedulerBridge
+
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK = "[OK]" if IS_FB else "\u2705"
 CROSS = "[!!]" if IS_FB else "\u274c"
@@ -89,7 +91,10 @@ class DetectionScreen(Screen):
             yield Button("Importer un pool", variant="warning", id="btn-import")
 
     def on_mount(self) -> None:
-        self.bridge = self.app.bridge
+        if hasattr(self.app, 'bridge') and self.app.bridge is not None:
+            self.bridge = self.app.bridge
+        else:
+            self.bridge = SchedulerBridge.default()
         pt = self.query_one("#pools-table", DataTable)
         pt.add_columns("Pool", "Etat", "Taille", "Utilise", "Libre")
         pt.cursor_type = "row"
