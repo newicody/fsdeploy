@@ -191,23 +191,9 @@ class FsDeployApp(App):
         self._refresh_interval = 2.0  # secondes entre les refresh TUI
 
         # Bridge TUI -> Scheduler
-        if runtime:
-            from .bridge import SchedulerBridge
-            # Créer une instance de bridge avec runtime et store (selon add.md 24.1)
-            self.bridge = SchedulerBridge.default(runtime=runtime, store=store)
-        else:
-            # Dummy bridge for when no runtime is available (e.g., test mode)
-            class DummyBridge:
-                def emit(self, event_name, *args, **kwargs):
-                    pass
-                def poll(self):
-                    return []
-                def on_result(self, ticket_id, callback):
-                    pass
-                def __getattr__(self, name):
-                    # Prevent AttributeError for any other method
-                    return lambda *args, **kwargs: None
-            self.bridge = DummyBridge()
+        from .bridge import SchedulerBridge
+        # Créer une instance de bridge avec runtime et store (selon add.md 24.1)
+        self.bridge = SchedulerBridge(runtime=runtime, store=store)
 
     # ── Compose ───────────────────────────────────────────────────────────────
 
