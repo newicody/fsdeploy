@@ -1,9 +1,9 @@
 # PLAN.md — fsdeploy (branche `dev`)
 
-> **Dernière mise à jour** : 2026-04-20
-> **Itération worker** : 105
-> **Codebase** : ~24 273 lignes Python
-> **Tâche active** : **24.1** — Refonte Bridge & Patch Global Screens
+
+> **Dernière mise à jour** : 2026-04-21
+> **Itération worker** : 106
+> **Tâche active** : **24.1** — Refonte Bridge/Bus & Patch Global Screens
 
 ---
 
@@ -24,11 +24,11 @@
 ---
 
 ## 🚧 Tâche active — 24.1
-Refonte de la communication UI/Scheduler :
-- Fix de l'initialisation multi-arguments dans `bridge.py`.
-- Ajout de l'interface `emit()` universelle.
-- Correction des signatures du `MessageBus`.
-- Migration systématique des 23 écrans vers le nouveau standard.
+**Réparation de la communication UI/Scheduler :**
+- Correction du constructeur de `bridge.py` (init multi-args).
+- Création de l'interface `emit()` pour les écrans.
+- Suppression du `TypeError` sur les signatures de tickets.
+- Migration des 23 écrans vers le nouveau standard de communication.
 Voir `add.md`.
 
 ---
