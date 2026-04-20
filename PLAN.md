@@ -26,7 +26,7 @@
 ## 🚧 Tâche active — 24.1
 Refonte de la communication UI/Scheduler :
 - Correction du constructeur et des signatures de `bridge.py`.
-- Migration des 23 écrans vers le standard `bridge.emit()`.
+- Migration exhaustive des 23 écrans vers le standard `bridge.emit()`.
 Voir `add.md`.
 
 ---
