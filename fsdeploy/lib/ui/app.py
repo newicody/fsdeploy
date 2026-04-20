@@ -193,12 +193,11 @@ class FsDeployApp(App):
         # Bridge TUI -> Scheduler
         if runtime:
             from .bridge import SchedulerBridge
-            # Préférer le singleton global si disponible
-            try:
-                self.bridge = SchedulerBridge.default()
-            except (TypeError, AttributeError):
-                # Fallback au constructeur legacy
-                self.bridge = SchedulerBridge(runtime, store)
+            # Obtenir l'instance singleton et l'initialiser avec le runtime/store
+            self.bridge = SchedulerBridge.default()
+            # Injecter les références pour que le bridge puisse les utiliser
+            self.bridge._scheduler = runtime
+            self.bridge._store = store
         else:
             # Dummy bridge for when no runtime is available (e.g., test mode)
             class DummyBridge:

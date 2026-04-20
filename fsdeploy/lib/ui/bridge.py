@@ -84,7 +84,8 @@ class SchedulerBridge:
     def __init__(self, runtime=None, store=None):
         # Accepte désormais les arguments passés par app.py
         self._scheduler = runtime
-        self._store = store 
+        self._store = store
+        self._runtime = runtime   # alias pour compatibilité
         
         try:
             from fsdeploy.lib.bus.event_bus import MessageBus
