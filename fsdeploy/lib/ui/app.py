@@ -194,7 +194,7 @@ class FsDeployApp(App):
         if runtime:
             from .bridge import SchedulerBridge
             # Créer une instance de bridge avec runtime et store (selon add.md 24.1)
-            self.bridge = SchedulerBridge(runtime=runtime, store=store)
+            self.bridge = SchedulerBridge.default(runtime=runtime, store=store)
         else:
             # Dummy bridge for when no runtime is available (e.g., test mode)
             class DummyBridge:

@@ -76,9 +76,9 @@ class SchedulerBridge:
     """
     _instance = None
     @classmethod
-    def default(cls) -> "SchedulerBridge":
+    def default(cls, runtime=None, store=None) -> "SchedulerBridge":
         if cls._instance is None:
-            cls._instance = cls()
+            cls._instance = cls(runtime=runtime, store=store)
         return cls._instance
 
     def __init__(self, runtime=None, store=None):
