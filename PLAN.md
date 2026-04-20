@@ -1,54 +1,31 @@
 # PLAN.md — fsdeploy (branche `dev`)
 
-
 > **Dernière mise à jour** : 2026-04-21
-> **Itération worker** : 106
+> **Itération worker** : 105
 > **Tâche active** : **24.1** — Refonte Bridge/Bus & Patch Global Screens
 
 ---
 
 ## ✅ Terminé
-
 | ID | Description |
 |----|-------------|
 | 23.3 | Mount namespace pour DatasetProbeTask (anti-leak) |
-| 22.3 | Fix __init__.py (38L, sys.path lib/ restauré, CLI fonctionnelle) |
-| 22.1-2 | Fix __main__.py (parent + lib/ dans sys.path) |
-| 18.1 | Tests SecurityResolver + Isolation (19 tests) |
-| 11.1-2 | SquashFS/overlay (overlay.py, overlay_intent.py, mounts.py) |
-| 23.1-2 | Isolation (isolation.py MountIsolation + CgroupLimits, executor intégré) |
-| 19.2 | 23 écrans câblés — 0 violation |
-| 17.1 | SecurityResolver 4 niveaux + executor |
-| 20.1-3, 21.1, 10.5, 9.1, 8.1, 16.x, 17.7, 7.0, Phase 1-6 | Tout le reste |
+| 23.1-2 | Isolation & CgroupLimits (executor intégré) |
+| 19.2 | Structure initiale des 23 écrans |
 
 ---
 
 ## 🚧 Tâche active — 24.1
 **Réparation de la communication UI/Scheduler :**
-- Correction du constructeur de `bridge.py` (init multi-args).
-- Création de l'interface `emit()` pour les écrans.
-- Suppression du `TypeError` sur les signatures de tickets.
-- Migration des 23 écrans vers le nouveau standard de communication.
-Voir `add.md`.
+- Fix du constructeur `bridge.py` (acceptation de runtime/store).
+- Implémentation de la méthode `emit()` universelle dans le Bridge.
+- Correction du bug de signature `ticket_id` dans `_log_ticket`.
+- Patch massif des 23 écrans pour utiliser le nouveau standard.
 
 ---
 
 ## ⏳ Restant
-
 | ID | Prio | Description |
 |----|------|-------------|
 | **18.2** | P1 | Tests overlay + intent pipeline |
 | **18.3** | P2 | Tests TUI Pilot |
-
----
-
-## Bilan
-
-| Métrique | Valeur |
-|----------|--------|
-| Lignes Python | ~24 273 |
-| Intents | 71 |
-| Écrans | 23 (tous câblés) |
-| Tasks réelles | 34 |
-| Tests | 15 fichiers |
-| Violations architecture | 0 (écrans), 8 (cli.py — acceptable pour CLI) |
