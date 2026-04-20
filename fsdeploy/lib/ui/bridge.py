@@ -169,7 +169,22 @@ class SchedulerBridge:
 
     def emit(self, event_name: str, callback: Optional[Callable] = None, 
              priority: Optional[int] = None, **params) -> str:
-        """Alias robuste utilisé par les écrans pour soumettre des événements."""
+        """
+        Émet un événement vers le scheduler via le bridge global.
+        
+        Cette méthode est l'interface standard que les écrans doivent utiliser
+        pour déclencher des actions. Elle retourne un identifiant de ticket
+        permettant de suivre l'exécution.
+        
+        Args:
+            event_name: Nom de l'événement (ex: "zfs.detect", "mount.request")
+            callback: Fonction appelée lorsque le ticket est terminé.
+            priority: Priorité de l'événement (plus bas = plus prioritaire).
+            **params: Paramètres supplémentaires à passer à l'événement.
+            
+        Returns:
+            Identifiant du ticket (chaîne).
+        """
         # On délègue à submit_event qui gère l'ID et le bus
         ticket_id = self.submit_event(event_name, priority=priority, **params)
         if callback:
