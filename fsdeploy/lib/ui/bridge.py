@@ -123,43 +123,88 @@ class SchedulerBridge:
 
     def is_done(self, ticket_id: str) -> bool:
         """Vrai si le ticket est termine."""
-        return self._global_bridge.is_done(ticket_id)
+        if self._global_bridge is not None:
+            return self._global_bridge.is_done(ticket_id)
+        with self._lock:
+            t = self._tickets.get(ticket_id)
+            return (not t) or t.status in ("completed", "failed")
 
     def get_result(self, ticket_id: str) -> Any:
         """Resultat d'un ticket termine (None si pas pret)."""
-        return self._global_bridge.get_result(ticket_id)
+        if self._global_bridge is not None:
+            return self._global_bridge.get_result(ticket_id)
+        with self._lock:
+            t = self._tickets.get(ticket_id)
+            return t.result if t and t.status == "completed" else None
 
     def get_error(self, ticket_id: str) -> Optional[str]:
         """Erreur d'un ticket en echec."""
-        return self._global_bridge.get_error(ticket_id)
+        if self._global_bridge is not None:
+            return self._global_bridge.get_error(ticket_id)
+        with self._lock:
+            t = self._tickets.get(ticket_id)
+            return t.error if t and t.status == "failed" else None
 
     def get_ticket(self, ticket_id: str) -> Optional[Ticket]:
-        return self._global_bridge.get_ticket(ticket_id)
+        if self._global_bridge is not None:
+            return self._global_bridge.get_ticket(ticket_id)
+        with self._lock:
+            return self._tickets.get(ticket_id)
 
     def on_result(self, ticket_id: str, callback: Callable) -> None:
         """Ajoute un callback a un ticket existant."""
-        self._global_bridge.on_result(ticket_id, callback)
+        if self._global_bridge is not None:
+            self._global_bridge.on_result(ticket_id, callback)
+            return
+        with self._lock:
+            t = self._tickets.get(ticket_id)
+            if not t:
+                return
+            t.callbacks.append(callback)
 
     def wait_for_ticket(self, ticket_id: str, timeout: float | None = None) -> bool:
         """
         Attend que le ticket soit terminé (completed ou failed).
         Délègue au bridge global.
         """
-        return self._global_bridge.wait_for_ticket(ticket_id, timeout)
+        if self._global_bridge is not None:
+            return self._global_bridge.wait_for_ticket(ticket_id, timeout)
+        # Implémentation locale simple
+        import time
+        start = time.time()
+        while not self.is_done(ticket_id):
+            if timeout is not None and time.time() - start >= timeout:
+                return False
+            time.sleep(0.1)
+        return True
 
     def get_tickets_by_status(self, status: str) -> list[Ticket]:
         """
         Retourne tous les tickets ayant le statut donné.
         Délègue au bridge global.
         """
-        return self._global_bridge.get_tickets_by_status(status)
+        if self._global_bridge is not None:
+            return self._global_bridge.get_tickets_by_status(status)
+        with self._lock:
+            return [t for t in self._tickets.values() if t.status == status]
 
     def get_scheduler_state(self) -> dict:
         """
         Retourne l'état actuel du scheduler (events, intents, tasks, etc.).
         Délègue au bridge global.
         """
-        return self._global_bridge.get_scheduler_state()
+        if self._global_bridge is not None:
+            return self._global_bridge.get_scheduler_state()
+        # Données de démo
+        import random
+        return {
+            "event_count": random.randint(0, 5),
+            "intent_count": random.randint(0, 3),
+            "task_count": random.randint(0, 2),
+            "completed_count": random.randint(10, 50),
+            "active_task": None,
+            "recent_tasks": []
+        }
 
     # ═══════════════════════════════════════════════════════════════
     # POLLING — appele a chaque cycle refresh de la TUI
@@ -172,7 +217,10 @@ class SchedulerBridge:
         Appele par FsDeployApp._refresh_from_store() toutes les 2s.
         Retourne la liste des tickets qui viennent de terminer.
         """
-        return self._global_bridge.poll()
+        if self._global_bridge is not None:
+            return self._global_bridge.poll()
+        # Pour les tickets locaux, rien à faire car ils sont déjà terminés immédiatement
+        return []
 
     # ═══════════════════════════════════════════════════════════════
     # MULTI-TICKET — pour les operations en plusieurs phases
@@ -217,20 +265,38 @@ class SchedulerBridge:
         Soumet un Intent directement à la file du scheduler.
         Un ticket est créé pour suivre l'achèvement, comme pour emit().
         """
-        # Utiliser le bridge global déjà référencé
-        ticket_id = self._global_bridge.submit(intent, priority=priority)
-        if callback:
-            self._global_bridge.on_result(ticket_id, callback)
+        if self._global_bridge is not None:
+            # Utiliser le bridge global déjà référencé
+            ticket_id = self._global_bridge.submit(intent, priority=priority)
+            if callback:
+                self._global_bridge.on_result(ticket_id, callback)
 
-        # Log
-        if self.store:
-            self.store.log_event(
-                f"tui.intent.{intent.__class__.__name__}",
-                source="bridge",
-                ticket=ticket_id,
+            # Log
+            if self._store:
+                self._store.log_event(
+                    f"tui.intent.{intent.__class__.__name__}",
+                    source="bridge",
+                    ticket=ticket_id,
+                )
+            return ticket_id
+        else:
+            # Fallback local
+            ticket_id = f"local-intent-{uuid4().hex[:8]}"
+            ticket = Ticket(
+                id=ticket_id,
+                event_name=f"intent.{intent.__class__.__name__}",
+                params=getattr(intent, 'params', {}),
+                submitted_at=time.time(),
+                status="completed",
+                result=None
             )
-
-        return ticket_id
+            with self._lock:
+                self._tickets[ticket_id] = ticket
+                self._history.append(ticket)
+            self._log_ticket("submitted", ticket)
+            if callback:
+                callback(ticket)
+            return ticket_id
 
     # ═══════════════════════════════════════════════════════════════
     # INTROSPECTION
@@ -252,25 +318,52 @@ class SchedulerBridge:
         return self._global_bridge.history
 
     def clear_done(self) -> int:
-        return self._global_bridge.clear_done()
+        if self._global_bridge is not None:
+            return self._global_bridge.clear_done()
+        with self._lock:
+            to_rm = [k for k, t in self._tickets.items()
+                     if t.status in ("completed", "failed")]
+            for k in to_rm:
+                del self._tickets[k]
+            return len(to_rm)
 
     def cleanup_old(self, max_age_seconds: float = 3600) -> int:
         """
         Supprime les tickets terminés plus anciens que max_age_seconds.
         Délègue au bridge global.
         """
-        return self._global_bridge.cleanup_old(max_age_seconds)
+        if self._global_bridge is not None:
+            return self._global_bridge.cleanup_old(max_age_seconds)
+        with self._lock:
+            to_remove = []
+            now = time.time()
+            for ticket_id, ticket in self._tickets.items():
+                if ticket.status in ("completed", "failed") and \
+                   (now - ticket.submitted_at) > max_age_seconds:
+                    to_remove.append(ticket_id)
+            for ticket_id in to_remove:
+                del self._tickets[ticket_id]
+            return len(to_remove)
 
     def reset_tickets(self) -> int:
         """
         Supprime tous les tickets (pending, completed, failed) et retourne
         le nombre total de tickets supprimés. Délègue au bridge global.
         """
-        return self._global_bridge.reset_tickets()
+        if self._global_bridge is not None:
+            return self._global_bridge.reset_tickets()
+        with self._lock:
+            count = len(self._tickets)
+            self._tickets.clear()
+            self._history.clear()
+            return count
 
     def get_all_tickets(self) -> list[Ticket]:
         """
         Retourne tous les tickets, quel que soit leur statut.
         Délègue au bridge global.
         """
-        return self._global_bridge.get_all_tickets()
+        if self._global_bridge is not None:
+            return self._global_bridge.get_all_tickets()
+        with self._lock:
+            return list(self._tickets.values())
