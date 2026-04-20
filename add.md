@@ -1,140 +1,48 @@
-# add.md — 23.3 : Mount namespace pour DatasetProbeTask
+# add.md — 24.1 : Refonte Bridge & Migration des 23 Écrans
 
 ## Problème
+Incohérence entre `app.py` et `bridge.py` et manque d'une interface d'émission standardisée (`emit`) pour les écrans.
 
-`DatasetProbeTask.run()` fait `mount -t zfs ... /tmp/probe` → scan → `umount`. Si fsdeploy crash entre mount et umount, le mount reste orphelin. Avec un mount namespace, les mounts du processus fils disparaissent automatiquement.
+## Modifications de l'Architecture
 
-## Fichier à modifier : `fsdeploy/lib/intents/detection_intent.py`
+### 1. `fsdeploy/ui/bridge.py`
+- **Init** : Modifier `__init__(self, runtime=None, store=None)` pour accepter les arguments de l'App.
+- **Méthode `emit`** : Ajouter `emit(self, event_name, callback=None, priority=None, **params)` comme alias de `submit_event`.
+- **Signature Log** : Fixer `_log_ticket` pour envoyer un dictionnaire unique au bus.
 
-Modifier la classe `DatasetProbeTask` pour utiliser `multiprocessing` + `os.unshare` quand le dataset n'est pas déjà monté. Garder le code actuel comme fallback.
+### 2. `fsdeploy/ui/app.py`
+- **Instanciation** : Passer `self.runtime` et `self.store` au constructeur du Bridge.
 
-### Ajouter une méthode `_probe_in_namespace()` dans `DatasetProbeTask`
+## Migration des Écrans (`fsdeploy/lib/ui/screens/`)
 
-Ajouter **avant** la méthode `run()` existante :
+Chaque fichier listé ci-dessous doit être modifié pour :
+1. Importer `SchedulerBridge`.
+2. Initialiser `self.bridge = SchedulerBridge.default()` dans `on_mount`.
+3. Remplacer les appels directs au bus/scheduler par `self.bridge.emit(...)`.
 
-```python
-    def _probe_in_namespace(self, dataset, scan_path):
-        """
-        Probe dans un mount namespace isole.
-        Le mount est auto-nettoye si le processus crash.
-        Fallback sur probe direct si unshare indisponible.
-        """
-        import multiprocessing
-        import os as _os
+### Liste des fichiers à traiter par `aider` :
 
-        # Verifier que os.unshare est disponible (Python 3.12+)
-        if not hasattr(_os, 'unshare'):
-            return None  # fallback
+* **Gestion Pools/ZFS** :
+    * `detection.py` : Migrer le scan des pools vers `bridge.emit("zfs.detect")`.
+    * `pool_list.py` : Utiliser le bridge pour rafraîchir la liste.
+    * `dataset_list.py` : Migrer les requêtes de propriétés.
+    * `snapshot_manager.py` : Remplacer les créations de snapshots par des tickets.
+* **Système & Stockage** :
+    * `disk_view.py` : Migrer l'inventaire SMART/Disques.
+    * `network_conf.py` : Migrer les changements d'IP/Interfaces.
+    * `service_status.py` : Utiliser le bridge pour start/stop les démons.
+* **Vues Temps Réel** :
+    * `graph_view.py` : Utiliser `bridge.get_scheduler_state()` pour les métriques.
+    * `log_streamer.py` : S'abonner aux flux via le bridge.
+    * `task_monitor.py` : Utiliser `bridge.pending_tickets` pour l'affichage.
+* **Configuration & Pilotage** :
+    * `pilot_main.py` : Centraliser les commandes de pilotage via `emit`.
+    * `config_editor.py` : Sauvegarder via des intents émis par le bridge.
+    * `security_audit.py` : Lancer l'audit via le scheduler bridge.
+* **Autres écrans (Total 23)** :
+    * `dashboard.py`, `help_screen.py`, `mount_explorer.py`, `scrub_monitor.py`, `update_manager.py`, `replication_view.py`, `quota_manager.py`, `user_access.py`, `shell_access.py`, `vms_containers.py`.
 
-        result_queue = multiprocessing.Queue()
-
-        def _child(dataset, scan_path_str, queue):
-            try:
-                import os as child_os
-                from pathlib import Path
-                import subprocess
-
-                # Entrer dans un mount namespace isole
-                try:
-                    child_os.unshare(child_os.CLONE_NEWNS)
-                except (OSError, AttributeError):
-                    queue.put(None)  # fallback
-                    return
-
-                # Rendre les mounts prives
-                subprocess.run(
-                    ["mount", "--make-rprivate", "/"],
-                    capture_output=True, timeout=5,
-                )
-
-                sp = Path(scan_path_str)
-                sp.mkdir(parents=True, exist_ok=True)
-
-                # Monter
-                r = subprocess.run(
-                    ["mount", "-t", "zfs", dataset, scan_path_str],
-                    capture_output=True, text=True, timeout=30,
-                )
-                if r.returncode != 0:
-                    queue.put({
-                        "dataset": dataset, "role": "unknown",
-                        "confidence": 0, "error": r.stderr,
-                    })
-                    return
-
-                # Scanner (reimplemente ici car on est dans un fork)
-                from fsdeploy.lib.function.detect.role_patterns import (
-                    ROLE_PATTERNS, score_patterns,
-                )
-                role, confidence, details = score_patterns(sp)
-                queue.put({
-                    "dataset": dataset, "role": role,
-                    "confidence": confidence, "details": details,
-                })
-                # Pas besoin de umount — le namespace meurt avec le process
-
-            except Exception as e:
-                queue.put({
-                    "dataset": dataset, "role": "unknown",
-                    "confidence": 0, "error": str(e),
-                })
-
-        proc = multiprocessing.Process(
-            target=_child,
-            args=(dataset, str(scan_path), result_queue),
-        )
-        proc.start()
-        proc.join(timeout=60)
-
-        if proc.is_alive():
-            proc.kill()
-            proc.join(timeout=5)
-            return {
-                "dataset": dataset, "role": "unknown",
-                "confidence": 0, "error": "timeout",
-            }
-
-        try:
-            return result_queue.get_nowait()
-        except Exception:
-            return None  # fallback
-```
-
-### Modifier la méthode `run()` existante
-
-Remplacer le bloc `else: # Montage temporaire` par :
-
-```python
-        else:
-            # Essayer avec mount namespace (anti-leak)
-            scan_path = Path(tempfile.mkdtemp(prefix="fsdeploy-probe-"))
-            ns_result = self._probe_in_namespace(dataset, scan_path)
-            if ns_result is not None:
-                try:
-                    scan_path.rmdir()
-                except OSError:
-                    pass
-                return ns_result
-
-            # Fallback : montage direct (sans namespace)
-            r = self.run_cmd(
-                f"mount -t zfs {dataset} {scan_path}",
-                sudo=True, check=False, timeout=30)
-            if not r.success:
-                try:
-                    scan_path.rmdir()
-                except OSError:
-                    pass
-                return {"dataset": dataset, "role": "unknown",
-                        "confidence": 0, "error": r.stderr}
-```
-
-Le reste de `run()` (le `try/finally` avec `_scan` et `umount`) reste **inchangé** pour le fallback.
-
-## Critères
-
-1. `grep "unshare\|CLONE_NEWNS\|mount namespace" fsdeploy/lib/intents/detection_intent.py` → présent
-2. `grep "_probe_in_namespace" fsdeploy/lib/intents/detection_intent.py` → méthode définie + appelée
-3. `grep "multiprocessing" fsdeploy/lib/intents/detection_intent.py` → présent
-4. Le fallback fonctionne si `os.unshare` n'est pas disponible (return None → code actuel)
-5. Le code existant (scan direct, umount) reste intact comme fallback
+## Critères de Validation
+- Aucun `TypeError` à l'init du Bridge.
+- `grep -r "bridge.emit" fsdeploy/lib/ui/screens/` doit retourner des résultats pour chaque fichier.
+- Le suivi des tâches fonctionne via `bridge.poll()`.

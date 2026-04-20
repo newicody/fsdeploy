@@ -11,6 +11,7 @@
 
 | ID | Description |
 |----|-------------|
+| 23.3 | Mount namespace pour DatasetProbeTask (anti-leak) |
 | 22.3 | Fix __init__.py (38L, sys.path lib/ restauré, CLI fonctionnelle) |
 | 22.1-2 | Fix __main__.py (parent + lib/ dans sys.path) |
 | 18.1 | Tests SecurityResolver + Isolation (19 tests) |
@@ -22,7 +23,10 @@
 
 ---
 
-## 🚧 Tâche active — 23.3
+## 🚧 Tâche active — 24.1
+Correction de la communication UI/Scheduler :
+- Fix des signatures et de l'initialisation dans `bridge.py`.
+- Migration de **tous les écrans (23)** vers le nouveau standard `bridge.emit()`.
 
 Voir `add.md`.
 
@@ -32,7 +36,6 @@ Voir `add.md`.
 
 | ID | Prio | Description |
 |----|------|-------------|
-| **23.3** | P1 | Mount namespace pour DatasetProbeTask (anti-leak mounts) |
 | **18.2** | P1 | Tests overlay + intent pipeline |
 | **18.3** | P2 | Tests TUI Pilot |
 
