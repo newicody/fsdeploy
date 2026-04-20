@@ -263,7 +263,20 @@ class SchedulerBridge:
         Retourne la liste des tickets qui viennent de terminer.
         """
         if self._global_bridge is not None:
-            return self._global_bridge.poll()
+            # Obtenir les tickets terminés du bridge global
+            completed = self._global_bridge.poll()
+            # Mettre à jour les tickets locaux correspondants
+            with self._lock:
+                for remote_ticket in completed:
+                    local_ticket = self._tickets.get(remote_ticket.id)
+                    if local_ticket:
+                        local_ticket.status = remote_ticket.status
+                        local_ticket.result = remote_ticket.result
+                        local_ticket.error = remote_ticket.error
+                        # Ajouter à l'historique si pas déjà présent
+                        if local_ticket not in self._history:
+                            self._history.append(local_ticket)
+            return completed
         # Pour les tickets locaux, rien à faire car ils sont déjà terminés immédiatement
         return []
 
@@ -377,7 +390,15 @@ class SchedulerBridge:
 
     def clear_done(self) -> int:
         if self._global_bridge is not None:
-            return self._global_bridge.clear_done()
+            # Obtenir les tickets à supprimer du bridge global
+            count = self._global_bridge.clear_done()
+            # Supprimer aussi les tickets locaux correspondants
+            with self._lock:
+                to_rm = [k for k, t in self._tickets.items()
+                         if t.status in ("completed", "failed")]
+                for k in to_rm:
+                    del self._tickets[k]
+            return count
         with self._lock:
             to_rm = [k for k, t in self._tickets.items()
                      if t.status in ("completed", "failed")]
@@ -391,7 +412,18 @@ class SchedulerBridge:
         Délègue au bridge global.
         """
         if self._global_bridge is not None:
-            return self._global_bridge.cleanup_old(max_age_seconds)
+            count = self._global_bridge.cleanup_old(max_age_seconds)
+            # Supprimer aussi les tickets locaux correspondants
+            with self._lock:
+                to_remove = []
+                now = time.time()
+                for ticket_id, ticket in self._tickets.items():
+                    if ticket.status in ("completed", "failed") and \
+                       (now - ticket.submitted_at) > max_age_seconds:
+                        to_remove.append(ticket_id)
+                for ticket_id in to_remove:
+                    del self._tickets[ticket_id]
+            return count
         with self._lock:
             to_remove = []
             now = time.time()
@@ -409,7 +441,12 @@ class SchedulerBridge:
         le nombre total de tickets supprimés. Délègue au bridge global.
         """
         if self._global_bridge is not None:
-            return self._global_bridge.reset_tickets()
+            count = self._global_bridge.reset_tickets()
+            # Supprimer aussi les tickets locaux
+            with self._lock:
+                self._tickets.clear()
+                self._history.clear()
+            return count
         with self._lock:
             count = len(self._tickets)
             self._tickets.clear()
