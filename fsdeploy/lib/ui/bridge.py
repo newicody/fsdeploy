@@ -116,6 +116,17 @@ class SchedulerBridge:
         data.update(extra)
         self._event_bus.emit("bridge.ticket." + action, data)
 
+    def _fire(self, ticket: Ticket) -> None:
+        """Déclenche les callbacks d'un ticket."""
+        with self._lock:
+            cbs = list(ticket.callbacks)
+            ticket.callbacks.clear()
+        for cb in cbs:
+            try:
+                cb(ticket)
+            except Exception:
+                pass
+
     # ═══════════════════════════════════════════════════════════════
     # EMISSION — la seule methode que la TUI utilise
     # ═══════════════════════════════════════════════════════════════
@@ -136,6 +147,8 @@ class SchedulerBridge:
                 self._tickets[ticket_id] = ticket
                 self._history.append(ticket)
             self._log_ticket("submitted", ticket)
+            # Déclencher les callbacks immédiatement
+            self._fire(ticket)
             return ticket_id
         # Délégation au bridge global
         ticket_id = self._global_bridge.submit_event(event_name, priority=priority, **params)
@@ -353,7 +366,8 @@ class SchedulerBridge:
                 self._history.append(ticket)
             self._log_ticket("submitted", ticket)
             if callback:
-                callback(ticket)
+                ticket.callbacks.append(callback)
+            self._fire(ticket)
             return ticket_id
 
     # ═══════════════════════════════════════════════════════════════
