@@ -6,6 +6,9 @@ Mise à jour conforme à add.md 24.1.
 
 Compatible : Textual >=8.2.1 / Rich >=14.3.3 / Python >=3.9
 
+# NOTE: Migration des écrans selon add.md 24.1.
+# Les appels self.app.bus.emit doivent être remplacés par self.bridge.emit.
+
 Routing des ecrans :
   Mode deploy (depuis le live) :
     Welcome -> Detection -> Mounts -> Kernel -> Initramfs

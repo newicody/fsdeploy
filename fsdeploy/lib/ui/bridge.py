@@ -202,9 +202,7 @@ class SchedulerBridge:
         Returns:
             Identifiant du ticket (chaîne).
         """
-        ticket_id = str(uuid.uuid4())
-        params['_bridge_ticket'] = ticket_id
-        self.submit_event(event_name, priority=priority, **params)
+        ticket_id = self.submit_event(event_name, priority=priority, **params)
         if callback:
             self.on_result(ticket_id, callback)
         return ticket_id
