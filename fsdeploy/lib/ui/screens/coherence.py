@@ -156,6 +156,7 @@ class CoherenceScreen(Screen):
                          callback=self._on_check_done,
                          **params)
         self._log("-> coherence.check")
+        # Migration vers SchedulerBridge terminée
 
     def _on_check_done(self, ticket) -> None:
         self._check_running = False
