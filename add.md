@@ -1,14 +1,13 @@
-# add.md — 24.1 : Finalisation Bridge
+# add.md — 24.1.c : Finalisation Électrique
 
-## 🛠 ACTION 1 : Initialisation manquante
-Dans `fsdeploy/lib/ui/screens/`, pour CHAQUE fichier n'ayant pas encore le Bridge :
-- Ajouter : `from fsdeploy.lib.ui.bridge import SchedulerBridge`
-- Dans `on_mount` : `self.bridge = SchedulerBridge.default()`
+> **CONTEXTE** : Tous les écrans sont ouverts. Le bridge est déjà initialisé.
 
-## 🛠 ACTION 2 : Branchement des commandes (CRITIQUE)
-Dans TOUS les fichiers du dossier `screens/` :
-- RECHERCHER : `self.app.bus.emit(`
-- REMPLACER PAR : `self.bridge.emit(`
+## 🛠 ACTION : Remplacement de masse
+Dans chaque fichier du dossier `fsdeploy/lib/ui/screens/` :
 
-## 🛠 ACTION 3 : Nettoyage
-- Supprimer `from fsdeploy.lib.bus import MessageBus` si le fichier n'utilise plus le bus directement.
+1. **REPLACER** : `self.app.bus.emit(` 
+2. **PAR** : `self.bridge.emit(`
+
+## 🧹 NETTOYAGE
+1. Supprimer l'import `from fsdeploy.lib.bus import MessageBus` s'il est présent.
+2. S'assurer que `from fsdeploy.lib.ui.bridge import SchedulerBridge` est bien présent en haut de fichier.

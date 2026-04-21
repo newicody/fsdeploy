@@ -1,7 +1,7 @@
 {
-  "current_task": "Analyse add.md et PLAN.md ajoute les fichier (dont les 24 ecrans) et developpe",
+  "current_task": "Tous les \u00e9crans sont charg\u00e9s via la config. Applique maintenant le remplacement de bus.emit vers bridge.emit d\u00e9fini dans add.md sur l'ensemble des fichiers",
   "status": "RUNNING",
-  "iteration": 149,
+  "iteration": 151,
   "bridge_migration": "COMPLETE",
   "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }
