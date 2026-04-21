@@ -298,31 +298,58 @@ srun apt-get update -qq
 ok "Sources APT configurées"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. PAQUETS SYSTÈME
+# 2. INSTALLATION DÉPENDANCES SYSTÈME
 # ─────────────────────────────────────────────────────────────────────────────
-step "2/9 — Paquets système"
-
-srun env DEBIAN_FRONTEND=noninteractive \
-    apt-get install -y --no-install-recommends \
-        linux-headers-$(uname -r) \
-        zfsutils-linux \
-        zfs-dkms \
-        squashfs-tools \
-        zstd xz-utils lz4 \
-        dracut dracut-core \
-        efibootmgr \
-        dosfstools gdisk parted \
-        git \
-        python3 python3-pip python3-venv python3-dev \
-        build-essential \
-        ffmpeg \
-        wget curl rsync \
-        pv \
-        sudo \
-        acl \
+install_dependencies() {
+    step "Installation des dépendances système"
+    
+    # Mettre à jour les sources APT d'abord
+    srun apt-get update -qq
+    
+    # Liste des paquets de base pour Debian Live
+    local BASE_PACKAGES=(
+        linux-headers-$(uname -r)
+        zfsutils-linux
+        zfs-dkms
+        squashfs-tools
+        zstd xz-utils lz4
+        dracut dracut-core
+        efibootmgr
+        dosfstools gdisk parted
+        git
+        python3 python3-pip python3-venv python3-dev
+        build-essential
+        ffmpeg
+        wget curl rsync
+        pv
+        sudo
+        acl
         dkms
+    )
+    
+    # Paquets supplémentaires pour le mode Live
+    if [[ $IS_LIVE -eq 1 ]]; then
+        info "Mode Live : installation des paquets supplémentaires"
+        BASE_PACKAGES+=(
+            live-boot
+            live-config
+            live-tools
+            casper
+            discover
+            laptop-detect
+            os-prober
+        )
+    fi
+    
+    # Installer tous les paquets
+    srun env DEBIAN_FRONTEND=noninteractive \
+        apt-get install -y --no-install-recommends "${BASE_PACKAGES[@]}"
+    
+    ok "Dépendances système installées"
+}
 
-ok "Paquets installés"
+# Appeler la fonction d'installation
+install_dependencies
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. ATTENTE COMPILATION DKMS ZFS
@@ -632,7 +659,8 @@ sudo tee "$WRAPPER" > /dev/null << WRAPPER_EOF
 #!/usr/bin/env bash
 # Wrapper fsdeploy — généré par launch.sh (ne pas éditer)
 [ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
-export PYTHONPATH="\$PYTHONPATH:$(pwd)"
+# PYTHONPATH correct pour trouver tous les modules fsdeploy
+export PYTHONPATH="${INSTALL_DIR}:${PYTHONPATH}"
 # Tuer les instances précédentes
 pkill -f "python3 -m fsdeploy" 2>/dev/null || true
 pkill -f "python3 -m fsdeploy.lib.ui.app" 2>/dev/null || true

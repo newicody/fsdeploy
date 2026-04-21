@@ -8,9 +8,9 @@
 # =============================================================================
 
 # ── TUI + rendu terminal ─────────────────────────────────────────────────────
-textual>=8.2.1,<9              # TUI async (breaking changes majeures depuis 0.x)
+textual==8.2.1                 # Version exacte pour la stabilité
 textual-dev>=1.8.0,<2          # Outils dev : textual run / console / serve
-rich>=14.3.3,<15               # Rendu console — Textual 8.x exige >=14.2.0
+rich==14.3.3                   # Version exacte testée
 
 # ── Configuration ────────────────────────────────────────────────────────────
 configobj>=5.0.8               # INI hiérarchique + validation, partagé deploy/initramfs/boot
