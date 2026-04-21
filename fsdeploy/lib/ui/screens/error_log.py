@@ -44,8 +44,12 @@ class ErrorLogScreen(Screen):
 
     def on_mount(self) -> None:
         from fsdeploy.lib.ui.bridge import SchedulerBridge
-        self.bridge = SchedulerBridge.default()
+        self._bridge = SchedulerBridge.default()
         self.refresh()
+
+    @property
+    def bridge(self):
+        return getattr(self, "_bridge", None)
 
     @property
     def store(self):

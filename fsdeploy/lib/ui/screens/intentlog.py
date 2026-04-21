@@ -15,6 +15,10 @@ class IntentLogScreen(Screen):
     """
     Affiche le journal des intents (HuffmanStore).
     """
+    
+    @property
+    def bridge(self):
+        return getattr(self, "_bridge", None)
     BINDINGS = [
         Binding("escape", "app.pop_screen", "Retour", show=True),
         Binding("r", "refresh", "Rafraîchir", show=True),
@@ -52,7 +56,7 @@ class IntentLogScreen(Screen):
 
     def on_mount(self) -> None:
         from fsdeploy.lib.ui.bridge import SchedulerBridge
-        self.bridge = SchedulerBridge.default()
+        self._bridge = SchedulerBridge.default()
         self.refresh_logs()
 
     def refresh_logs(self):

@@ -22,6 +22,10 @@ class DebugScreen(Screen):
     """
     Écran de débogage.
     """
+    
+    @property
+    def bridge(self):
+        return getattr(self, "_bridge", None)
 
     BINDINGS = [
         Binding("r", "refresh", "Actualiser", show=True),
@@ -42,7 +46,8 @@ class DebugScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        self.bridge = SchedulerBridge.default()
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self._bridge = SchedulerBridge.default()
         self.action_refresh()
 
     def action_refresh(self) -> None:

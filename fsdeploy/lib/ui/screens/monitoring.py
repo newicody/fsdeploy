@@ -49,7 +49,7 @@ class MonitoringScreen(Screen):
 
     @property
     def bridge(self):
-        return getattr(self.app, "bridge", None)
+        return getattr(self, "_bridge", None)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -63,7 +63,7 @@ class MonitoringScreen(Screen):
 
     def on_mount(self) -> None:
         from fsdeploy.lib.ui.bridge import SchedulerBridge
-        self.bridge = SchedulerBridge.default()
+        self._bridge = SchedulerBridge.default()
         table = self.query_one("#task-table", DataTable)
         table.add_columns("Statut", "Tache", "Duree")
         table.cursor_type = "row"
