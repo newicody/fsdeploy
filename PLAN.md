@@ -1,11 +1,11 @@
 # PLAN.md — fsdeploy
 
-> **Itération** : 117 | **Tâche** : Débianisation du Bootloader
-> **Objectif** : Remplacer les résidus d'Ubuntu (Casper) par les standards Debian Live.
+> **Itération** : 120 | **Focus** : Étanchéité Hôte/Cible (Dracut)
+> **Objectif** : Empêcher la pollution du système Live par les outils de génération de noyau.
 
 ---
 
-## 🚧 Tâche active — 27.2 (Migration Casper -> Live-Boot)
-1. **Audit de launch.sh** : Identifier toutes les occurrences de "casper".
-2. **Remplacement** : Utiliser `/lib/live/mount/medium` et `boot=live` pour la détection.
-3. **Vérification** : S'assurer que les fonctions d'installation APT s'activent bien si l'un de ces marqueurs est trouvé.
+## 🚧 Tâche active — 28.1 (Audit des appels Système)
+- **Vérification** : S'assurer que TOUS les appels à `dracut` dans le code source sont préfixés par une commande de chroot ou exécutés via un namespace isolé.
+- **launch.sh** : Retirer `dracut` de la liste des dépendances APT de l'hôte si le worker l'y a mis par erreur.
+- **Validation** : Le script doit installer `live-boot` et `initramfs-tools` sur l'hôte, et RIEN D'AUTRE concernant le boot.
