@@ -397,7 +397,6 @@ install_dependencies() {
         zfs-dkms
         squashfs-tools
         zstd xz-utils lz4
-        dracut dracut-core
         efibootmgr
         dosfstools gdisk parted
         git
@@ -423,12 +422,19 @@ install_dependencies() {
             discover
             laptop-detect
             os-prober
+            initramfs-tools
         )
     fi
     
     # Installer tous les paquets
     srun env DEBIAN_FRONTEND=noninteractive \
         apt-get install -y --no-install-recommends "${BASE_PACKAGES[@]}"
+    
+    # Vérification que dracut n'est pas installé sur l'hôte
+    if dpkg -l | grep -q '^ii.*dracut'; then
+        warn "dracut présent sur l'hôte - désinstallation pour éviter la pollution"
+        srun apt-get remove -y --purge dracut dracut-core
+    fi
     
     ok "Dépendances système installées"
 }
