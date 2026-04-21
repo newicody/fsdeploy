@@ -34,6 +34,7 @@ from textual.widgets import (
     Static,
     Rule,
 )
+from fsdeploy.lib.ui.bridge import SchedulerBridge
 
 # ── Import des écrans additionnels ───────────────────────────────────────────
 
@@ -276,7 +277,6 @@ class WelcomeScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialisation après montage."""
-        from fsdeploy.lib.ui.bridge import SchedulerBridge
         self.bridge = SchedulerBridge.default()
         self._detect_system()
         self._detect_pools()

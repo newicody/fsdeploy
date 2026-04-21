@@ -9,6 +9,7 @@ from textual.app import ComposeResult
 from textual.containers import Container
 from textual.screen import Screen
 from textual.widgets import Header, Footer, Static, DataTable
+from fsdeploy.lib.ui.bridge import SchedulerBridge
 
 class ModuleRegistryScreen(Screen):
     """
@@ -23,7 +24,6 @@ class ModuleRegistryScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize registry after the screen is attached to the app."""
-        from fsdeploy.lib.ui.bridge import SchedulerBridge
         self.bridge = SchedulerBridge.default()
         if hasattr(self.app, 'config') and self.app.config:
             from fsdeploy.lib.modules.registry import ModuleRegistry

@@ -15,6 +15,7 @@ from textual.binding import Binding
 
 from fsdeploy.lib.overlay_check import check_all_overlays
 from fsdeploy.lib.legacy_mount_check import check_legacy_mounts
+from fsdeploy.lib.ui.bridge import SchedulerBridge
 
 
 class DebugScreen(Screen):
@@ -41,7 +42,6 @@ class DebugScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        from fsdeploy.lib.ui.bridge import SchedulerBridge
         self.bridge = SchedulerBridge.default()
         self.action_refresh()
 
