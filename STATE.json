@@ -1,5 +1,5 @@
 {
-  "current_task": "Le d\u00e9p\u00f4t est \u00e0 jour. Travaille exclusivement sur les fichiers dans fsdeploy/lib/ui/. Commence par faire /add fsdeploy/lib/ui/bridge.py fsdeploy/lib/ui/app.py. Ensuite, liste et ajoute tous les fichiers du dossier fsdeploy/lib/ui/screens/. Applique enfin les modifications de add.md. Ne cr\u00e9e aucun nouveau dossier, ne devine aucun code",
+  "current_task": "Lis add.md. La configuration .aider.conf.yml a d\u00e9j\u00e0 charg\u00e9 bridge.py et app.py. Utilise tes outils pour trouver les \u00e9crans dans lib/ui/screens/ et applique les changements.",
   "status": "RUNNING",
-  "iteration": 127
+  "iteration": 128
 }
