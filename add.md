@@ -1,16 +1,10 @@
-# add.md — 27.1 : Restauration Système
+# add.md — 27.2 : Nettoyage Casper
 
-## 🛠 ACTION 1 : Analyse de l'historique
-- Examine l'ancienne version de `launch.sh` (avant le commit c0d7262).
-- Identifie les blocs : `install_dependencies()`, `check_live_environment()`, et la gestion du `PYTHONPATH`.
+## 🎯 Contexte
+Nous sommes sur Debian, pas Ubuntu. Le script fait référence à "casper", ce qui est incorrect.
 
-## 🛠 ACTION 2 : Fusion du script launch.sh
-- Le nouveau `launch.sh` doit IMPÉRATIVEMENT :
-  1. Vérifier si on est sur un système Debian Live.
-  2. Installer les dépendances système manquantes (apt-get).
-  3. Créer/Activer le venv et installer `requirements.txt`.
-  4. Lancer `fsdeploy.lib.ui.app` avec le bon `PYTHONPATH`.
-
-## 🛠 ACTION 3 : Vérification des versions
-- Compare `requirements.txt` avec la version de sauvegarde.
-- Fixe les versions : `textual==X.X.X` et `rich==X.X.X` pour garantir la stabilité de l'UI.
+## 🛠 ACTIONS
+1. Dans `launch.sh`, remplace la détection du mode Live :
+   - Au lieu de chercher `/casper` ou `boot=casper`, cherche `/lib/live/mount/medium` ou le flag `boot=live` dans `/proc/cmdline`.
+2. Assure-toi que la variable `IS_LIVE` (ou équivalent) est bien mise à `true` si ces éléments Debian sont présents.
+3. Vérifie que le chemin vers les paquets de secours (si présents) pointe vers `/lib/live/mount/medium/live/`.

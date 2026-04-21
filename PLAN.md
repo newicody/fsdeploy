@@ -1,11 +1,11 @@
 # PLAN.md — fsdeploy
 
-> **Urgence** : Restauration de la logique de déploiement Debian Live.
+> **Itération** : 117 | **Tâche** : Débianisation du Bootloader
+> **Objectif** : Remplacer les résidus d'Ubuntu (Casper) par les standards Debian Live.
 
 ---
 
-## 🚧 Tâche active — 27.1 (Restaurer & Fusionner)
-1. **Extraction** : Demander au worker d'extraire la logique système de l'ancienne version de `launch.sh` (via git checkout/show).
-2. **Réintégration** : Replacer la détection Debian Live et l'installation des dépendances APT dans le nouveau `launch.sh`.
-3. **Audit Requirements** : Vérifier que `requirements.txt` correspond aux versions stables utilisées précédemment.
-4. **Validation du lancement** : S'assurer que le script prépare le système AVANT de lancer l'UI.
+## 🚧 Tâche active — 27.2 (Migration Casper -> Live-Boot)
+1. **Audit de launch.sh** : Identifier toutes les occurrences de "casper".
+2. **Remplacement** : Utiliser `/lib/live/mount/medium` et `boot=live` pour la détection.
+3. **Vérification** : S'assurer que les fonctions d'installation APT s'activent bien si l'un de ces marqueurs est trouvé.
