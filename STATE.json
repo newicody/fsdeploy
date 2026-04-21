@@ -1,5 +1,7 @@
 {
   "current_task": "18.2 — Tests overlay + intent pipeline",
   "status": "READY",
-  "iteration": 135
+  "iteration": 135,
+  "bridge_migration": "COMPLETE",
+  "last_updated": "Migration 24.1.b terminée - Tous les écrans utilisent self.bridge.emit()"
 }
