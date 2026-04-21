@@ -91,10 +91,7 @@ class DetectionScreen(Screen):
             yield Button("Importer un pool", variant="warning", id="btn-import")
 
     def on_mount(self) -> None:
-        if hasattr(self.app, 'bridge') and self.app.bridge is not None:
-            self.bridge = self.app.bridge
-        else:
-            self.bridge = SchedulerBridge.default()
+        self.bridge = SchedulerBridge.default()
         pt = self.query_one("#pools-table", DataTable)
         pt.add_columns("Pool", "Etat", "Taille", "Utilise", "Libre")
         pt.cursor_type = "row"
