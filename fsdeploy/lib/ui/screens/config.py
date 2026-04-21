@@ -59,6 +59,9 @@ class ConfigScreen(Screen):
             yield Button("Recharger", variant="default", id="btn-reload")
 
     def on_mount(self):
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
+        
         dt = self.query_one("#kv-table", DataTable)
         dt.add_columns("Cle", "Valeur"); dt.cursor_type = "row"
         self._load_section()

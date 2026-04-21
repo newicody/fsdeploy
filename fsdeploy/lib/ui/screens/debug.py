@@ -41,6 +41,8 @@ class DebugScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         self.action_refresh()
 
     def action_refresh(self) -> None:
