@@ -1,5 +1,6 @@
 {
   "current_task": "18.2 — Tests overlay + intent pipeline",
-  "status": "READY",
-  "iteration": 135
+  "status": "IN_PROGRESS",
+  "iteration": 135,
+  "bridge_migration": "COMPLETE"
 }
