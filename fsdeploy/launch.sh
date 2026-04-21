@@ -118,12 +118,28 @@ as_user() {
 # DÉTECTION : LIVE vs INSTALLÉ
 # ─────────────────────────────────────────────────────────────────────────────
 _is_live() {
+    # 1. Vérifier la ligne de commande du noyau
     grep -qiE 'boot=live|live-media|casper|nopersistent' /proc/cmdline 2>/dev/null && return 0
+    
+    # 2. Vérifier les dossiers live standard
     [[ -d /run/live ]]         && return 0
     [[ -f /etc/live/config ]]  && return 0
+    
+    # 3. Vérifier si / est en squashfs (typique d'un Live)
+    if command -v findmnt &>/dev/null; then
+        findmnt -n -o FSTYPE / 2>/dev/null | grep -qi squashfs && return 0
+    fi
+    
+    # 4. Vérifier système de fichiers en lecture seule
+    if [[ "$(findmnt -n -o OPTIONS / 2>/dev/null | grep -o ro)" == "ro" ]]; then
+        return 0
+    fi
+    
+    # 5. Vérifier si on a peu d'entrées fstab (système Live minimal)
     local entries
     entries=$(grep -cvE '^\s*#|^\s*$' /etc/fstab 2>/dev/null || true)
     [[ "${entries:-0}" -lt 3 ]] && return 0
+    
     return 1
 }
 
@@ -131,29 +147,98 @@ IS_LIVE=0
 _is_live && IS_LIVE=1
 
 # ─────────────────────────────────────────────────────────────────────────────
+# VÉRIFICATION ENVIRONNEMENT LIVE
+# ─────────────────────────────────────────────────────────────────────────────
+check_live_environment() {
+    step "Vérification de l'environnement Debian Live"
+    
+    if [[ $IS_LIVE -eq 1 ]]; then
+        info "Détecté : Système Debian Live"
+        
+        # Vérifier l'espace disponible
+        local avail_mb
+        avail_mb=$(df --output=avail -m / 2>/dev/null | tail -1 | tr -d ' ' || echo "0")
+        
+        if [[ "${avail_mb:-0}" -lt 2048 ]]; then
+            warn "Espace limité sur le Live : ${avail_mb} MB"
+            warn "Considérez libérer de l'espace ou utiliser un système installé"
+        fi
+        
+        # Vérifier la connectivité réseau
+        if ! ping -c1 -W2 deb.debian.org &>/dev/null; then
+            warn "Pas de connectivité réseau détectée"
+            warn "L'installation des paquets nécessitera une connexion Internet"
+        fi
+        
+        # Vérifier les droits sudo
+        if [[ "$(id -u)" -ne 0 ]]; then
+            if ! sudo -n true 2>/dev/null; then
+                die "Droits sudo nécessaires en mode Live. Lancez : sudo bash launch.sh"
+            fi
+        fi
+        
+        ok "Environnement Live vérifié"
+    else
+        info "Détecté : Système Debian installé"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # VÉRIFICATIONS PRÉ-BOOTSTRAP
 # ─────────────────────────────────────────────────────────────────────────────
 _pre_checks() {
+    step "Vérifications pré-installation"
+    
     [[ "$(uname -m)" == "x86_64" ]] \
         || die "Architecture non supportée : $(uname -m) (amd64 requis)"
 
     local codename=""
     codename=$(. /etc/os-release 2>/dev/null && printf '%s' "${VERSION_CODENAME:-}") || true
-    [[ "$codename" == "trixie" ]] \
-        || warn "Codename Debian détecté : '${codename}' — trixie attendu. Continuer peut casser APT."
+    
+    if [[ "$codename" != "trixie" ]]; then
+        warn "Codename Debian détecté : '${codename}' — trixie attendu"
+        if [[ $IS_LIVE -eq 1 ]]; then
+            info "Mode Live : utilisation des sources Trixie malgré le codename"
+        else
+            warn "Continuer peut casser APT sur un système installé"
+            read -p "Continuer ? (o/N) " -n 1 -r
+            echo
+            [[ $REPLY =~ ^[Oo]$ ]] || die "Installation annulée"
+        fi
+    fi
 
     local avail_mb
-    avail_mb=$(df --output=avail -m "${INSTALL_DIR%/*}" 2>/dev/null | tail -1 | tr -d ' ') || avail_mb=9999
-    [[ "${avail_mb:-0}" -ge 512 ]] \
-        || die "Espace insuffisant sur ${INSTALL_DIR%/*} : ${avail_mb} MB disponibles (512 MB requis)"
+    avail_mb=$(df --output=avail -m "${INSTALL_DIR%/*}" 2>/dev/null | tail -1 | tr -d ' ' || echo "0")
+    
+    if [[ $IS_LIVE -eq 1 ]]; then
+        # Moins d'exigence en mode Live
+        [[ "${avail_mb:-0}" -ge 1024 ]] \
+            || die "Espace insuffisant : ${avail_mb} MB (1024 MB requis en mode Live)"
+    else
+        [[ "${avail_mb:-0}" -ge 512 ]] \
+            || die "Espace insuffisant : ${avail_mb} MB (512 MB requis)"
+    fi
 
     command -v sudo &>/dev/null \
         || die "sudo introuvable — installez-le : su -c 'apt-get install sudo'"
+    
     if [[ "$(id -u)" -ne 0 ]]; then
         sudo -v 2>/dev/null \
             || die "Droits sudo insuffisants pour '$(id -un)'. Lancez via : sudo bash launch.sh"
     fi
+    
+    ok "Vérifications pré-installation réussies"
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VÉRIFICATION ENVIRONNEMENT LIVE
+# ─────────────────────────────────────────────────────────────────────────────
+check_live_environment
+
+# ─────────────────────────────────────────────────────────────────────────────
+# VÉRIFICATIONS PRÉ-BOOTSTRAP
+# ─────────────────────────────────────────────────────────────────────────────
+_pre_checks
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BANNIÈRE
@@ -170,8 +255,6 @@ info "Environnement      : $( [[ $IS_LIVE -eq 1 ]] && printf 'Debian Live' || pr
 [[ $DEV_MODE    -eq 1 ]] && info "${CY}Mode dev activé${CR}"
 [[ $UPDATE_MODE -eq 1 ]] && info "${CY}Mode update activé${CR}"
 printf "\n"
-
-_pre_checks
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MODE UPDATE — git pull + pip + migration config uniquement
