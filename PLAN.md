@@ -1,7 +1,7 @@
 # PLAN.md — fsdeploy (branche `dev`)
 
 > **Dernière mise à jour** : 2026-04-21
-> **Itération worker** : 105
+> **Itération worker** : 106
 > **Tâche active** : **24.1** — Refonte Bridge/Bus & Patch Global Screens
 
 ---
@@ -11,16 +11,16 @@
 |----|-------------|
 | 23.3 | Mount namespace pour DatasetProbeTask (anti-leak) |
 | 23.1-2 | Isolation & CgroupLimits (executor intégré) |
-| 19.2 | Structure initiale des 23 écrans |
+| 19.2 | Structure initiale des 23 écrans câblés |
 
 ---
 
 ## 🚧 Tâche active — 24.1
 **Réparation de la communication UI/Scheduler :**
 - Fix du constructeur `bridge.py` (acceptation de runtime/store).
-- Implémentation de la méthode `emit()` universelle dans le Bridge.
+- Implémentation de la méthode `emit()` avec IDs `uuid`.
 - Correction du bug de signature `ticket_id` dans `_log_ticket`.
-- Patch massif des 23 écrans pour utiliser le nouveau standard.
+- Migration systématique des 23 écrans vers le nouveau standard.
 
 ---
 
