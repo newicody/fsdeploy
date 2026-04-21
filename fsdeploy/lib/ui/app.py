@@ -196,8 +196,8 @@ class FsDeployApp(App):
 
         # Bridge TUI -> Scheduler
         from .bridge import SchedulerBridge
-        # Créer une instance de bridge avec runtime et store (selon add.md 24.1)
-        self.bridge = SchedulerBridge(runtime=self.runtime, store=self.store)
+        # Utiliser l'instance singleton pour garantir la cohérence entre tous les écrans
+        self.bridge = SchedulerBridge.default(runtime=self.runtime, store=self.store)
 
     # ── Compose ───────────────────────────────────────────────────────────────
 
