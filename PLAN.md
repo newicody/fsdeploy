@@ -1,11 +1,11 @@
 # PLAN.md — fsdeploy
 
-> **Objectif** : Fiabilisation du lancement et gestion des retours (Full Loop).
+> **Urgence** : Restauration de la logique de déploiement Debian Live.
 
-## 🚧 En cours — 24.2.a (Audit & Launch)
-- **launch.sh** : Sécurisation du démarrage (Kill process, PYTHONPATH).
-- **bridge.py** : Ajout de la gestion des `_callbacks` par `ticket_id`.
+---
 
-## 🚧 En cours — 24.2.b (Screens Callbacks)
-- **Screens** : Ajout de la logique de réception des messages du Bridge.
-- **Validation** : Vérifier que l'UI réagit quand le scheduler confirme la fin d'une tâche.
+## 🚧 Tâche active — 27.1 (Restaurer & Fusionner)
+1. **Extraction** : Demander au worker d'extraire la logique système de l'ancienne version de `launch.sh` (via git checkout/show).
+2. **Réintégration** : Replacer la détection Debian Live et l'installation des dépendances APT dans le nouveau `launch.sh`.
+3. **Audit Requirements** : Vérifier que `requirements.txt` correspond aux versions stables utilisées précédemment.
+4. **Validation du lancement** : S'assurer que le script prépare le système AVANT de lancer l'UI.

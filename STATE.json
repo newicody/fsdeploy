@@ -1,7 +1,7 @@
 {
-  "current_task": "On tinue le developement suivant add.md et PLAN.md",
+  "current_task": "Stop. Le nouveau launch.sh est trop simplifi\u00e9 et a perdu la gestion Debian Live et l'installation des d\u00e9pendances syst\u00e8me qu'on avait avant.      Va chercher dans l'historique Git l'ancienne version de launch.sh.      Fusionne sa logique d'installation et de d\u00e9tection syst\u00e8me avec notre nouvelle fa\u00e7on de lancer l'application.      V\u00e9rifie que les versions dans requirements.txt sont bien celles qui \u00e9taient stables.     Ne supprime plus les fonctions de setup syst\u00e8me !",
   "status": "RUNNING",
-  "iteration": 153,
+  "iteration": 154,
   "bridge_migration": "COMPLETE",
   "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }
