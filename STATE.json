@@ -1,5 +1,5 @@
 {
-  "current_task": "Lis add.md et applique TOUTES les modifications. Pour chaque fichier cit\u00e9 que tu n'as pas encore dans ton contexte, utilise tes outils pour les lire et les modifier. utilise aussi plan.md",
+  "current_task": "Le d\u00e9p\u00f4t est \u00e0 jour. Travaille exclusivement sur les fichiers dans fsdeploy/lib/ui/. Commence par faire /add fsdeploy/lib/ui/bridge.py fsdeploy/lib/ui/app.py. Ensuite, liste et ajoute tous les fichiers du dossier fsdeploy/lib/ui/screens/. Applique enfin les modifications de add.md. Ne cr\u00e9e aucun nouveau dossier, ne devine aucun code",
   "status": "RUNNING",
-  "iteration": 125
+  "iteration": 127
 }
