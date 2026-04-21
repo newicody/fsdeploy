@@ -37,7 +37,7 @@ class ModuleRegistryScreen(Screen):
         table.add_columns("Module", "Status", "Description")
         # Example data; in a real implementation we would query self.config
         # and self.bridge for actual module information.
-        if self.config:
+        if hasattr(self.app, 'config') and self.app.config:
             # Access config to demonstrate validation
             # (no‑op, just to show that self.app.config is usable)
             pass
@@ -57,16 +57,6 @@ class ModuleRegistryScreen(Screen):
             classes="center"
         )
         yield Footer()
-
-    @property
-    def bridge(self):
-        """Bridge to the scheduler."""
-        return self.app.bridge
-
-    @property
-    def config(self):
-        """FsDeployConfig instance."""
-        return self.app.config
 
     def load_modules(self) -> None:
         """Load modules via the bridge."""
