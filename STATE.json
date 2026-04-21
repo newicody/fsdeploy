@@ -1,7 +1,7 @@
 {
-  "current_task": "continue le developement en utilisant add.md et PLAN.md",
+  "current_task": "Continue le developement en utilisant add.md et PLAN.md, utilise /add ou ajoute les fichiers toi meme si besoin d'edition ou de creation lecture",
   "status": "RUNNING",
-  "iteration": 144,
+  "iteration": 146,
   "bridge_migration": "COMPLETE",
   "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }
