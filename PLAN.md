@@ -1,18 +1,19 @@
 # PLAN.md — fsdeploy
 
-> **Itération** : 107 | **Status** : Migration partielle (12/23 écrans)
-> **Tâche active** : **24.1.b** — Finalisation et Migration Fonctionnelle
+> **Itération** : 134 | **Status** : Migration complète (23/23 écrans)
+> **Tâche active** : **18.2** — Tests overlay + intent pipeline
 
 ---
 
 ## ✅ Terminé
 - Correction de `bridge.py` et `app.py`.
-- Injection du bridge dans le premier lot d'écrans (commit c0d7262).
+- Injection du bridge dans tous les 23 écrans (commit c0d7262 + migrations suivantes).
+- **Tâche 24.1.b COMPLÈTE** : Tous les écrans utilisent `self.bridge.emit()` et ont `SchedulerBridge.default()` dans `on_mount()`.
 
-## 🚧 Tâche active — 24.1.b
-- **Couverture totale** : Patcher les 11 écrans restants dans `fsdeploy/lib/ui/screens/`.
-- **Remplacement critique** : Migrer tous les `self.app.bus.emit` vers `self.bridge.emit` dans les 23 fichiers.
-- **Validation** : Vérifier que `SchedulerBridge.default()` est bien utilisé partout.
+## 🚧 Tâche active — 18.2
+- **Tests overlay + intent pipeline**
+- Validation du bon fonctionnement du bridge avec les événements réels.
+- Vérification que les intents sont correctement convertis en tâches.
 
 ---
 
@@ -20,3 +21,4 @@
 | ID | Prio | Description |
 |----|------|-------------|
 | **18.2** | P1 | Tests overlay + intent pipeline |
+| **24.2** | P2 | Documentation et exemples d'utilisation du bridge |
