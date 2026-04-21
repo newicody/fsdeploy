@@ -59,6 +59,7 @@ class IntentLogScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
         self.bridge = SchedulerBridge.default()
         self.refresh_logs()
 

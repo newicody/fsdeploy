@@ -23,6 +23,8 @@ class ModuleRegistryScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize registry after the screen is attached to the app."""
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         if hasattr(self.app, 'config') and self.app.config:
             from fsdeploy.lib.modules.registry import ModuleRegistry
             self.registry = ModuleRegistry(self.app.config)
