@@ -1,7 +1,7 @@
 {
-  "current_task": "18.2 — Tests overlay + intent pipeline",
-  "status": "READY",
-  "iteration": 135,
+  "current_task": "Termine maintenant la t\u00e2che 24.1 sur l'int\u00e9gralit\u00e9 des 23 \u00e9crans dans fsdeploy/lib/ui/screens/.      Patche les \u00e9crans manquants (ceux qui n'ont pas encore le Bridge).      Dans les 23 fichiers, remplace tous les self.app.bus.emit par self.bridge.emit.     Travaille par lots de 5 fichiers pour \u00e9viter de saturer la session",
+  "status": "RUNNING",
+  "iteration": 136,
   "bridge_migration": "COMPLETE",
-  "last_updated": "Migration 24.1.b terminée - Tous les 23 écrans utilisent self.bridge.emit()"
+  "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }
