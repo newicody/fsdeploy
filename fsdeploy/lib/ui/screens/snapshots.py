@@ -69,6 +69,8 @@ class SnapshotsScreen(Screen):
             yield Button("Rollback", variant="error", id="btn-rollback")
 
     def on_mount(self):
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         dt = self.query_one("#snap-table", DataTable)
         dt.add_columns("Snapshot", "Utilise", "Creation")
         dt.cursor_type = "row"

@@ -73,6 +73,8 @@ class ZBMScreen(Screen):
             yield Button(f"Terminer {ARROW}", variant="success", id="btn-finish")
 
     def on_mount(self):
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         cfg = getattr(self.app, "config", None)
         if cfg:
             self.query_one("#input-efi-device", Input).value = \

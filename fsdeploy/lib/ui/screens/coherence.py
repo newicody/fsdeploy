@@ -75,6 +75,8 @@ class CoherenceScreen(Screen):
                          disabled=True)
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         dt = self.query_one("#checks-table", DataTable)
         dt.add_columns("", "Verification", "Resultat", "Severite")
         dt.cursor_type = "row"

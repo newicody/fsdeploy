@@ -65,6 +65,8 @@ class ConfigSnapshotScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         table = self.query_one("#snapshot-table", DataTable)
         table.add_columns("Nom", "Date", "Taille")
         table.cursor_type = "row"

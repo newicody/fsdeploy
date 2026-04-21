@@ -69,7 +69,10 @@ class PresetsScreen(Screen):
             yield Button("Supprimer", variant="error", id="btn-delete")
             yield Button(f"Suivant {ARROW}", variant="success", id="btn-next")
 
-    def on_mount(self): self._load_presets()
+    def on_mount(self):
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
+        self._load_presets()
 
     # Textual 8.x: RowHighlighted au lieu de RowSelected
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted):

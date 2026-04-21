@@ -61,6 +61,8 @@ class StreamScreen(Screen):
             yield Button("Statut", variant="default", id="btn-status")
 
     def on_mount(self):
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         cfg = getattr(self.app, "config", None)
         if cfg:
             self.query_one("#input-key", Input).value = cfg.get("stream.youtube_key", "")

@@ -60,6 +60,8 @@ class KernelScreen(Screen):
             yield Button(f"Suivant {ARROW}", variant="success", id="btn-next")
 
     def on_mount(self):
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         dt = self.query_one("#kernel-table", DataTable)
         dt.add_columns("","Version","Fichier","Taille","Initramfs","Modules"); dt.cursor_type="row"
         cfg = getattr(self.app,"config",None)

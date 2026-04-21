@@ -106,6 +106,8 @@ class MountsScreen(Screen):
 
     def on_mount(self) -> None:
         """Textual lifecycle hook — pas de parametres."""
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         dt = self.query_one("#mounts-table", DataTable)
         dt.add_columns("", "Dataset", "Role", "Montage actuel",
                         "Montage propose", "Monte", "Verifie")

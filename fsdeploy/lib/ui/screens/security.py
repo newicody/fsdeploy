@@ -55,6 +55,8 @@ class SecurityScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         table = self.query_one("#rules-table", DataTable)
         table.add_columns("Type", "Chemin", "Valeur")
         table.cursor_type = "row"

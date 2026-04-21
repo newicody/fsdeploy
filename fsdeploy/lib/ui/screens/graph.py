@@ -67,6 +67,8 @@ class GraphScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         table = self.query_one("#history-table", DataTable)
         table.add_columns("Statut", "Tache", "Duree")
         table.cursor_type = "row"

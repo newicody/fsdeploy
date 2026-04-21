@@ -67,6 +67,8 @@ class CrossCompileScreen(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
         table = self.query_one("#arch-table", DataTable)
         table.add_columns("Architecture", "Toolchain", "Statut")
         table.cursor_type = "row"
