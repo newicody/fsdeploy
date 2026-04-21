@@ -118,12 +118,13 @@ as_user() {
 # DÉTECTION : LIVE vs INSTALLÉ
 # ─────────────────────────────────────────────────────────────────────────────
 _is_live() {
-    # 1. Vérifier la ligne de commande du noyau
-    grep -qiE 'boot=live|live-media|casper|nopersistent' /proc/cmdline 2>/dev/null && return 0
+    # 1. Vérifier la ligne de commande du noyau - standards Debian Live
+    grep -qiE 'boot=live|live-media' /proc/cmdline 2>/dev/null && return 0
     
-    # 2. Vérifier les dossiers live standard
+    # 2. Vérifier les dossiers live standard Debian
     [[ -d /run/live ]]         && return 0
     [[ -f /etc/live/config ]]  && return 0
+    [[ -d /lib/live/mount/medium ]] && return 0
     
     # 3. Vérifier si / est en squashfs (typique d'un Live)
     if command -v findmnt &>/dev/null; then
@@ -410,14 +411,15 @@ install_dependencies() {
         dkms
     )
     
-    # Paquets supplémentaires pour le mode Live
+    # Paquets supplémentaires pour le mode Live - standards Debian Live
     if [[ $IS_LIVE -eq 1 ]]; then
-        info "Mode Live : installation des paquets supplémentaires"
+        info "Mode Live : installation des paquets Debian Live"
         BASE_PACKAGES+=(
             live-boot
             live-config
             live-tools
-            casper
+            live-boot-initramfs-tools
+            live-config-systemd
             discover
             laptop-detect
             os-prober
