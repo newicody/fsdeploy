@@ -51,10 +51,6 @@ class GraphScreen(Screen):
         self._paused = False
         self._timer = None
 
-    @property
-    def bridge(self):
-        return getattr(self.app, "bridge", None)
-
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static("Pipeline Scheduler", id="graph-header")
@@ -68,7 +64,7 @@ class GraphScreen(Screen):
 
     def on_mount(self) -> None:
         from fsdeploy.lib.ui.bridge import SchedulerBridge
-        self.bridge = SchedulerBridge.default()
+        self._bridge = SchedulerBridge.default()
         table = self.query_one("#history-table", DataTable)
         table.add_columns("Statut", "Tache", "Duree")
         table.cursor_type = "row"
@@ -95,9 +91,10 @@ class GraphScreen(Screen):
     def _update_data(self) -> None:
         if self._paused:
             return
-        if not self.bridge:
+        bridge = getattr(self, "_bridge", None)
+        if not bridge:
             return
-        state = self.bridge.get_scheduler_state()
+        state = bridge.get_scheduler_state()
         self._update_pipeline(state)
         self._update_task_detail(state)
         self._update_history(state)
