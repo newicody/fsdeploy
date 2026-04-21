@@ -31,6 +31,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+import uuid
 from uuid import uuid4
 from fsdeploy.lib.log import get_logger
 
@@ -138,11 +139,16 @@ class SchedulerBridge:
     # ═══════════════════════════════════════════════════════════════
     def submit_event(self, event_name: str, priority: int | None = None, **params) -> str:
         """Soumet un événement au scheduler via le bridge global."""
+        # Récupérer ou générer un identifiant local de ticket
+        local_ticket_id = params.get('_bridge_ticket')
+        if local_ticket_id is None:
+            local_ticket_id = str(uuid.uuid4())
+            params['_bridge_ticket'] = local_ticket_id
+        
         if self._global_bridge is None:
             # Fallback: générer un ticket local immédiatement terminé
-            ticket_id = str(uuid4())
             ticket = Ticket(
-                id=ticket_id,
+                id=local_ticket_id,
                 event_name=event_name,
                 params=params,
                 submitted_at=time.time(),
@@ -150,27 +156,30 @@ class SchedulerBridge:
                 result=None
             )
             with self._lock:
-                self._tickets[ticket_id] = ticket
+                self._tickets[local_ticket_id] = ticket
                 self._history.append(ticket)
             self._log_ticket("submitted", ticket)
             # Déclencher les callbacks immédiatement
             self._fire(ticket)
-            return ticket_id
-        # Délégation au bridge global
-        ticket_id = self._global_bridge.submit_event(event_name, priority=priority, **params)
+            return local_ticket_id
+        
+        # Délégation au bridge global avec le ticket local inclus
+        global_ticket_id = self._global_bridge.submit_event(
+            event_name, priority=priority, **params
+        )
         # Créer un ticket local pour le suivi
         ticket = Ticket(
-            id=ticket_id,
+            id=local_ticket_id,
             event_name=event_name,
             params=params,
             submitted_at=time.time(),
             status="pending"
         )
         with self._lock:
-            self._tickets[ticket_id] = ticket
+            self._tickets[local_ticket_id] = ticket
             self._history.append(ticket)
         self._log_ticket("submitted", ticket)
-        return ticket_id
+        return local_ticket_id
 
     def emit(self, event_name: str, callback: Optional[Callable] = None, 
              priority: Optional[int] = None, **params) -> str:
@@ -190,8 +199,9 @@ class SchedulerBridge:
         Returns:
             Identifiant du ticket (chaîne).
         """
-        # On délègue à submit_event qui gère l'ID et le bus
-        ticket_id = self.submit_event(event_name, priority=priority, **params)
+        ticket_id = str(uuid.uuid4())
+        params['_bridge_ticket'] = ticket_id
+        self.submit_event(event_name, priority=priority, **params)
         if callback:
             self.on_result(ticket_id, callback)
         return ticket_id
