@@ -632,7 +632,12 @@ sudo tee "$WRAPPER" > /dev/null << WRAPPER_EOF
 #!/usr/bin/env bash
 # Wrapper fsdeploy — généré par launch.sh (ne pas éditer)
 [ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
-exec "${VENV_DIR}/bin/python3" -m fsdeploy "\$@"
+export PYTHONPATH="\$PYTHONPATH:$(pwd)"
+# Tuer les instances précédentes
+pkill -f "python3 -m fsdeploy" 2>/dev/null || true
+pkill -f "python3 -m fsdeploy.lib.ui.app" 2>/dev/null || true
+sleep 0.5
+exec "${VENV_DIR}/bin/python3" -m fsdeploy.lib.ui.app "\$@"
 WRAPPER_EOF
 srun chmod 755 "$WRAPPER"
 ok "'fsdeploy' disponible → ${WRAPPER}"
@@ -643,6 +648,11 @@ sudo tee "$SERVE_WRAPPER" > /dev/null << WEBEOF
 # fsdeploy web mode — généré par launch.sh
 # Usage : fsdeploy-web [--port 8080] [--host 0.0.0.0]
 [ -f "${ENV_FILE}" ] && . "${ENV_FILE}"
+export PYTHONPATH="\$PYTHONPATH:$(pwd)"
+# Tuer les instances précédentes
+pkill -f "python3 -m fsdeploy" 2>/dev/null || true
+pkill -f "python3 -m fsdeploy.lib.ui.app" 2>/dev/null || true
+sleep 0.5
 PORT="8080"
 HOST="0.0.0.0"
 while [[ \$# -gt 0 ]]; do
@@ -652,7 +662,7 @@ while [[ \$# -gt 0 ]]; do
         *) shift ;;
     esac
 done
-exec "${VENV_DIR}/bin/textual" serve --host "\$HOST" --port "\$PORT" "python3 -m fsdeploy"
+exec "${VENV_DIR}/bin/textual" serve --host "\$HOST" --port "\$PORT" "python3 -m fsdeploy.lib.ui.app"
 WEBEOF
 srun chmod 755 "$SERVE_WRAPPER"
 ok "'fsdeploy-web' disponible → ${SERVE_WRAPPER}"
@@ -733,16 +743,27 @@ fi
 
 if [[ $RUN_AFTER -eq 1 ]]; then
     printf "   Lancement de fsdeploy...\n\n"
+    
+    # 1. Ajouter le répertoire courant au PYTHONPATH
+    export PYTHONPATH="$PYTHONPATH:$(pwd)"
+    
+    # 2. Tuer les instances précédentes
+    info "Arrêt des instances précédentes..."
+    pkill -f "python3 -m fsdeploy" 2>/dev/null || true
+    pkill -f "python3 -m fsdeploy.lib.ui.app" 2>/dev/null || true
+    sleep 0.5
+    
+    # 3. Lancer l'application avec le bon module
     if [[ "$(id -un)" == "$REAL_USER" ]]; then
-        exec "$VENV_DIR/bin/python3" -m fsdeploy "$@"
+        exec "$VENV_DIR/bin/python3" -m fsdeploy.lib.ui.app "$@"
     else
         exec sudo -u "$REAL_USER" \
-             "$VENV_DIR/bin/python3" -m fsdeploy "$@"
+             "$VENV_DIR/bin/python3" -m fsdeploy.lib.ui.app "$@"
     fi
 else
     step "Installation terminée"
     ok "fsdeploy est prêt dans ${INSTALL_DIR}"
-    info "Lancer : ${VENV_DIR}/bin/python3 -m fsdeploy"
+    info "Lancer : ${VENV_DIR}/bin/python3 -m fsdeploy.lib.ui.app"
     info "Ou utiliser le wrapper : fsdeploy"
     exit 0
 fi
