@@ -43,7 +43,7 @@
 10. **debug.py** - ✓ Utilise `self.bridge.emit()`
 11. **zbm.py** - ✓ Utilise `self.bridge.emit()`
 12. **graph.py** - ✓ Utilise `self._bridge` avec propriété `bridge`
-13. **crosscompile.py** - ✓ Utilise `self.bridge.emit()`
+13. **crosscompile.py** - ✓ Utilise `self.bridge.emit()**
 
 ### ✅ Fichiers de base :
 - **bridge.py** - Correct et fonctionnel
@@ -52,3 +52,13 @@
 ### ✅ Aucun écran n'utilise plus `self.app.bus.emit()`
 
 **La migration 24.1.b est maintenant terminée avec succès !** 🎉
+
+---
+
+## Prochaines étapes immédiates
+
+1. **Exécuter les tests overlay** pour vérifier que les événements `overlay.mount` et `overlay.teardown` fonctionnent correctement via le bridge.
+2. **Valider le pipeline intent** en émettant des événements depuis les écrans et en vérifiant leur conversion en Intents et Tasks.
+3. **Documenter les résultats** dans le rapport de test.
+
+**Félicitations ! La migration est complète.** 🎉
