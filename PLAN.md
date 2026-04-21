@@ -1,12 +1,11 @@
-# PLAN.md — fsdeploy
-
-> **Dernière mise à jour** : 2026-04-21
-> **Tâche active** : **24.1** — Refonte Bridge (PATH FIX)
+> **Itération** : 107 | **Push** : Validé
+> **Tâche active** : **24.1.b** — Migration fonctionnelle des `emit`
 
 ---
 
-## 🚧 Tâche active — 24.1
-**Réparation de la communication UI (Chemins définitifs) :**
-- Le code source RÉEL est dans `fsdeploy/lib/ui/`.
-- Ignorer tout dossier `fsdeploy/ui/` à la racine (doublon potentiel).
-- Mise à jour de `bridge.py`, `app.py` et des 23 écrans dans `lib/ui/`.
+## ✅ Terminé
+- Injection du Bridge dans `kernel`, `presets`, `coherence`, `mounts`, `zbm`, `config_snapshot`, `graph`, `crosscompile`, `stream`, `security`, `snapshots`, `monitoring`.
+
+## 🚧 Tâche active — 24.1.b
+- Finaliser les écrans manquants (ex: `detection.py`, `dashboard.py`, etc.).
+- Remplacer tous les `self.app.bus.emit` par `self.bridge.emit` dans TOUT le dossier screens.
