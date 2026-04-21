@@ -70,6 +70,10 @@ class GraphScreen(Screen):
         table.cursor_type = "row"
         self._timer = self.set_interval(1.0, self._update_data)
         self._update_data()
+        
+    @property
+    def bridge(self):
+        return getattr(self, "_bridge", None)
 
     def on_unmount(self) -> None:
         if self._timer:
