@@ -26,6 +26,9 @@ en cherchant le _bridge_ticket injecte dans chaque event.
 Thread-safe : la TUI et le scheduler tournent dans des threads differents.
 """
 
+# NOTE: Pour appliquer la migration des écrans (add.md 24.1), veuillez ajouter
+# tous les fichiers de `fsdeploy/lib/ui/screens/` au chat.
+
 import threading
 import time
 from collections import deque
