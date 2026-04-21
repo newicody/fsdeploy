@@ -1,12 +1,14 @@
-# add.md — 24.1.b : Migration Fonctionnelle Bridge
+# add.md — 24.1 : Finalisation Bridge
 
-## 🎯 Objectif : Remplacement systématique et complet
+## 🛠 ACTION 1 : Initialisation manquante
+Pour tous les fichiers dans `fsdeploy/lib/ui/screens/` n'ayant pas encore `self.bridge` :
+- Ajouter l'import : `from fsdeploy.lib.ui.bridge import SchedulerBridge`
+- Ajouter dans `on_mount` : `self.bridge = SchedulerBridge.default()`
 
-Dans TOUS les fichiers de `fsdeploy/lib/ui/screens/*.py` :
+## 🛠 ACTION 2 : Migration des appels (OBLIGATOIRE)
+Dans TOUS les fichiers de `fsdeploy/lib/ui/screens/` :
+- RECHERCHER : `self.app.bus.emit(`
+- REMPLACER PAR : `self.bridge.emit(`
 
-1. **Initialisation** : S'assurer que `self.bridge = SchedulerBridge.default()` est présent dans `on_mount`.
-2. **Remplacement Bus** : Migrer TOUS les appels :
-   `self.app.bus.emit(...)`  =>  `self.bridge.emit(...)`
-3. **Nettoyage** : Supprimer l'import de `MessageBus` s'il n'est plus utilisé localement.
-
-> **IMPORTANT** : Ne touche à aucune autre partie du code (CSS, logique métier, etc.). Utilise tes outils pour traiter les écrans restants (ceux non listés dans le commit c0d7262).
+## 🛠 ACTION 3 : Nettoyage
+- Supprimer `from fsdeploy.lib.bus import MessageBus` si plus utilisé.
