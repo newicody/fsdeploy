@@ -1,11 +1,15 @@
 # PLAN.md — fsdeploy
 
-> **Itération** : 109 | **Config** : .aider.conf.yml active (Auto-load screens/*)
-> **Objectif** : Branchement final des appels `emit`.
+> **Itération** : 110 | **Mode** : Full-Context (via .aider.conf.yml)
+> **Objectif** : Validation de la redirection UI -> Bridge.
 
 ---
 
-## 🚧 Tâche active — 24.1.c
-- **État** : Bridge initialisé dans `on_mount` (OK).
-- **Action Requise** : Remplacer `self.app.bus.emit` par `self.bridge.emit` dans TOUS les fichiers chargés.
-- **Vérification** : Plus aucun appel direct au bus dans le dossier `ui/screens/`.
+## ✅ Terminé
+- Configuration automatique du contexte via YAML.
+- Initialisation `on_mount` sur l'intégralité du dossier `screens/`.
+
+## 🚧 Tâche active — 24.1.d (L'ESTOCADE)
+- **Remplacement de masse** : Migrer `self.app.bus.emit` -> `self.bridge.emit` sur les écrans restants.
+- **Validation unitaire** : Vérifier un écran complexe (ex: `kernel.py`) pour confirmer que le `ticket_id` est bien généré.
+- **Cleanup** : Suppression des références directes au `MessageBus` dans l'UI.

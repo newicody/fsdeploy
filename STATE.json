@@ -1,7 +1,7 @@
 {
-  "current_task": "Tous les \u00e9crans sont charg\u00e9s via la config. Applique maintenant le remplacement de bus.emit vers bridge.emit d\u00e9fini dans add.md sur l'ensemble des fichiers",
+  "current_task": "Tous les \u00e9crans sont charg\u00e9s. Le plan est dans add.md : remplace les appels au bus par des appels au bridge. Pour \u00e9viter de saturer la m\u00e9moire, traite les fichiers par lots de 4. Commence par les \u00e9crans de A \u00e0 M, fais un commit, puis fais le reste. Je veux voir le remplacement effectif de self.app.bus.emit par self.bridge.emit partout",
   "status": "RUNNING",
-  "iteration": 151,
+  "iteration": 152,
   "bridge_migration": "COMPLETE",
   "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }

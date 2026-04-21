@@ -1,13 +1,14 @@
-# add.md — 24.1.c : Finalisation Électrique
+# add.md — 24.1.d : Branchement Final
 
-> **CONTEXTE** : Tous les écrans sont ouverts. Le bridge est déjà initialisé.
+## ⚡️ ACTION : Redirection du Flux
+Dans tous les fichiers `.py` de `fsdeploy/lib/ui/screens/` :
 
-## 🛠 ACTION : Remplacement de masse
-Dans chaque fichier du dossier `fsdeploy/lib/ui/screens/` :
+1. **Substitution** :
+   * Chercher : `self.app.bus.emit(`
+   * Remplacer par : `self.bridge.emit(`
 
-1. **REPLACER** : `self.app.bus.emit(` 
-2. **PAR** : `self.bridge.emit(`
+2. **Vérification des Imports** :
+   * S'assurer que `SchedulerBridge` est importé.
+   * Supprimer l'import de `MessageBus` s'il n'est plus utilisé.
 
-## 🧹 NETTOYAGE
-1. Supprimer l'import `from fsdeploy.lib.bus import MessageBus` s'il est présent.
-2. S'assurer que `from fsdeploy.lib.ui.bridge import SchedulerBridge` est bien présent en haut de fichier.
+> **CONSIGNE DE SÉCURITÉ** : Procède écran par écran ou par petits groupes. Ne tente pas de modifier les 23 fichiers dans un seul bloc SEARCH/REPLACE pour éviter la corruption de fichier.
