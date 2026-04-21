@@ -68,9 +68,9 @@ class ModuleRegistryScreen(Screen):
 
     def load_modules(self) -> None:
         """Load modules via the bridge."""
-        if hasattr(self.app, 'bridge'):
+        if self.bridge:
             # Example: emit an event to load modules
-            self.app.bridge.emit("module_registry.load")
+            self.bridge.emit("module_registry.load")
             # update UI placeholder
             pass
         else:
