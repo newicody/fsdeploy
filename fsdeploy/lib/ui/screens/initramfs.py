@@ -100,9 +100,6 @@ class InitramfsScreen(Screen):
         self._kernel_version: str = ""
         self._building: bool = False
 
-    @property
-    def bridge(self):
-        return getattr(self.app, "bridge", None)
 
     # ── Compose ─────────────────────────────────────────────────────
 
@@ -182,6 +179,9 @@ class InitramfsScreen(Screen):
             yield Button(f"Suivant {ARROW}", variant="success", id="btn-next")
 
     def on_mount(self) -> None:
+        from fsdeploy.lib.ui.bridge import SchedulerBridge
+        self.bridge = SchedulerBridge.default()
+        
         dt = self.query_one("#images-table", DataTable)
         dt.add_columns("", "Fichier", "Version", "Taille")
         dt.cursor_type = "row"

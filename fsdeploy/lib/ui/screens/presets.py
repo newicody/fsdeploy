@@ -39,8 +39,6 @@ class PresetsScreen(Screen):
     """
     def __init__(self, **kw):
         super().__init__(**kw); self._presets=[]; self._selected_idx=-1
-    @property
-    def bridge(self): return getattr(self.app,"bridge",None)
 
     def compose(self) -> ComposeResult:
         yield Static("Presets de boot", id="presets-header")
