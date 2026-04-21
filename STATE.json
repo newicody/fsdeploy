@@ -1,7 +1,7 @@
 {
-  "current_task": "Continue le developement en utilisant add.md et PLAN.md, utilise /add ou ajoute les fichiers toi meme si besoin d'edition ou de creation lecture",
+  "current_task": "Tu stagnes sur la migration des \u00e9crans. Utilise imm\u00e9diatement la commande shell : grep -r \"self.app.bus.emit\" fsdeploy/lib/ui/screens/ pour lister le travail restant.",
   "status": "RUNNING",
-  "iteration": 146,
+  "iteration": 147,
   "bridge_migration": "COMPLETE",
   "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }

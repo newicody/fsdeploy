@@ -1,19 +1,17 @@
 # PLAN.md — fsdeploy
 
-> **Status** : 12/23 initialisés, 0/23 migrés fonctionnellement.
-> **Stratégie** : Approche par lots (Batches) pour éviter la saturation.
+> **Itération** : 108 | **Objectif** : Connexion fonctionnelle totale.
+> **Stratégie** : Migration par lots (Batches) pour éviter la saturation mémoire.
 
 ---
 
 ## 🚧 Tâche active — 24.1 (FINITION)
-**Objectif : Migration fonctionnelle totale vers `bridge.emit`.**
-
-1. **Vérification (Shell)** : Identifier les fichiers qui contiennent encore `bus.emit`.
-2. **Batch 1 (11 restants)** : Initialiser le Bridge dans `on_mount`.
-3. **Batch 2 (Les 23)** : Remplacer `self.app.bus.emit` par `self.bridge.emit`.
+1. **Recensement** : Identifier via `grep` les fichiers restants.
+2. **Patch Lot A (11 fichiers)** : Injection de `SchedulerBridge` dans `on_mount`.
+3. **Migration Lot B (23 fichiers)** : Remplacement global de `bus.emit` par `bridge.emit`.
 
 ---
 
-## ✅ Historique Récent
-- `bridge.py` et `app.py` sont 100% OK.
-- Premier lot de 12 écrans initialisés (structure uniquement).
+## ✅ Historique
+- Refonte de `bridge.py` validée.
+- Instanciation dans `app.py` validée.
