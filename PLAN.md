@@ -41,7 +41,7 @@
 8. **stream.py** - ✓ Utilise `self.bridge.emit()`
 9. **config.py** - ✓ Utilise `self.bridge.emit()`
 10. **debug.py** - ✓ Utilise `self.bridge.emit()`
-11. **zbm.py** - ✓ Utilise `self.bridge.emit()`
+11. **zbm.py** - ✓ Utilise `self.bridge.emit()**
 12. **graph.py** - ✓ Utilise `self._bridge` avec propriété `bridge`
 13. **crosscompile.py** - ✓ Utilise `self.bridge.emit()**
 
