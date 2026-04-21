@@ -24,3 +24,31 @@
 |----|------|-------------|
 | **18.2** | P1 | Tests overlay + intent pipeline |
 | **24.2** | P2 | Documentation et exemples d'utilisation du bridge |
+
+---
+
+## 📊 État de la migration du bridge
+
+### ✅ Tous les écrans sont correctement migrés :
+
+1. **detection.py** - ✓ Utilise `self.bridge.emit()`
+2. **mounts.py** - ✓ Utilise `self.bridge.emit()`
+3. **kernel.py** - ✓ Utilise `self.bridge.emit()`
+4. **initramfs.py** - ✓ Utilise `self.bridge.emit()`
+5. **presets.py** - ✓ Utilise `self.bridge.emit()`
+6. **coherence.py** - ✓ Utilise `self.bridge.emit()`
+7. **snapshots.py** - ✓ Utilise `self.bridge.emit()`
+8. **stream.py** - ✓ Utilise `self.bridge.emit()`
+9. **config.py** - ✓ Utilise `self.bridge.emit()`
+10. **debug.py** - ✓ Utilise `self.bridge.emit()`
+11. **zbm.py** - ✓ Utilise `self.bridge.emit()`
+12. **graph.py** - ✓ Utilise `self._bridge` avec propriété `bridge`
+13. **crosscompile.py** - ✓ Utilise `self.bridge.emit()`
+
+### ✅ Fichiers de base :
+- **bridge.py** - Correct et fonctionnel
+- **app.py** - Initialise `self.bridge = SchedulerBridge.default()` dans `__init__`
+
+### ✅ Aucun écran n'utilise plus `self.app.bus.emit()`
+
+**La migration 24.1.b est maintenant terminée avec succès !** 🎉
