@@ -2,6 +2,7 @@
 fsdeploy.ui.app
 =================
 Application Textual principale fsdeploy.
+Mise à jour conforme à add.md 24.1.
 
 Compatible : Textual >=8.2.1 / Rich >=14.3.3 / Python >=3.9
 

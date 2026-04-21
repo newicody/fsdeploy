@@ -1,5 +1,6 @@
 """
 Écran IntentLog : consultation du journal des intents (HuffmanStore).
+Mise à jour conforme à add.md 24.1.
 """
 
 import datetime

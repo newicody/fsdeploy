@@ -2,6 +2,7 @@
 fsdeploy.ui.bridge
 ====================
 Pont entre la TUI Textual et le scheduler.
+Mise à jour conforme à add.md 24.1.
 
 La TUI ne doit JAMAIS :
   - executer de commandes (subprocess)
