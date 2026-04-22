@@ -1,7 +1,7 @@
 {
-  "current_task": "Continue le developement en utilisant add.md et PLAN.md",
+  "current_task": "Continue les taches en cours (ca a crash\u00e9 timeout de deepseek)",
   "status": "RUNNING",
-  "iteration": 168,
+  "iteration": 171,
   "bridge_migration": "COMPLETE",
   "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }

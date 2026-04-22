@@ -1,20 +1,18 @@
 # PLAN.md — fsdeploy
 
-> **Concept** : Orchestration de Graphe Sécurisée (Context-Aware DAG).
-> **État** : Graphe et Config unifiés. Passage à l'exécution multi-mode.
+> **Statut** : Phase de transition vers l'exécution unifiée.
+> **Objectif** : Rendre le Scheduler totalement autonome via le Graphe et la Config.
 
 ---
 
-## 🏗 Phase 1 : Système (TERMINÉ ✅)
-- [x] **Bootstrap** : Cage `/opt/fsdeploy/bootstrap` opérationnelle.
-- [x] **Venv** : Environnement Python isolé.
+## 🏗️ Phase 1 : Système (TERMINÉ ✅)
 
-## ⚙️ Phase 2 : Le Scheduler (Moteur d'Exécution Unique)
-- [x] **Multi-Mode Runner** : Implémenter le switch Standard / Sudo / Chroot.
-- [x] **Stdin Injection** : Gérer la transmission du password via `subprocess.Popen`.
-- [x] **Cage Lifecycle** : Automatiser `mount --bind` (dev/proc/sys) -> `chroot` -> `umount`.
+## ⚙️ Phase 2 : Le Runner du Scheduler (EN COURS 🚀)
+- [ ] **Runtime Injector** : Moteur de formatage des commandes via `detected.ini`.
+- [ ] **Cage Lifecycle** : Automatisation `mount` / `chroot` / `umount`.
+- [ ] **The Multi-Runner** : Gestion des flux `Standard`, `Sudo`, `Chroot` avec injection `stdin`.
 
-## 🔒 Phase 3 : Validation & UI (Le Pont)
-- [x] **Security Enforcement** : Finaliser le hook qui valide les nœuds du graphe par rapport à `defaults.ini`.
-- [x] **SudoModal** : Écran de capture de mot de passe déclenché par le Scheduler.
-- [ ] **Audit Final** : Purge des appels système directs dans les 23 écrans.
+## 🔒 Phase 3 : Interface & Découplage (À VENIR)
+- [ ] **SudoModal** : Intégration de la capture de secret asynchrone.
+- [ ] **UI Refactor** : Migration massive des écrans vers le système d'Intentions.
+- [ ] **Security Audit** : Vérification de la non-régression des garde-fous sémantiques.
