@@ -1,26 +1,29 @@
-# add.md — 38.2 : Pilotage du Scheduler par les champs Config
+# add.md — 38.2 : Branchement du Scheduler sur les champs Config
 
-## 🛠 1. Analyse des Champs ConfigObj
-- Le Scheduler doit scanner les fichiers de configuration du dépôt.
-- **Identification des marqueurs** :
-    - Repérer les clés indiquant un besoin de privilèges (ex: `need_root=1`, `sudo=true`).
-    - Repérer les clés indiquant une action en milieu isolé (ex: `target=chroot`, `use_cage=true`).
+## 🛠 1. Analyse des champs ConfigObj
+- Modifier `lib/scheduler.py` pour qu'il charge systématiquement la configuration au démarrage.
+- **Logique de décision** :
+    - Si une section contient une clé de type `privileged=true` ou `sudo=1` -> Mode Sudo.
+    - Si une section contient `context=chroot` ou `use_cage=true` -> Mode Chroot.
+    - Extraire dynamiquement les commandes et arguments depuis les champs de la section.
 
-## 🛠 2. Automatisation du Flux de Travail
-Modifier `lib/scheduler.py` pour automatiser ce cycle :
-1. **Réception** d'un ID de config depuis le Bridge.
-2. **Lecture** du bloc correspondant dans le fichier de config.
-3. **Challenge** : Si la config marque l'action comme protégée, émettre un signal `NEED_PASS` au Bridge.
-4. **Exécution** : 
-    - Si `chroot` est requis : Utiliser le bootstrap `/opt/fsdeploy/bootstrap`.
-    - Si `sudo` est requis : Injecter le pass via `Popen` et `stdin`.
-    - Appliquer les paramètres (flags, chemins) définis dans les champs de la config.
+## 🛠 2. Implémentation du Runner Multi-Mode
+- **Mode Standard** : Exécuter directement via le `venv`.
+- **Mode Sudo** : 
+    - Appeler `self.bridge.ask_sudo()` pour déclencher le `SudoModal`.
+    - Exécuter `sudo -S -k {command}` via `subprocess.Popen`.
+    - Injecter le mot de passe dans `stdin`.
+- **Mode Chroot** : 
+    - Monter `/dev`, `/proc`, `/sys` dans `/opt/fsdeploy/bootstrap`.
+    - Lancer `sudo -S -k chroot /opt/fsdeploy/bootstrap {command}`.
+    - Démonter les API kernel après exécution (même en cas d'erreur).
 
-## 🛠 3. Sécurisation des Montages (Overlay/ZFS)
-- Pour toute section de montage trouvée dans la config :
-    - Le Scheduler doit vérifier si le point de montage existe dans la cage.
-    - Exécuter le montage via le Runner Sudo.
+## 🛠 3. Mise à jour du Bridge (D-Bus style)
+- Le Bridge ne doit plus accepter de chaînes de caractères "commandes".
+- Il doit recevoir un `config_id` (ex: `zfs_create_pool`).
+- Le Bridge transmet cet ID au Scheduler qui se charge de trouver la "recette" dans la config.
 
-## 🛠 4. Mise à jour du Bridge
-- Le Bridge ne doit plus envoyer de "commandes", mais des "IDs de section" de ta config.
-- Il doit être prêt à intercepter la demande de mot de passe du Scheduler pour afficher le `SudoModal`.
+## 🛠 4. Audit des 23 Écrans
+- Supprimer les imports `os`, `subprocess` et `shutil`.
+- Remplacer les fonctions de boutons par : 
+  `self.bridge.emit("RUN_TASK", {"id": "NOM_DE_LA_SECTION_CONFIG"})`.
