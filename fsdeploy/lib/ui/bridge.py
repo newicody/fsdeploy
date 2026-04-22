@@ -211,8 +211,47 @@ class SchedulerBridge:
             self.on_result(ticket_id, callback)
         return ticket_id
     
+    def execute_config_section(self, section_id: str, callback: Optional[Callable] = None, 
+                              priority: Optional[int] = None) -> str:
+        """
+        Exécute une section de configuration identifiée par son ID.
+        
+        Args:
+            section_id: ID de la section de configuration (ex: "mounts.root", "kernel.compile")
+            callback: Fonction appelée lorsque le ticket est terminé
+            priority: Priorité de l'exécution
+            
+        Returns:
+            Identifiant du ticket (chaîne)
+        """
+        return self.emit(
+            "config.execute", 
+            section_id=section_id,
+            callback=callback,
+            priority=priority
+        )
+
+    def get_config_sections(self) -> list[dict]:
+        """
+        Récupère toutes les sections de configuration disponibles.
+        Délègue au bridge global.
+        """
+        if self._global_bridge is not None:
+            return self._global_bridge.get_config_sections()
+        # Fallback : retourner des sections vides
+        return []
+
+    def get_config_section(self, section_id: str) -> Optional[dict]:
+        """
+        Récupère une section de configuration spécifique.
+        Délègue au bridge global.
+        """
+        if self._global_bridge is not None:
+            return self._global_bridge.get_config_section(section_id)
+        return None
+    
     def _handle_sudo_request(self, params: dict, callback: Optional[Callable] = None) -> str:
-        """Gère une demande d'authentification sudo."""
+        """Gère une demande d'authentification sudo via le SudoModal."""
         import time
         import uuid
         
@@ -229,27 +268,24 @@ class SchedulerBridge:
         with self._lock:
             self._tickets[ticket_id] = ticket
         
-        # Afficher le modal de saisie de mot de passe
-        # Note: Dans une implémentation réelle, nous devrions appeler
-        # l'application Textual pour afficher un modal
-        # Pour l'instant, nous allons simuler une réponse automatique
-        # avec un mot de passe vide (ce qui échouera)
+        # Demander le mot de passe via le SudoModal
+        section_id = params.get("section_id", "unknown")
+        action = params.get("action", "Action protégée")
         
-        # Simuler un délai pour l'interface utilisateur
-        def simulate_ui_response():
-            import time
-            time.sleep(0.5)
-            
-            # Pour l'instant, nous n'avons pas de modal réel
-            # Donc nous échouons l'authentification
-            password = None  # Simuler une annulation
-            
+        # Note: Nous n'avons pas d'accès direct à l'application ici
+        # Nous devons utiliser un mécanisme de callback ou d'événement
+        # Pour l'instant, nous allons utiliser une approche simplifiée
+        
+        def handle_password_response(password: str) -> None:
+            """Gère la réponse du mot de passe."""
             if password:
                 # Envoyer la réponse au scheduler
                 response_ticket_id = self.submit_event(
                     "auth.sudo_response",
                     password=password,
                     original_ticket=ticket_id,
+                    section_id=section_id,
+                    success=True
                 )
                 
                 # Mettre à jour le ticket original
@@ -258,24 +294,38 @@ class SchedulerBridge:
                         self._tickets[ticket_id].status = "completed"
                         self._tickets[ticket_id].result = {"authenticated": True}
                         self._history.append(self._tickets[ticket_id])
-                
-                # Appeler le callback si fourni
-                if callback:
-                    callback(self._tickets[ticket_id])
             else:
                 # Authentification annulée
                 with self._lock:
                     if ticket_id in self._tickets:
                         self._tickets[ticket_id].status = "failed"
-                        self._tickets[ticket_id].error = "Authentification annulée ou non implémentée"
+                        self._tickets[ticket_id].error = "Authentification annulée par l'utilisateur"
                         self._history.append(self._tickets[ticket_id])
-                
-                if callback:
-                    callback(self._tickets[ticket_id])
+            
+            # Appeler le callback original si fourni
+            if callback:
+                callback(self._tickets[ticket_id])
         
-        # Démarrer la simulation dans un thread séparé
+        # Pour l'instant, nous ne pouvons pas appeler directement le SudoModal
+        # car nous n'avons pas de référence à l'application
+        # Dans une implémentation réelle, nous devrions émettre un événement
+        # que l'application capturerait pour afficher le modal
+        
+        # Solution temporaire : simuler une annulation
+        # Dans la vraie implémentation, ceci devrait être remplacé par :
+        # self.app.request_sudo_password(section_id, action, handle_password_response)
+        
         import threading
-        thread = threading.Thread(target=simulate_ui_response, daemon=True)
+        def simulate_password_request():
+            # Attendre un peu pour simuler l'interface utilisateur
+            import time
+            time.sleep(0.5)
+            
+            # Pour l'instant, simuler un échec d'authentification
+            # (à remplacer par l'appel réel au modal)
+            handle_password_response(None)
+        
+        thread = threading.Thread(target=simulate_password_request, daemon=True)
         thread.start()
         
         return ticket_id

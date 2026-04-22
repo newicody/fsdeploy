@@ -193,6 +193,7 @@ class FsDeployApp(App):
         self.config = config       # config.FsDeployConfig
         self.deploy_mode = mode    # deploy | booted | stream
         self._refresh_interval = 2.0  # secondes entre les refresh TUI
+        self.sudo_requests = {}    # stocke les demandes sudo en attente
 
         # Bridge TUI -> Scheduler
         from .bridge import SchedulerBridge
@@ -394,3 +395,31 @@ class FsDeployApp(App):
         """Ecriture sure d'une valeur config."""
         if self.config:
             self.config.set(key, value)
+
+    def request_sudo_password(self, section_id: str, action: str = "", 
+                             callback: Optional[Callable] = None) -> None:
+        """
+        Affiche un modal pour demander le mot de passe sudo.
+        
+        Args:
+            section_id: ID de la section de configuration
+            action: Description de l'action
+            callback: Fonction à appeler avec le mot de passe
+        """
+        from .screens.sudo_modal import SudoModal
+        
+        def handle_password(password: str) -> None:
+            """Gère la réponse du modal."""
+            if callback:
+                if password:
+                    # Le mot de passe a été fourni
+                    callback(password)
+                else:
+                    # L'utilisateur a annulé
+                    callback(None)
+        
+        # Afficher le modal
+        self.push_screen(
+            SudoModal(section_id=section_id, action=action),
+            handle_password
+        )
