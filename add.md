@@ -1,28 +1,27 @@
-# add.md — 38.2 : Branchement du Scheduler sur les champs Config
+# add.md — 38.2 : Logique d'Exécution du Scheduler
 
-## 🛠 1. Centralisation de la Configuration
-- Modifier `lib/scheduler.py` pour qu'il soit le seul à manipuler les appels système.
-- **Lecture de Config** : Le Scheduler doit charger les fichiers ConfigObj du dépôt pour identifier les sections d'action.
+## 🛠 1. Initialisation du Scheduler (lib/scheduler.py)
+- Charger l'instance globale de la configuration via **ConfigObj**.
+- Créer une méthode `resolve_context(section_id)` qui identifie si une tâche doit s'exécuter sur l'hôte ou dans la cage, et si elle nécessite `sudo`.
 
-## 🛠 2. Implémentation du Runner Multi-Mode
-Le Scheduler doit implémenter une fonction d'exécution qui choisit son tunnel selon la config :
-- **Mode Standard** : Exécution simple via le `venv`.
-- **Mode Sudo Host** : 
-    - Déclenché par les drapeaux de privilèges dans la config.
-    - Utilise `subprocess.Popen(['sudo', '-S', '-k', ...])`.
-    - Demande le pass au Bridge (qui affiche le `SudoModal`) et l'injecte dans `stdin`.
-- **Mode Sudo Chroot** :
-    - Déclenché par les drapeaux de contexte/cage dans la config.
-    - Automatisme : `mount --bind` des API kernel (`/dev`, `/proc`, `/sys`) dans `/opt/fsdeploy/bootstrap`.
-    - Exécution : `chroot` vers la cage avec injection du pass.
-    - Nettoyage : `umount` systématique après l'action.
+## 🛠 2. Implémentation du Runner Sécurisé
+Développer la fonction `run_intent(intent_id, password=None)` :
+- **Si Sudo requis** : 
+    - Utiliser `subprocess.Popen` avec les arguments `['sudo', '-S', '-k', '--', 'command']`.
+    - Envoyer le `password` dans `stdin`.
+- **Si Chroot requis** :
+    - Exécuter (via sudo) les montages bind : `/dev`, `/proc`, `/sys` vers `/opt/fsdeploy/bootstrap/`.
+    - Encapsuler la commande : `chroot /opt/fsdeploy/bootstrap /bin/bash -c "la_commande"`.
+    - **Sécurité** : Utiliser un bloc `finally` pour garantir le `umount` des API kernel après l'action.
 
-## 🛠 3. Liaison par "Intents" (Bridge)
-- Le Bridge ne doit plus faire passer de commandes brutes.
-- L'UI envoie un `config_id` (ex: `zfs_pool_setup`).
-- Le Scheduler récupère la section associée dans ConfigObj et exécute selon les paramètres définis.
+## 🛠 3. Bridge : Gestion du challenge d'authentification
+- Le Bridge intercepte l'appel du Scheduler.
+- Si le Scheduler renvoie un code `AUTH_REQUIRED` :
+    - Le Bridge appelle `app.push_screen(SudoModal)`.
+    - Une fois le pass reçu, il relance la tâche dans le Scheduler.
 
-## 🛠 4. Nettoyage des Écrans (Audit)
-- Parcourir les 23 écrans de `lib/ui/screens/`.
-- **Action** : Supprimer tous les `import os`, `subprocess`, `shutil`.
-- **Remplacement** : Toutes les actions de boutons doivent devenir des `self.bridge.emit("EXECUTE_TASK", {"id": "NOM_SECTION_CONFIG"})`.
+## 🛠 4. Nettoyage de l'UI (Exemple : ZFS ou Partitions)
+- Prendre un écran de montage comme modèle.
+- Supprimer `import os` et `import subprocess`.
+- Remplacer le clic du bouton par : 
+  `self.bridge.emit("EXECUTE", {"config_id": "ma_section_zfs"})`.

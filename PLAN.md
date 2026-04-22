@@ -1,20 +1,21 @@
 # PLAN.md — fsdeploy
 
-> **Concept** : Le Scheduler comme exécuteur exclusif des définitions ConfigObj.
-> **Isolation** : Utilisation systématique du chroot pour les actions système définies.
+> **Concept** : Orchestration pilotée par les métadonnées (Config-Driven).
+> **État** : Infrastructure prête, passage à la logique de vol.
 
 ---
 
-## 🏗 Phase 1 : Infrastructure (TERMINÉ ✅)
-- [x] **launch.sh** : Bootstrap/Cage (`/opt/fsdeploy/bootstrap`) et venv prêts.
+## 🏗 Phase 1 : Système (TERMINÉ ✅)
+- [x] **launch.sh** : Cage d'exécution (`/opt/fsdeploy/bootstrap`) et venv isolés.
 
-## ⚙️ Phase 2 : Le Scheduler (Action Server)
-- [ ] **Config Parser** : Charger et mapper les sections ConfigObj.
-- [ ] **Execution Logic** : 
-    - Identifier les modes (User, Sudo, Chroot) via les clés de config.
-    - Gérer l'injection de mot de passe via `stdin` pour `sudo -S -k`.
-- [ ] **Cage Orchestrator** : Gérer les montages éphémères (`bind`) requis pour le chroot.
+## ⚙️ Phase 2 : Scheduler (L'Exécuteur Universel)
+- [ ] **Config Mapper** : Intégration de la logique de lecture des sections ConfigObj.
+- [ ] **Runner Multi-Mode** :
+    - Gestion du flux **User** (standard).
+    - Gestion du flux **Sudo-Host** (via `sudo -S -k` et stdin).
+    - Gestion du flux **Sudo-Chroot** (bind mounts + chroot).
+- [ ] **Lifecycle Manager** : Automatisation du cycle `Mount Bind -> Chroot -> Unmount`.
 
-## 🔒 Phase 3 : UI & Bridge (Client)
-- [ ] **SudoModal** : Capture du mot de passe à la demande du Scheduler.
-- [ ] **Intent Bridge** : Remplacer les appels directs par des envois d'IDs de section.
+## 🔒 Phase 3 : UI & Bridge (L'Interface Client)
+- [ ] **SudoModal** : Capture asynchrone du mot de passe.
+- [ ] **Event Routing** : Migration des 23 écrans vers des émissions d'IDs de config.
