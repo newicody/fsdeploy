@@ -277,31 +277,37 @@ class SchedulerBridge:
         def handle_password_response(password: str | None) -> None:
             """Callback appelé après la réponse du modal."""
             if password:
+                # Marquer le ticket comme complété avec le mot de passe
+                with self._lock:
+                    if ticket_id in self._tickets:
+                        self._tickets[ticket_id].status = "completed"
+                        self._tickets[ticket_id].result = {"password": password}
+                        self._history.append(self._tickets[ticket_id])
+            else:
+                # Marquer comme échoué
+                with self._lock:
+                    if ticket_id in self._tickets:
+                        self._tickets[ticket_id].status = "failed"
+                        self._tickets[ticket_id].error = "Authentification annulée"
+                        self._history.append(self._tickets[ticket_id])
+            
+            # Appeler le callback si fourni
+            if callback:
+                with self._lock:
+                    t = self._tickets.get(ticket_id)
+                if t:
+                    callback(t)
+            
+            # Pour les requêtes synchrones, notifier via le bridge global
+            if params.get("_sync_request"):
                 # Envoyer la réponse au scheduler
                 self.submit_event(
                     "auth.sudo_response",
                     password=password,
                     original_ticket=ticket_id,
                     section_id=section_id,
-                    success=True,
+                    success=bool(password),
                 )
-                with self._lock:
-                    if ticket_id in self._tickets:
-                        self._tickets[ticket_id].status = "completed"
-                        self._tickets[ticket_id].result = {"authenticated": True}
-                        self._history.append(self._tickets[ticket_id])
-            else:
-                with self._lock:
-                    if ticket_id in self._tickets:
-                        self._tickets[ticket_id].status = "failed"
-                        self._tickets[ticket_id].error = "Authentification annulée par l'utilisateur"
-                        self._history.append(self._tickets[ticket_id])
-
-            if callback:
-                with self._lock:
-                    t = self._tickets.get(ticket_id)
-                if t:
-                    callback(t)
 
         # Utiliser l'application si disponible, sinon fallback simulé
         if self._app is not None:
