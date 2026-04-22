@@ -1,24 +1,22 @@
-# add.md — 38.3 : Runtime Injector et Orchestration de la Cage
+# add.md — 38.4 : Bridge asynchrone et Agent Sudo
 
-## 🛠️ 1. Runtime Variable Injector (lib/scheduler/injector.py)
-- Créer une fonction `resolve_command(raw_command, config_obj)` :
-    - Utilise les variables de la section `[DETECTED]` pour remplir les `{placeholders}`.
-    - **Sécurité** : Nettoyer les valeurs injectées pour empêcher tout "command injection" (interdire `;`, `&`, `|` dans les variables dynamiques).
-    - **Fallback** : Si une variable est absente (ex: `{target_disk}` n'est pas défini), lever une erreur explicite pour stopper le graphe.
+## 🛠️ 1. Évolution du Bridge (lib/bridge.py)
+- Créer le canal `INTENT_REQUEST` :
+    - L'UI envoie un `intent_id`.
+    - Le Bridge interroge le Scheduler : "Est-ce que cette branche du graphe a besoin de root ?"
+- Si oui : Le Bridge déclenche `app.push_screen(SudoModal)`.
 
-## 🛠️ 2. Gestionnaire de la Cage (lib/scheduler/cage.py)
-- Implémenter le cycle de vie sécurisé pour le mode `chroot` :
-    - `enter_cage()` : Effectue les `mount --bind` de `/dev`, `/proc`, `/sys`, `/run` vers `/opt/fsdeploy/bootstrap`.
-    - `exit_cage()` : Effectue les `umount -l` (lazy unmount).
-- **Robustesse** : Utiliser un bloc `try...finally` dans le Scheduler pour garantir que `exit_cage()` est appelé même si la commande ZFS ou APT échoue ou est interrompue.
+## 🛠️ 2. Le SudoModal (lib/ui/modals/sudo.py)
+- Créer un écran Textual minimaliste :
+    - Champ `Input(password=True)`.
+    - Bouton "Valider" qui renvoie le pass au Bridge (via un callback ou un message).
+    - **Sécurité** : Le mot de passe ne doit être stocké dans aucune variable globale. Il doit être transmis directement au Scheduler qui l'injectera dans le pipe `stdin` puis sera effacé.
 
-## 🛠️ 3. Le Runner Multi-Mode (lib/scheduler/runner.py)
-- Développer le moteur d'exécution basé sur `subprocess.Popen` :
-    - **Flux Standard** : Exécution simple.
-    - **Flux Sudo** : Lancer `sudo -S -k`, attendre le signal du Bridge pour injecter le mot de passe dans `stdin`.
-    - **Flux Chroot** : Préparer la cage, exécuter la commande via `chroot`, nettoyer la cage.
-- **Log Streaming** : Capturer `stdout` et `stderr` ligne par ligne et les émettre vers le Bridge pour que l'UI puisse afficher la progression réelle (ex: logs d'installation de paquets).
+## 🛠️ 3. Streamer de Logs (UI Feedback)
+- Adapter le Scheduler pour qu'il émette un signal `TASK_LOG` à chaque ligne de sortie de `subprocess`.
+- Le Bridge doit capturer ce signal pour mettre à jour une `RichLog` ou un widget de terminal dans l'écran actif.
 
-## 🛠️ 4. Validation des Nœuds (Security Hook)
-- Juste avant l'exécution, comparer la commande finale avec la politique de `defaults.ini`.
-- Vérifier que les disques ciblés ne sont pas dans la liste d'exclusion des périphériques système.
+## 🛠️ 4. Refactoring des Écrans (Modèle)
+- Choisir un écran (ex: `ZfsPoolScreen`) et appliquer le nouveau paradigme :
+    - Supprimer : `subprocess.run(...)`.
+    - Ajouter : `self.bridge.emit("EXECUTE", {"id": "ZFS_CREATE_POOL", "data": {"name": "data"}})`.
