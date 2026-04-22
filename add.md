@@ -1,26 +1,28 @@
-# add.md — 38.3 : Adaptation du Graphe et Sécurisation
+# add.md — 38.3 : Implémentation du Runner Multi-Mode
 
-## 🛠 1. Adaptation du Resolver (lib/resolver.py)
-- **Lazy Loading des variables** : Modifier la méthode qui génère la commande finale. Elle doit aller chercher les valeurs dans l'objet fusionné `ConfigObj` juste avant l'envoi au Scheduler.
-- **Vérification de l'État du Graphe** : S'assurer que si une tâche parente échoue, le Resolver marque immédiatement toutes les tâches dépendantes comme `SKIPPED` et demande au Scheduler de nettoyer la cage (`umount`).
+## 🛠 1. Architecture du Scheduler (lib/scheduler.py)
+Le Scheduler doit maintenant consommer les nœuds validés par le Resolver :
+- **Entrée** : Un objet `TaskNode` contenant la commande résolue, le contexte (`env`) et le niveau de privilège (`root`).
+- **Sortie** : Un flux de statut vers le Bridge (Progress, Success, Error).
 
-## 🛠 2. Renforcement du Security Hook
-- Localiser le hook de sécurité actuel et l'étendre :
-    - **Validation de Paramètres** : Ajouter une étape de vérification via Regex ou Liste Noire sur les arguments injectés (ex: empêcher l'injection de commandes via des noms de pool ZFS malveillants).
-    - **Vérification Hardware** : Le hook doit consulter `detected.ini` pour interdire toute action root sur les périphériques marqués comme "critiques" ou "système".
+## 🛠 2. Implémentation du "Tunnel" Sudo
+Pour les tâches marquées `root=true` :
+- Utiliser `subprocess.Popen(['sudo', '-S', '-k', '--', ...], stdin=PIPE, stdout=PIPE, stderr=PIPE)`.
+- **Mécanisme** : Le Scheduler demande le secret au Bridge, puis l'injecte via `process.communicate(input=f"{password}\n".encode())`.
+- **Sécurité** : Utiliser `sudo -k` pour s'assurer que le mot de passe ne reste pas en cache système.
 
-## 🛠 3. Branchement au Scheduler (lib/scheduler.py)
-- Le Scheduler doit recevoir un objet `TaskNode` (issu du graphe) et non plus une simple commande.
-- **Traitement du Contexte** :
-    - Lire `node.environment` : Si `cage`, activer le cycle `mount_api` -> `chroot` -> `umount`.
-    - Lire `node.privileged` : Si `true`, invoquer le tunnel `sudo -S -k`.
+## 🛠 3. Implémentation du "Tunnel" Chroot (La Cage)
+Pour les tâches marquées `env=chroot` :
+- **Pré-exécution** : Monter les API kernel nécessaires dans `/opt/fsdeploy/bootstrap` :
+  `mount --bind /dev`, `/proc`, `/sys`.
+- **Exécution** : Lancer la commande via `chroot /opt/fsdeploy/bootstrap {command}`.
+- **Post-exécution** : Bloc `finally` obligatoire pour exécuter `umount -l` sur tous les points de montage bind, même en cas de crash de la tâche.
 
-## 🛠 4. Unification de la Config d'Intention
-- Vérifier que `intents.ini` utilise bien les clés standardisées que nous avons définies :
-    - `requires` / `parent` pour la hiérarchie.
-    - `policy` pour le niveau de sécurité.
-    - `env` pour le contexte d'exécution.
+## 🛠 4. Sécurité Contextuelle (Validation finale)
+- Avant de lancer le tunnel, le Scheduler effectue un dernier check :
+  "Est-ce que les arguments de la commande (ex: `/dev/sda`) sont cohérents avec les politiques définies dans `defaults.ini` ?"
+- Si une incohérence est détectée (ex: tentative de modification d'un disque protégé), le Scheduler avorte la tâche et marque le nœud comme `BLOCKED`.
 
-## 🛠 5. Refactor UI / Bridge
-- Nettoyer les écrans pour s'assurer qu'aucun ne court-circuite le Resolver.
-- Chaque action doit être une "soumission d'intention" au Bridge, qui la passe au Resolver pour validation.
+## 🛠 5. Liaison UI
+- Adapter le Bridge pour qu'il serve de relais entre le Scheduler et le `SudoModal`.
+- S'assurer que le mot de passe n'est jamais stocké, mais uniquement transmis au pipe `stdin` du processus.
