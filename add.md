@@ -1,35 +1,31 @@
-# add.md — 38.1 : Bootstrap Adaptatif & Isolation (Cage)
+# add.md — 38.2 : Centralisation de l'Exécution via le Scheduler
 
-## 🛠 1. Script launch.sh (Élévation & Détection)
-- **Privilèges** : Si `EUID != 0`, tester la présence de `sudo` pour relancer, sinon solliciter `su -c "$0 $@"`.
-- **Analyse Distro** :
-    - Lire `/etc/os-release`.
-    - Si `trixie` : Utiliser les dépôts `main contrib non-free-firmware non-free`.
-    - Si `bookworm` : Utiliser `main contrib non-free` + `bookworm-backports`.
-- **Update** : `apt update`.
+## 🛠 1. Intégration de la Logique de Configuration
+- Le Scheduler doit charger les fichiers `.ini` via **ConfigObj**.
+- **Audit des Clés** : Identifier dans la configuration les clés qui pilotent l'exécution (ex: `sudo=true`, `environment=chroot`).
+- **Mapping des Intents** : Faire en sorte que le Scheduler reconnaisse quel bloc de configuration correspond à quelle intention envoyée par le Bridge.
 
-## 🛠 2. Installation Hôte (ZFS & Tools)
-- Installer : `zfsutils-linux`, `debootstrap`, `python3-venv`.
-- **Spécificité Bookworm** : Forcer l'installation de ZFS via les backports (`apt install -y -t bookworm-backports zfsutils-linux`).
-- Charger le module : `modprobe zfs`.
+## 🛠 2. Implémentation du Multi-Mode Runner
+Modifier le moteur d'exécution du Scheduler pour gérer trois flux distincts :
+- **MODE A (Standard)** : Exécution via `subprocess.run` classique pour les tâches informatives.
+- **MODE B (Sudo Host)** : 
+    - Déclenchement : `sudo=true` dans la config.
+    - Action : Utiliser `subprocess.Popen(['sudo', '-S', '-k', ...])`.
+    - Injection : Envoyer le mot de passe (reçu du Bridge) via `stdin.write`.
+- **MODE C (Sudo Chroot)** :
+    - Déclenchement : `environment=chroot` dans la config.
+    - Pré-requis : Monter `/dev`, `/proc`, `/sys` en bind dans `/opt/fsdeploy/bootstrap`.
+    - Action : `sudo -S -k chroot /opt/fsdeploy/bootstrap {cmd}`.
+    - Post-requis : Démonter proprement les API kernel après la tâche.
 
-## 🛠 3. Construction de la Cage (Chroot)
-- Dossier cible : `/opt/fsdeploy/bootstrap`.
-- Action : `debootstrap --variant=minbase $CODENAME /opt/fsdeploy/bootstrap`.
-- **Préparation Interne** :
-    - Copier `/etc/apt/sources.list` vers `/opt/fsdeploy/bootstrap/etc/apt/`.
-    - Exécuter `chroot /opt/fsdeploy/bootstrap apt update`.
-    - Installer `zfsutils-linux` dans la cage pour les opérations de montage isolées.
+## 🛠 3. Liaison Bridge <-> Scheduler (Auth Flow)
+- Si le Scheduler détecte un besoin de `sudo` :
+    1. Envoyer un signal de "pause" au Bridge.
+    2. Demander au Bridge d'afficher le `SudoModal`.
+    3. Attendre la réception du password avant de lancer le Runner.
+    4. **Sécurité** : Ne jamais stocker le mot de passe dans un fichier, uniquement en mémoire vive pour la durée de la tâche.
 
-## 🛠 4. Environnement Python (Venv)
-- Créer `./venv` à la racine de l'application.
-- Installer les dépendances : `./venv/bin/pip install -r requirements.txt`.
-- **Permissions** : Appliquer `chown -R $SUDO_USER:$SUDO_USER .` pour garantir que l'utilisateur non-root possède les droits sur le projet et son venv.
-
-## 🛠 5. Point d'entrée (__main__.py)
-- Ajouter la logique de "Self-Swap" au début du fichier pour forcer l'usage du venv :
-  ```python
-  import sys, os
-  venv_py = os.path.join(os.path.dirname(__file__), "..", "venv", "bin", "python3")
-  if os.path.exists(venv_py) and sys.executable != os.path.abspath(venv_py):
-      os.execv(venv_py, [venv_py] + sys.argv)
+## 🛠 4. Nettoyage de l'UI (Début de l'Audit)
+- Commencer par les écrans de montage/partitionnement.
+- Remplacer toute logique de manipulation de fichiers (`os`, `shutil`) ou d'appels `subprocess` par l'émission d'une intention vers le Bridge.
+- Exemple : `self.bridge.emit("EXECUTE_CONFIG", {"id": "mount_zfs_overlay"})`.
