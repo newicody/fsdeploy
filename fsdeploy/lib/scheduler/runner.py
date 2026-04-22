@@ -17,13 +17,14 @@ import time
 import os
 import shlex
 import select
-from typing import Optional, Dict, Any, List, Callable
+import fcntl
+from typing import Optional, Dict, Any, List, Callable, Union
 from dataclasses import dataclass, field
 from enum import Enum
 
 from fsdeploy.lib.log import get_logger
-from .injector import VariableInjector, MissingVariableError, get_injector
-from .cage import ChrootCage, temporary_cage
+from .injector import resolve_command, sanitize_value, MissingVariableError
+from .cage import cage_context
 
 logger = get_logger(__name__)
 
@@ -50,6 +51,8 @@ class ExecutionResult:
     stderr: str
     execution_time: float
     error_message: Optional[str] = None
+    command: str = ""
+    mode: str = "standard"
 
 
 class ExecutionMode(Enum):
@@ -72,28 +75,35 @@ class TaskRunner:
     
     def __init__(
         self,
-        injector: Optional[VariableInjector] = None,
+        config: Optional[Dict[str, Any]] = None,
         bridge=None,
-        config: Optional[Dict[str, Any]] = None
+        cage_path: str = "/opt/fsdeploy/bootstrap",
+        sudo_password: Optional[str] = None,
+        on_output: Optional[Callable[[str, str], None]] = None
     ):
         """
         Initialise le runner.
         
         Args:
-            injector: Injecteur de variables
+            config: Configuration pour l'injection
             bridge: Bridge pour les requêtes sudo
-            config: Configuration pour initialiser l'injecteur
+            cage_path: Chemin vers la cage chroot
+            sudo_password: Mot de passe sudo (optionnel)
+            on_output: Callback pour le streaming des logs
         """
-        self.injector = injector or get_injector(config or {})
+        self.config = config or {}
         self.bridge = bridge
+        self.cage_path = cage_path
+        self.sudo_password = sudo_password
+        self.on_output = on_output
         self._active_processes = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         
     def run_task(
         self,
         command: str,
         context: Optional[Dict[str, Any]] = None,
-        mode: ExecutionMode = ExecutionMode.STANDARD,
+        mode: Union[ExecutionMode, str] = ExecutionMode.STANDARD,
         chroot_path: Optional[str] = None,
         timeout: Optional[float] = None,
         log_callback: Optional[Callable[[str, str], None]] = None,
@@ -121,20 +131,14 @@ class TaskRunner:
         if context is None:
             context = {}
         
+        # Convertir le mode en enum si nécessaire
+        if isinstance(mode, str):
+            mode = ExecutionMode(mode.lower())
+        
         # 1. Validation et injection
         try:
-            if not self.injector.validate_command(command):
-                missing = self.injector.get_missing_variables(command)
-                return {
-                    "success": False,
-                    "error": f"Variables manquantes: {missing}",
-                    "exit_code": -1,
-                    "command": command,
-                    "injected_command": None
-                }
-            
-            injected_cmd = self.injector.inject(command, context)
-        except MissingVariableError as e:
+            injected_cmd = resolve_command(command, self.config)
+        except ValueError as e:
             return {
                 "success": False,
                 "error": str(e),
@@ -144,17 +148,19 @@ class TaskRunner:
             }
         
         # 2. Préparation de la commande selon le mode
-        if mode == ExecutionMode.CHROOT and chroot_path:
+        if mode == ExecutionMode.CHROOT:
+            target_path = chroot_path or self.cage_path
             return self._run_chroot(
-                injected_cmd, chroot_path, timeout, log_callback, cwd, env
+                injected_cmd, target_path, timeout, log_callback, cwd, env
             )
         elif mode == ExecutionMode.SUDO:
             return self._run_sudo(
                 injected_cmd, sudo_password, timeout, log_callback, cwd, env
             )
-        elif mode == ExecutionMode.SUDO_CHROOT and chroot_path:
+        elif mode == ExecutionMode.SUDO_CHROOT:
+            target_path = chroot_path or self.cage_path
             return self._run_sudo_chroot(
-                injected_cmd, chroot_path, sudo_password, timeout, log_callback, cwd, env
+                injected_cmd, target_path, sudo_password, timeout, log_callback, cwd, env
             )
         else:
             return self._run_standard(
@@ -215,7 +221,7 @@ class TaskRunner:
     ) -> Dict[str, Any]:
         """Exécution en chroot."""
         try:
-            with temporary_cage() as cage:
+            with cage_context(chroot_path):
                 # Préparer la commande chroot
                 chroot_cmd = f"chroot {chroot_path} {command}"
                 return self._execute_command(
@@ -254,6 +260,75 @@ class TaskRunner:
                 "command": command
             }
     
+    def _stream_output(
+        self,
+        process: subprocess.Popen,
+        stdout_callback: Optional[Callable[[str], None]] = None,
+        stderr_callback: Optional[Callable[[str], None]] = None
+    ) -> None:
+        """
+        Stream la sortie d'un processus en temps réel.
+        """
+        # Rendre les pipes non-bloquants
+        for pipe in [process.stdout, process.stderr]:
+            if pipe:
+                fd = pipe.fileno()
+                fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+                fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        
+        buffers = {process.stdout: "", process.stderr: ""}
+        
+        while process.poll() is None:
+            # Surveiller les pipes avec select
+            readable, _, _ = select.select(
+                [process.stdout, process.stderr],
+                [],
+                [],
+                0.1
+            )
+            
+            for pipe in readable:
+                if pipe == process.stdout:
+                    callback = stdout_callback
+                    buffer_key = process.stdout
+                else:
+                    callback = stderr_callback
+                    buffer_key = process.stderr
+                
+                try:
+                    chunk = pipe.read(4096)
+                    if chunk:
+                        if isinstance(chunk, bytes):
+                            chunk = chunk.decode('utf-8', errors='replace')
+                        
+                        buffers[buffer_key] += chunk
+                        
+                        while '\n' in buffers[buffer_key]:
+                            line, buffers[buffer_key] = buffers[buffer_key].split('\n', 1)
+                            
+                            if callback:
+                                callback(line)
+                            
+                            if self.on_output:
+                                source = "stdout" if pipe == process.stdout else "stderr"
+                                self.on_output(source, line)
+                except (IOError, OSError):
+                    pass
+        
+        # Lire les données restantes
+        for pipe, buffer in buffers.items():
+            if pipe and buffer:
+                for line in buffer.split('\n'):
+                    if line:
+                        if pipe == process.stdout and stdout_callback:
+                            stdout_callback(line)
+                        elif pipe == process.stderr and stderr_callback:
+                            stderr_callback(line)
+                        
+                        if self.on_output:
+                            source = "stdout" if pipe == process.stdout else "stderr"
+                            self.on_output(source, line)
+    
     def _execute_command(
         self,
         command: str,
@@ -286,7 +361,7 @@ class TaskRunner:
                 cwd=cwd,
                 env=process_env,
                 text=True,
-                bufsize=1,  # Ligne tamponnée
+                bufsize=1,
                 universal_newlines=True
             )
             
@@ -300,51 +375,26 @@ class TaskRunner:
                 proc.stdin.flush()
                 proc.stdin.close()
             
-            # Lire les sorties en temps réel
+            # Streamer la sortie en temps réel
             stdout_lines = []
             stderr_lines = []
             
-            # Utiliser select pour lire sans bloquer
-            while proc.poll() is None:
-                # Lire stdout
-                while True:
-                    chunk = proc.stdout.readline()
-                    if not chunk:
-                        break
-                    stdout_lines.append(chunk)
-                    if log_callback:
-                        log_callback("stdout", chunk.rstrip())
-                
-                # Lire stderr
-                while True:
-                    chunk = proc.stderr.readline()
-                    if not chunk:
-                        break
-                    stderr_lines.append(chunk)
-                    if log_callback:
-                        log_callback("stderr", chunk.rstrip())
-                
-                # Petit sleep pour éviter la boucle infinie
-                time.sleep(0.01)
+            def collect_stdout(line: str) -> None:
+                stdout_lines.append(line)
             
-            # Lire les derniers bytes
-            remaining_stdout, remaining_stderr = proc.communicate()
-            if remaining_stdout:
-                stdout_lines.append(remaining_stdout)
-                if log_callback:
-                    log_callback("stdout", remaining_stdout.rstrip())
-            if remaining_stderr:
-                stderr_lines.append(remaining_stderr)
-                if log_callback:
-                    log_callback("stderr", remaining_stderr.rstrip())
+            def collect_stderr(line: str) -> None:
+                stderr_lines.append(line)
             
-            exit_code = proc.returncode
+            self._stream_output(proc, collect_stdout, collect_stderr)
+            
+            # Attendre la fin du processus
+            returncode = proc.wait(timeout=timeout)
             
             return {
-                "success": exit_code == 0,
-                "exit_code": exit_code,
-                "stdout": "".join(stdout_lines),
-                "stderr": "".join(stderr_lines),
+                "success": returncode == 0,
+                "exit_code": returncode,
+                "stdout": '\n'.join(stdout_lines),
+                "stderr": '\n'.join(stderr_lines),
                 "command": command,
                 "process_id": process_id
             }
@@ -394,12 +444,11 @@ class TaskRunner:
             timeout=timeout
         )
         
-        # Attendre la réponse (simplifié - en réalité via callback)
         # Pour l'instant, retourner un résultat d'attente
         return {
             "success": False,
             "error": "Sudo requis - en attente d'authentification",
-            "exit_code": -2,  # Code spécial pour attente sudo
+            "exit_code": -2,
             "command": command,
             "ticket_id": ticket_id,
             "pending_auth": True
@@ -437,7 +486,7 @@ class TaskRunner:
             return [
                 {
                     "process_id": pid,
-                    "command": "N/A",  # À améliorer
+                    "command": "N/A",
                     "alive": proc.poll() is None
                 }
                 for pid, proc in self._active_processes.items()
@@ -458,13 +507,9 @@ class MultiModeRunner:
     
     def __init__(self, bridge=None, config=None):
         self.bridge = bridge
-        self.config = config
+        self.config = config or {}
         self.chroot_base = "/opt/fsdeploy/bootstrap"
         self._mount_points = []
-        # Initialiser l'injecteur si config est fourni
-        self.injector = None
-        if config:
-            self.injector = get_injector(config)
         
     def execute(self, task_node: TaskNode) -> ExecutionResult:
         """
@@ -486,33 +531,25 @@ class MultiModeRunner:
                 stdout="",
                 stderr="",
                 execution_time=0,
-                error_message="Tâche bloquée par les politiques de sécurité"
+                error_message="Tâche bloquée par les politiques de sécurité",
+                command=task_node.command,
+                mode="standard"
             )
         
-        # Injection de variables si injecteur disponible
-        command_to_execute = task_node.command
-        if self.injector:
-            try:
-                if not self.injector.validate_command(task_node.command):
-                    missing = self.injector.get_missing_variables(task_node.command)
-                    return ExecutionResult(
-                        success=False,
-                        return_code=-1,
-                        stdout="",
-                        stderr=f"Variables manquantes: {missing}",
-                        execution_time=0,
-                        error_message="Variables manquantes dans la configuration"
-                    )
-                command_to_execute = self.injector.inject(task_node.command, {})
-            except MissingVariableError as e:
-                return ExecutionResult(
-                    success=False,
-                    return_code=-1,
-                    stdout="",
-                    stderr=str(e),
-                    execution_time=0,
-                    error_message=str(e)
-                )
+        # Injection de variables
+        try:
+            command_to_execute = resolve_command(task_node.command, self.config)
+        except ValueError as e:
+            return ExecutionResult(
+                success=False,
+                return_code=-1,
+                stdout="",
+                stderr=str(e),
+                execution_time=0,
+                error_message=str(e),
+                command=task_node.command,
+                mode="standard"
+            )
         
         try:
             if task_node.chroot:
@@ -528,7 +565,9 @@ class MultiModeRunner:
                 stdout="",
                 stderr=str(e),
                 execution_time=time.time() - start_time,
-                error_message=f"Erreur d'exécution: {e}"
+                error_message=f"Erreur d'exécution: {e}",
+                command=task_node.command,
+                mode="chroot" if task_node.chroot else "sudo" if task_node.root else "standard"
             )
     
     def _execute_standard(self, task_node: TaskNode, command: str, start_time: float) -> ExecutionResult:
@@ -550,7 +589,9 @@ class MultiModeRunner:
                 return_code=result.returncode,
                 stdout=result.stdout,
                 stderr=result.stderr,
-                execution_time=time.time() - start_time
+                execution_time=time.time() - start_time,
+                command=command,
+                mode="standard"
             )
         except subprocess.TimeoutExpired:
             return ExecutionResult(
@@ -559,16 +600,15 @@ class MultiModeRunner:
                 stdout="",
                 stderr="",
                 execution_time=time.time() - start_time,
-                error_message="Timeout expiré"
+                error_message="Timeout expiré",
+                command=command,
+                mode="standard"
             )
     
     def _execute_sudo(self, task_node: TaskNode, command: str, start_time: float) -> ExecutionResult:
         """
         Exécution avec privilèges root via tunnel sudo.
-        
-        Utilise sudo -S -k pour demander le mot de passe via stdin.
         """
-        # Demander le mot de passe via le bridge
         if not self.bridge:
             return ExecutionResult(
                 success=False,
@@ -576,14 +616,14 @@ class MultiModeRunner:
                 stdout="",
                 stderr="",
                 execution_time=time.time() - start_time,
-                error_message="Bridge non disponible pour l'authentification sudo"
+                error_message="Bridge non disponible pour l'authentification sudo",
+                command=command,
+                mode="sudo"
             )
         
-        # Construire la commande avec sudo
         base_cmd = self._build_command(task_node, command)
         cmd = ["sudo", "-S", "-k", "--"] + base_cmd
         
-        # Demander le mot de passe
         password = self._request_sudo_password(task_node)
         if not password:
             return ExecutionResult(
@@ -592,11 +632,12 @@ class MultiModeRunner:
                 stdout="",
                 stderr="",
                 execution_time=time.time() - start_time,
-                error_message="Authentification sudo annulée"
+                error_message="Authentification sudo annulée",
+                command=command,
+                mode="sudo"
             )
         
         try:
-            # Exécuter avec sudo
             proc = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
@@ -607,7 +648,6 @@ class MultiModeRunner:
                 env={**os.environ, **task_node.env}
             )
             
-            # Injecter le mot de passe
             stdout, stderr = proc.communicate(input=f"{password}\n", timeout=task_node.timeout)
             
             return ExecutionResult(
@@ -615,7 +655,9 @@ class MultiModeRunner:
                 return_code=proc.returncode,
                 stdout=stdout,
                 stderr=stderr,
-                execution_time=time.time() - start_time
+                execution_time=time.time() - start_time,
+                command=command,
+                mode="sudo"
             )
         except subprocess.TimeoutExpired:
             proc.kill()
@@ -625,42 +667,48 @@ class MultiModeRunner:
                 stdout="",
                 stderr="",
                 execution_time=time.time() - start_time,
-                error_message="Timeout expiré"
+                error_message="Timeout expiré",
+                command=command,
+                mode="sudo"
             )
     
     def _execute_chroot(self, task_node: TaskNode, command: str, start_time: float) -> ExecutionResult:
         """
         Exécution dans la cage chroot.
-        
-        Monte les API kernel nécessaires, exécute dans chroot, puis démonte.
         """
-        # Monter les systèmes de fichiers nécessaires
-        self._mount_chroot_apis()
-        
         try:
-            # Construire la commande chroot
-            base_cmd = self._build_command(task_node, command)
-            cmd = ["chroot", self.chroot_base] + base_cmd
-            
-            # Exécuter dans chroot
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                env={**os.environ, **task_node.env},
-                timeout=task_node.timeout
-            )
-            
+            with cage_context(self.chroot_base):
+                base_cmd = self._build_command(task_node, command)
+                cmd = ["chroot", self.chroot_base] + base_cmd
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    env={**os.environ, **task_node.env},
+                    timeout=task_node.timeout
+                )
+                
+                return ExecutionResult(
+                    success=result.returncode == 0,
+                    return_code=result.returncode,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    execution_time=time.time() - start_time,
+                    command=command,
+                    mode="chroot"
+                )
+        except Exception as e:
             return ExecutionResult(
-                success=result.returncode == 0,
-                return_code=result.returncode,
-                stdout=result.stdout,
-                stderr=result.stderr,
-                execution_time=time.time() - start_time
+                success=False,
+                return_code=-1,
+                stdout="",
+                stderr=str(e),
+                execution_time=time.time() - start_time,
+                error_message=f"Erreur chroot: {e}",
+                command=command,
+                mode="chroot"
             )
-        finally:
-            # Toujours démonter, même en cas d'erreur
-            self._unmount_chroot_apis()
     
     def _mount_chroot_apis(self):
         """Monte les API kernel nécessaires dans la cage."""
@@ -697,8 +745,6 @@ class MultiModeRunner:
     
     def _request_sudo_password(self, task_node: TaskNode) -> Optional[str]:
         """Demande un mot de passe sudo via le bridge."""
-        # Cette méthode sera implémentée dans le scheduler principal
-        # qui a accès au bridge global
         return None
     
     def _build_command(self, task_node: TaskNode, command: str = None) -> List[str]:
@@ -709,23 +755,17 @@ class MultiModeRunner:
         if isinstance(command, list):
             return command
         else:
-            # Split la commande string en arguments
             return shlex.split(command)
     
     def _validate_security(self, task_node: TaskNode) -> bool:
         """
         Validation de sécurité finale.
-        
-        Vérifie que les arguments de commande sont cohérents avec
-        les politiques définies dans defaults.ini.
         """
         if not self.config:
-            return True  # Pas de validation sans config
+            return True
         
-        # Récupérer les politiques
         policies = self.config.get("security.policies", {})
         
-        # Vérifier les chemins de disque protégés
         protected_disks = policies.get("protected_disks", [])
         command_str = " ".join(self._build_command(task_node))
         
@@ -734,7 +774,6 @@ class MultiModeRunner:
                 logger.warning(f"Tentative d'accès à un disque protégé: {disk}")
                 return False
         
-        # Vérifier les commandes dangereuses
         dangerous_commands = policies.get("dangerous_commands", [])
         for cmd in dangerous_commands:
             if command_str.startswith(cmd):
@@ -748,22 +787,29 @@ class MultiModeRunner:
 _runner_instance = None
 
 def get_runner(
-    injector: Optional[VariableInjector] = None,
+    config: Optional[Dict[str, Any]] = None,
     bridge=None,
-    config: Optional[Dict[str, Any]] = None
+    cage_path: str = "/opt/fsdeploy/bootstrap",
+    sudo_password: Optional[str] = None
 ) -> TaskRunner:
     """
     Retourne l'instance singleton du runner.
     
     Args:
-        injector: Injecteur de variables
-        bridge: Bridge pour sudo
         config: Configuration pour l'injecteur
+        bridge: Bridge pour sudo
+        cage_path: Chemin vers la cage
+        sudo_password: Mot de passe sudo
         
     Returns:
         Instance TaskRunner
     """
     global _runner_instance
     if _runner_instance is None:
-        _runner_instance = TaskRunner(injector, bridge, config)
+        _runner_instance = TaskRunner(
+            config=config,
+            bridge=bridge,
+            cage_path=cage_path,
+            sudo_password=sudo_password
+        )
     return _runner_instance
