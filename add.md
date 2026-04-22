@@ -1,21 +1,26 @@
-# add.md — 38.2 : Implémentation du Runner Multi-Mode
+# add.md — 38.3 : Adaptation du Graphe et Sécurisation
 
-## 🛠 1. Logique de décision (lib/scheduler.py)
-- Créer une fonction `execute_from_config(section_name)` :
-    - Récupérer les clés `mode`, `root`, `command` dans ConfigObj.
-    - Déterminer le tunnel d'exécution.
+## 🛠 1. Adaptation du Resolver (lib/resolver.py)
+- **Lazy Loading des variables** : Modifier la méthode qui génère la commande finale. Elle doit aller chercher les valeurs dans l'objet fusionné `ConfigObj` juste avant l'envoi au Scheduler.
+- **Vérification de l'État du Graphe** : S'assurer que si une tâche parente échoue, le Resolver marque immédiatement toutes les tâches dépendantes comme `SKIPPED` et demande au Scheduler de nettoyer la cage (`umount`).
 
-## 🛠 2. Le tunnel Chroot (L'Isolation)
-- Créer une méthode privée `_prepare_cage()` :
-    - `sudo mount --bind /dev /opt/fsdeploy/bootstrap/dev` (et ainsi de suite pour proc et sys).
-- Créer une méthode privée `_cleanup_cage()` :
-    - `sudo umount -l /opt/fsdeploy/bootstrap/dev` (le `-l` est important pour éviter les blocages).
+## 🛠 2. Renforcement du Security Hook
+- Localiser le hook de sécurité actuel et l'étendre :
+    - **Validation de Paramètres** : Ajouter une étape de vérification via Regex ou Liste Noire sur les arguments injectés (ex: empêcher l'injection de commandes via des noms de pool ZFS malveillants).
+    - **Vérification Hardware** : Le hook doit consulter `detected.ini` pour interdire toute action root sur les périphériques marqués comme "critiques" ou "système".
 
-## 🛠 3. Injection Sudo (La Sécurité)
-- Utiliser `subprocess.Popen` avec `stdin=PIPE`.
-- Récupérer le mot de passe depuis le Bridge (via le SudoModal).
-- Envoyer : `process.communicate(input=f"{password}\n".encode())`.
+## 🛠 3. Branchement au Scheduler (lib/scheduler.py)
+- Le Scheduler doit recevoir un objet `TaskNode` (issu du graphe) et non plus une simple commande.
+- **Traitement du Contexte** :
+    - Lire `node.environment` : Si `cage`, activer le cycle `mount_api` -> `chroot` -> `umount`.
+    - Lire `node.privileged` : Si `true`, invoquer le tunnel `sudo -S -k`.
 
-## 🛠 4. Test sur une section ZFS
-- Prendre une section ZFS de ta config comme cobaye.
-- Vérifier que la commande s'exécute bien dans le chroot sans laisser de traces sur l'hôte.
+## 🛠 4. Unification de la Config d'Intention
+- Vérifier que `intents.ini` utilise bien les clés standardisées que nous avons définies :
+    - `requires` / `parent` pour la hiérarchie.
+    - `policy` pour le niveau de sécurité.
+    - `env` pour le contexte d'exécution.
+
+## 🛠 5. Refactor UI / Bridge
+- Nettoyer les écrans pour s'assurer qu'aucun ne court-circuite le Resolver.
+- Chaque action doit être une "soumission d'intention" au Bridge, qui la passe au Resolver pour validation.
