@@ -23,7 +23,7 @@ Routing des ecrans :
 
 import os
 import sys
-from typing import Any
+from typing import Any, Optional, Callable
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
