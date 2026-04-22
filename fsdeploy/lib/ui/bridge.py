@@ -101,6 +101,7 @@ class SchedulerBridge:
         self._tickets: dict[str, Ticket] = {}
         self._history: deque[Ticket] = deque(maxlen=500)
         self._lock = threading.Lock()
+        self._app = None   # <-- AJOUTER CETTE LIGNE
         
         # Obtenir l'instance globale du bridge du scheduler
         if GlobalSchedulerBridge is not None:
@@ -115,6 +116,10 @@ class SchedulerBridge:
         # Définir l'instance singleton si pas déjà défini
         if self.__class__._instance is None:
             self.__class__._instance = self
+
+    def set_app(self, app) -> None:
+        """Définit l'application Textual pour les interactions UI (modal sudo)."""
+        self._app = app
 
     def _log_ticket(self, action: str, ticket: Ticket, **extra):
         """Émet un événement de log sans erreur de signature."""
@@ -255,10 +260,6 @@ class SchedulerBridge:
     
     def _handle_sudo_request(self, params: dict, callback: Optional[Callable] = None) -> str:
         """Gère une demande d'authentification sudo via le SudoModal."""
-        import time
-        import uuid
-        
-        # Créer un ticket immédiatement
         ticket_id = f"sudo-{uuid.uuid4().hex[:8]}"
         ticket = Ticket(
             id=ticket_id,
@@ -267,70 +268,56 @@ class SchedulerBridge:
             submitted_at=time.time(),
             status="pending",
         )
-        
         with self._lock:
             self._tickets[ticket_id] = ticket
-        
-        # Demander le mot de passe via le SudoModal
+
         section_id = params.get("section_id", "unknown")
         action = params.get("action", "Action protégée")
-        
-        # Note: Nous n'avons pas d'accès direct à l'application ici
-        # Nous devons utiliser un mécanisme de callback ou d'événement
-        # Pour l'instant, nous allons utiliser une approche simplifiée
-        
-        def handle_password_response(password: str) -> None:
-            """Gère la réponse du mot de passe."""
+
+        def handle_password_response(password: str | None) -> None:
+            """Callback appelé après la réponse du modal."""
             if password:
                 # Envoyer la réponse au scheduler
-                response_ticket_id = self.submit_event(
+                self.submit_event(
                     "auth.sudo_response",
                     password=password,
                     original_ticket=ticket_id,
                     section_id=section_id,
-                    success=True
+                    success=True,
                 )
-                
-                # Mettre à jour le ticket original
                 with self._lock:
                     if ticket_id in self._tickets:
                         self._tickets[ticket_id].status = "completed"
                         self._tickets[ticket_id].result = {"authenticated": True}
                         self._history.append(self._tickets[ticket_id])
             else:
-                # Authentification annulée
                 with self._lock:
                     if ticket_id in self._tickets:
                         self._tickets[ticket_id].status = "failed"
                         self._tickets[ticket_id].error = "Authentification annulée par l'utilisateur"
                         self._history.append(self._tickets[ticket_id])
-            
-            # Appeler le callback original si fourni
+
             if callback:
-                callback(self._tickets[ticket_id])
-        
-        # Pour l'instant, nous ne pouvons pas appeler directement le SudoModal
-        # car nous n'avons pas de référence à l'application
-        # Dans une implémentation réelle, nous devrions émettre un événement
-        # que l'application capturerait pour afficher le modal
-        
-        # Solution temporaire : simuler une annulation
-        # Dans la vraie implémentation, ceci devrait être remplacé par :
-        # self.app.request_sudo_password(section_id, action, handle_password_response)
-        
-        import threading
-        def simulate_password_request():
-            # Attendre un peu pour simuler l'interface utilisateur
-            import time
-            time.sleep(0.5)
-            
-            # Pour l'instant, simuler un échec d'authentification
-            # (à remplacer par l'appel réel au modal)
-            handle_password_response(None)
-        
-        thread = threading.Thread(target=simulate_password_request, daemon=True)
-        thread.start()
-        
+                with self._lock:
+                    t = self._tickets.get(ticket_id)
+                if t:
+                    callback(t)
+
+        # Utiliser l'application si disponible, sinon fallback simulé
+        if self._app is not None:
+            self._app.request_sudo_password(
+                section_id=section_id,
+                action=action,
+                callback=handle_password_response,
+            )
+        else:
+            # Fallback : simulation (pour tests sans UI)
+            import threading
+            def simulate():
+                time.sleep(0.5)
+                handle_password_response(None)
+            threading.Thread(target=simulate, daemon=True).start()
+
         return ticket_id
 
     # ═══════════════════════════════════════════════════════════════

@@ -199,6 +199,7 @@ class FsDeployApp(App):
         from .bridge import SchedulerBridge
         # Utiliser l'instance singleton pour garantir la cohérence entre tous les écrans
         self.bridge = SchedulerBridge.default(runtime=self.runtime, store=self.store)
+        self.bridge.set_app(self)   # <-- AJOUTER CETTE LIGNE
 
     # ── Compose ───────────────────────────────────────────────────────────────
 
