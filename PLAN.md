@@ -1,20 +1,21 @@
 # PLAN.md — fsdeploy
 
-> **Concept** : Orchestration de Graphe Contextuelle & Sécurisée.
-> **État** : Moteurs de calcul et d'exécution OK. Passage à l'interface asynchrone.
+> **Concept** : Orchestration Contextuelle & Sécurisée.
+> **État** : Moteurs de calcul et d'exécution OK. Passage à l'unification de l'UI.
 
 ---
 
-## 🏗️ Phase 1 : Système (TERMINÉ ✅)
-- [x] **Infrastructure** : Cage et Venv isolés.
+## 🏗️ Phase 1 & 2 : Fondations & Moteurs (TERMINÉ ✅)
+- [x] **Infrastructure** : Cage, Venv, Resolver, Scheduler.
+- [x] **Runtime Engine** : Injector, Multi-Runner, Cage Lifecycle.
 
-## ⚙️ Phase 2 : Le Cœur de l'Exécuteur (TERMINÉ ✅)
-- [x] **Runtime Injector** : Résolution tardive des variables.
-- [x] **Multi-Tunnel Runner** : Support Standard / Sudo / Chroot.
-- [x] **Cage Lifecycle** : Automatisation des montages API Kernel.
+## ⚙️ Phase 3 : Le Grand Nettoyage de l'UI (EN COURS 🚀)
+- [ ] **Bridge Finalization** : Router les événements de statut (logs, progression) vers les widgets.
+- [ ] **SudoModal Integration** : Branchement final du secret vers le pipe stdin du Runner.
+- [ ] **UI Purge (The 23 Screens)** : 
+    - Remplacer les 23 occurrences de logique système par des `emit("INTENT")`.
+    - Supprimer définitivement les imports `os` et `subprocess` des fichiers de vue.
 
-## 🔒 Phase 3 : L'Interface & Le Bridge (EN COURS 🚀)
-- [ ] **SudoModal** : Écran de capture asynchrone du secret (sans stockage RAM permanent).
-- [ ] **Bridge Signals** : Routage des intentions UI vers le Resolver.
-- [ ] **Log Streamer** : Branchement des sorties `stdout` du Scheduler sur les widgets UI.
-- [ ] **Le Grand Nettoyage** : Purge finale des imports `os` et `subprocess` dans les 23 écrans.
+## 🔒 Phase 4 : Audit & Livraison (À VENIR)
+- [ ] **Stress Test** : Vérifier la robustesse du `umount` lors d'un crash forcé dans la cage.
+- [ ] **Documentation** : Générer le catalogue des `intents.ini`.
