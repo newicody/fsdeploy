@@ -1,20 +1,20 @@
 # PLAN.md — fsdeploy
 
-> **Focus** : Pilotage du Scheduler via les champs ConfigObj.
-> **Objectif** : Zéro commande en dur, tout passe par les définitions de la config.
+> **Concept** : Le Scheduler comme exécuteur exclusif des définitions ConfigObj.
+> **Isolation** : Utilisation systématique du chroot pour les actions système définies.
 
 ---
 
 ## 🏗 Phase 1 : Infrastructure (TERMINÉ ✅)
-- [x] **launch.sh** : Bootstrap/Cage opérationnel avec ZFS et venv.
+- [x] **launch.sh** : Bootstrap/Cage (`/opt/fsdeploy/bootstrap`) et venv prêts.
 
-## ⚙️ Phase 2 : Scheduler (Le Cerveau Opérationnel)
-- [ ] **Config Resolver** : Mapper les intentions UI aux sections ConfigObj.
-- [ ] **Execution Router** : 
-    - Lire les drapeaux (`need_root`, `environment`, etc.) dans les champs.
-    - Router vers `subprocess.Popen` avec injection de password si nécessaire.
-- [ ] **Cage Manager** : Automatiser les `bind mounts` avant l'entrée en chroot.
+## ⚙️ Phase 2 : Le Scheduler (Action Server)
+- [ ] **Config Parser** : Charger et mapper les sections ConfigObj.
+- [ ] **Execution Logic** : 
+    - Identifier les modes (User, Sudo, Chroot) via les clés de config.
+    - Gérer l'injection de mot de passe via `stdin` pour `sudo -S -k`.
+- [ ] **Cage Orchestrator** : Gérer les montages éphémères (`bind`) requis pour le chroot.
 
-## 🔒 Phase 3 : UI & Bridge (L'Interface Client)
-- [ ] **SudoModal** : Intégration de la capture de pass pour le Scheduler.
-- [ ] **Bridge Signals** : Remplacer les appels système des écrans par des IDs de config.
+## 🔒 Phase 3 : UI & Bridge (Client)
+- [ ] **SudoModal** : Capture du mot de passe à la demande du Scheduler.
+- [ ] **Intent Bridge** : Remplacer les appels directs par des envois d'IDs de section.

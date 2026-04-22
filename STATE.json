@@ -1,7 +1,7 @@
 {
-  "current_task": "On continue le developement en utilisant plan.md et add.md",
+  "current_task": "On continue le developement selon add.md et PLAN.md",
   "status": "RUNNING",
-  "iteration": 160,
+  "iteration": 161,
   "bridge_migration": "COMPLETE",
   "last_updated": "Migration 24.1.b termin\u00e9e - Tous les 23 \u00e9crans utilisent self.bridge.emit()"
 }

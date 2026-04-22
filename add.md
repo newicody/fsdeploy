@@ -1,29 +1,28 @@
 # add.md — 38.2 : Branchement du Scheduler sur les champs Config
 
-## 🛠 1. Analyse des champs ConfigObj
-- Modifier `lib/scheduler.py` pour qu'il charge systématiquement la configuration au démarrage.
-- **Logique de décision** :
-    - Si une section contient une clé de type `privileged=true` ou `sudo=1` -> Mode Sudo.
-    - Si une section contient `context=chroot` ou `use_cage=true` -> Mode Chroot.
-    - Extraire dynamiquement les commandes et arguments depuis les champs de la section.
+## 🛠 1. Centralisation de la Configuration
+- Modifier `lib/scheduler.py` pour qu'il soit le seul à manipuler les appels système.
+- **Lecture de Config** : Le Scheduler doit charger les fichiers ConfigObj du dépôt pour identifier les sections d'action.
 
 ## 🛠 2. Implémentation du Runner Multi-Mode
-- **Mode Standard** : Exécuter directement via le `venv`.
-- **Mode Sudo** : 
-    - Appeler `self.bridge.ask_sudo()` pour déclencher le `SudoModal`.
-    - Exécuter `sudo -S -k {command}` via `subprocess.Popen`.
-    - Injecter le mot de passe dans `stdin`.
-- **Mode Chroot** : 
-    - Monter `/dev`, `/proc`, `/sys` dans `/opt/fsdeploy/bootstrap`.
-    - Lancer `sudo -S -k chroot /opt/fsdeploy/bootstrap {command}`.
-    - Démonter les API kernel après exécution (même en cas d'erreur).
+Le Scheduler doit implémenter une fonction d'exécution qui choisit son tunnel selon la config :
+- **Mode Standard** : Exécution simple via le `venv`.
+- **Mode Sudo Host** : 
+    - Déclenché par les drapeaux de privilèges dans la config.
+    - Utilise `subprocess.Popen(['sudo', '-S', '-k', ...])`.
+    - Demande le pass au Bridge (qui affiche le `SudoModal`) et l'injecte dans `stdin`.
+- **Mode Sudo Chroot** :
+    - Déclenché par les drapeaux de contexte/cage dans la config.
+    - Automatisme : `mount --bind` des API kernel (`/dev`, `/proc`, `/sys`) dans `/opt/fsdeploy/bootstrap`.
+    - Exécution : `chroot` vers la cage avec injection du pass.
+    - Nettoyage : `umount` systématique après l'action.
 
-## 🛠 3. Mise à jour du Bridge (D-Bus style)
-- Le Bridge ne doit plus accepter de chaînes de caractères "commandes".
-- Il doit recevoir un `config_id` (ex: `zfs_create_pool`).
-- Le Bridge transmet cet ID au Scheduler qui se charge de trouver la "recette" dans la config.
+## 🛠 3. Liaison par "Intents" (Bridge)
+- Le Bridge ne doit plus faire passer de commandes brutes.
+- L'UI envoie un `config_id` (ex: `zfs_pool_setup`).
+- Le Scheduler récupère la section associée dans ConfigObj et exécute selon les paramètres définis.
 
-## 🛠 4. Audit des 23 Écrans
-- Supprimer les imports `os`, `subprocess` et `shutil`.
-- Remplacer les fonctions de boutons par : 
-  `self.bridge.emit("RUN_TASK", {"id": "NOM_DE_LA_SECTION_CONFIG"})`.
+## 🛠 4. Nettoyage des Écrans (Audit)
+- Parcourir les 23 écrans de `lib/ui/screens/`.
+- **Action** : Supprimer tous les `import os`, `subprocess`, `shutil`.
+- **Remplacement** : Toutes les actions de boutons doivent devenir des `self.bridge.emit("EXECUTE_TASK", {"id": "NOM_SECTION_CONFIG"})`.
