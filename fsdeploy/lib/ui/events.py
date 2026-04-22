@@ -17,3 +17,15 @@ class LogMessage(Message):
         self.ticket_id = ticket_id
         self.level = level
         super().__init__()
+
+
+class TaskStatusMessage(Message):
+    """Message de statut de tâche pour mettre à jour les widgets UI."""
+    
+    def __init__(self, node_id: str, status: str, 
+                 progress: float = 0.0, message: str = "") -> None:
+        super().__init__()
+        self.node_id = node_id
+        self.status = status  # "started", "running", "completed", "failed"
+        self.progress = progress
+        self.message = message

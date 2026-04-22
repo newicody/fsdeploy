@@ -201,6 +201,16 @@ class FsDeployApp(App):
         self.bridge = SchedulerBridge.default(runtime=self.runtime, store=self.store)
         self.bridge.set_app(self)   # <-- AJOUTER CETTE LIGNE
 
+    def call_from_thread(self, func, *args, **kwargs):
+        """
+        Exécute une fonction dans le thread de l'UI de manière thread-safe.
+        """
+        if hasattr(self, '_loop') and self._loop.is_running():
+            self._loop.call_soon_threadsafe(lambda: func(*args, **kwargs))
+        else:
+            # Fallback pour les tests
+            func(*args, **kwargs)
+
     # ── Compose ───────────────────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
@@ -414,16 +424,16 @@ class FsDeployApp(App):
         
         def handle_password(password: str) -> None:
             """Gère la réponse du modal."""
+            # S'assurer que le callback est appelé dans le thread UI
             if callback:
                 if password:
-                    # Le mot de passe a été fourni
                     callback(password)
                 else:
-                    # L'utilisateur a annulé
                     callback(None)
         
-        # Afficher le modal
-        self.push_screen(
+        # Afficher le modal de manière thread-safe
+        self.call_from_thread(
+            self.push_screen,
             SudoModal(section_id=section_id, action=action),
             handle_password
         )

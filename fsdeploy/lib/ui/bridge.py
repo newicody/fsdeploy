@@ -98,6 +98,13 @@ class SchedulerBridge:
         except ImportError:
             self._event_bus = None
             
+        # S'abonner aux événements du scheduler
+        if self._event_bus is not None:
+            self._event_bus.subscribe("task.start", self._on_task_start)
+            self._event_bus.subscribe("task.log", self._on_task_log)
+            self._event_bus.subscribe("task.done", self._on_task_done)
+            self._event_bus.subscribe("auth.sudo_request", self._on_sudo_request)
+            
         self._tickets: dict[str, Ticket] = {}
         self._history: deque[Ticket] = deque(maxlen=500)
         self._lock = threading.Lock()
@@ -129,6 +136,16 @@ class SchedulerBridge:
                 LogMessage(log=log, stream=stream, ticket_id=ticket_id, level=level)
             )
 
+    def emit_task_status(self, node_id: str, status: str, progress: float = 0.0, message: str = "") -> None:
+        """
+        Émet un événement de statut de tâche vers l'UI.
+        """
+        if self._app and hasattr(self._app, 'post_message'):
+            from .events import TaskStatusMessage
+            self._app.post_message(
+                TaskStatusMessage(node_id=node_id, status=status, progress=progress, message=message)
+            )
+
     def set_app(self, app) -> None:
         """Définit l'application Textual pour les interactions UI (modal sudo)."""
         self._app = app
@@ -149,6 +166,61 @@ class SchedulerBridge:
             }
             data.update(extra)
             self._event_bus.emit("bridge.ticket." + action, data)
+
+    def _on_task_start(self, data):
+        node_id = data.get('node_id')
+        self.emit_log(f"Tâche démarrée: {node_id}", level="info", ticket_id=data.get('ticket_id'))
+        self.emit_task_status(node_id=node_id, status="started", progress=0.0, message="Démarrage...")
+
+    def _on_task_log(self, data):
+        text = data.get('text', '')
+        self.emit_log(text, stream="stdout", ticket_id=data.get('ticket_id'))
+
+    def _on_task_done(self, data):
+        node_id = data.get('node_id')
+        success = data.get('success', False)
+        if success:
+            self.emit_log(f"Tâche terminée avec succès: {node_id}", level="success", ticket_id=data.get('ticket_id'))
+            self.emit_task_status(node_id=node_id, status="completed", progress=1.0, message="Terminé avec succès")
+        else:
+            self.emit_log(f"Tâche échouée: {node_id}", level="error", ticket_id=data.get('ticket_id'))
+            self.emit_task_status(node_id=node_id, status="failed", progress=1.0, message="Échec")
+
+    def _on_sudo_request(self, data):
+        # Le scheduler demande un mot de passe
+        section_id = data.get('section_id', 'unknown')
+        action = data.get('action', 'Action protégée')
+        ticket_id = data.get('ticket_id')  # Le ticket du scheduler qui attend le mot de passe
+
+        def handle_password(password: str | None) -> None:
+            if password:
+                # Émettre la réponse vers le scheduler
+                self.submit_event(
+                    "auth.sudo_response",
+                    password=password,
+                    original_ticket=ticket_id,
+                    section_id=section_id,
+                    success=True,
+                )
+            else:
+                # Annulation
+                self.submit_event(
+                    "auth.sudo_response",
+                    password=None,
+                    original_ticket=ticket_id,
+                    section_id=section_id,
+                    success=False,
+                )
+
+        if self._app is not None:
+            self._app.request_sudo_password(
+                section_id=section_id,
+                action=action,
+                callback=handle_password,
+            )
+        else:
+            # Pas d'UI, on répond par un échec
+            handle_password(None)
 
     def _fire(self, ticket: Ticket) -> None:
         """Déclenche les callbacks d'un ticket."""
@@ -226,10 +298,6 @@ class SchedulerBridge:
         Returns:
             Identifiant du ticket (chaîne).
         """
-        # Intercepter les demandes d'authentification
-        if event_name == "auth.sudo_request":
-            return self._handle_sudo_request(params, callback)
-        
         ticket_id = self.submit_event(event_name, priority=priority, **params)
         if callback:
             self.on_result(ticket_id, callback)
@@ -274,73 +342,6 @@ class SchedulerBridge:
             return self._global_bridge.get_config_section(section_id)
         return None
     
-    def _handle_sudo_request(self, params: dict, callback: Optional[Callable] = None) -> str:
-        """Gère une demande d'authentification sudo via le SudoModal."""
-        ticket_id = f"sudo-{uuid.uuid4().hex[:8]}"
-        ticket = Ticket(
-            id=ticket_id,
-            event_name="auth.sudo_request",
-            params=params,
-            submitted_at=time.time(),
-            status="pending",
-        )
-        with self._lock:
-            self._tickets[ticket_id] = ticket
-
-        section_id = params.get("section_id", "unknown")
-        action = params.get("action", "Action protégée")
-
-        def handle_password_response(password: str | None) -> None:
-            """Callback appelé après la réponse du modal."""
-            if password:
-                # Marquer le ticket comme complété avec le mot de passe
-                with self._lock:
-                    if ticket_id in self._tickets:
-                        self._tickets[ticket_id].status = "completed"
-                        self._tickets[ticket_id].result = {"password": password}
-                        self._history.append(self._tickets[ticket_id])
-            else:
-                # Marquer comme échoué
-                with self._lock:
-                    if ticket_id in self._tickets:
-                        self._tickets[ticket_id].status = "failed"
-                        self._tickets[ticket_id].error = "Authentification annulée"
-                        self._history.append(self._tickets[ticket_id])
-            
-            # Appeler le callback si fourni
-            if callback:
-                with self._lock:
-                    t = self._tickets.get(ticket_id)
-                if t:
-                    callback(t)
-            
-            # Pour les requêtes synchrones, notifier via le bridge global
-            if params.get("_sync_request"):
-                # Envoyer la réponse au scheduler
-                self.submit_event(
-                    "auth.sudo_response",
-                    password=password,
-                    original_ticket=ticket_id,
-                    section_id=section_id,
-                    success=bool(password),
-                )
-
-        # Utiliser l'application si disponible, sinon fallback simulé
-        if self._app is not None:
-            self._app.request_sudo_password(
-                section_id=section_id,
-                action=action,
-                callback=handle_password_response,
-            )
-        else:
-            # Fallback : simulation (pour tests sans UI)
-            import threading
-            def simulate():
-                time.sleep(0.5)
-                handle_password_response(None)
-            threading.Thread(target=simulate, daemon=True).start()
-
-        return ticket_id
 
     # ═══════════════════════════════════════════════════════════════
     # RESULTATS
