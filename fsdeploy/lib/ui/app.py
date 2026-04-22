@@ -220,6 +220,9 @@ class FsDeployApp(App):
         else:
             self.push_screen("welcome")
 
+        # Connecter le scheduler au bridge global pour les logs
+        self._connect_scheduler_to_bridge()
+
         # Refresh periodique depuis le store
         if self.store:
             self.set_interval(self._refresh_interval, self._refresh_from_store)
@@ -424,3 +427,33 @@ class FsDeployApp(App):
             SudoModal(section_id=section_id, action=action),
             handle_password
         )
+
+    # ── Connexion du scheduler au bridge ──────────────────────────────────────
+
+    def _connect_scheduler_to_bridge(self) -> None:
+        """Connecte le scheduler au bridge global pour l'émission de logs."""
+        try:
+            # Obtenir le scheduler global
+            from fsdeploy.lib.scheduler.core.scheduler import Scheduler
+            scheduler = Scheduler.global_instance()
+            
+            # Obtenir le bridge global
+            from fsdeploy.lib.scheduler.bridge import SchedulerBridge as GlobalSchedulerBridge
+            global_bridge = GlobalSchedulerBridge.default()
+            
+            # Connecter le scheduler au bridge global
+            if hasattr(scheduler, 'set_bridge'):
+                scheduler.set_bridge(global_bridge)
+                self.log(f"Scheduler connecté au bridge global pour les logs")
+            else:
+                self.log(f"Le scheduler n'a pas de méthode set_bridge")
+                
+        except ImportError as e:
+            self.log(f"Impossible d'importer les modules nécessaires: {e}")
+        except Exception as e:
+            self.log(f"Erreur lors de la connexion du scheduler: {e}")
+    
+    def log(self, message: str) -> None:
+        """Méthode utilitaire pour journaliser."""
+        import logging
+        logging.info(f"[FsDeployApp] {message}")

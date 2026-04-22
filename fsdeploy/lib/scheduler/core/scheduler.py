@@ -125,6 +125,9 @@ class Scheduler:
             except ImportError:
                 pass
         
+        # Bridge pour l'émission de logs
+        self._bridge = None
+        
         # Hooks extensibles
         self._on_cycle_start: list = []
         self._on_cycle_end: list = []
@@ -283,7 +286,7 @@ class Scheduler:
           3. Si les locks sont disponibles :
                a) Acquisition via `self.runtime.state.acquire_locks(locks)`.
                b) Injection du runtime dans la task (`task.set_runtime(self.runtime)`).
-               c) Délégation à l'Executor (`self.executor.execute(task, locks=locks)`).
+               c) Déléguer à l'Executor (`self.executor.execute(task, locks=locks)`).
              Sinon :
                a) Les locks sont stockés dans `task._pending_locks`.
                b) La task est placée dans la file d'attente (`self.runtime.add_waiting(task)`).
@@ -296,6 +299,15 @@ class Scheduler:
           - state.release_locks(locks)
         """
         context = getattr(intent, "context", {})
+        ticket_id = context.get('_bridge_ticket')
+
+        # Émettre un log de début de tâche
+        task_name = task.__class__.__name__ if hasattr(task, '__class__') else "Tâche inconnue"
+        self.emit_log(
+            f"Début de la tâche: {task_name}",
+            ticket_id=ticket_id,
+            level="info"
+        )
 
         result = self.resolver.resolve(task, context=context)
         locks = result.get("locks", [])
@@ -312,14 +324,33 @@ class Scheduler:
             # Pour "threaded" : retourne immédiatement
             try:
                 self.executor.execute(task, locks=locks)
-            except Exception:
+                # Émettre un log de succès
+                self.emit_log(
+                    f"Tâche exécutée avec succès: {task_name}",
+                    ticket_id=ticket_id,
+                    level="success"
+                )
+            except Exception as e:
+                # Émettre un log d'erreur
+                self.emit_log(
+                    f"Erreur dans la tâche {task_name}: {str(e)}",
+                    ticket_id=ticket_id,
+                    level="error"
+                )
                 # Sécurité : si execute() elle-même échoue (pas la task),
                 # on libère les locks manuellement
                 self.runtime.state.release_locks(locks)
+                raise
         else:
             # Pas de locks disponibles — mise en attente
             task._pending_locks = locks
             self.runtime.add_waiting(task)
+            # Émettre un log d'attente
+            self.emit_log(
+                f"Tâche mise en attente: {task_name} (locks non disponibles)",
+                ticket_id=ticket_id,
+                level="warning"
+            )
 
     # ═════════════════════════════════════════════════════════════════
     # WAITING QUEUE
@@ -422,6 +453,30 @@ class Scheduler:
 
         if signum in (signal.SIGTERM, signal.SIGINT):
             self.stop()
+
+    # ═════════════════════════════════════════════════════════════════
+    # GESTION DES LOGS
+    # ═════════════════════════════════════════════════════════════════
+
+    def set_bridge(self, bridge):
+        """Définit le bridge pour l'émission de logs."""
+        self._bridge = bridge
+    
+    def emit_log(self, log: str, stream: str = "stdout", 
+                 ticket_id: str = None, level: str = "info") -> None:
+        """Émet un log via le bridge."""
+        if self._bridge and hasattr(self._bridge, 'emit_log'):
+            self._bridge.emit_log(log, stream, ticket_id, level)
+        # Fallback: log local
+        elif level == "error":
+            import logging
+            logging.error(f"[Scheduler] {log}")
+        elif level == "warning":
+            import logging
+            logging.warning(f"[Scheduler] {log}")
+        else:
+            import logging
+            logging.info(f"[Scheduler] {log}")
 
     # ═════════════════════════════════════════════════════════════════
     # HOOKS
