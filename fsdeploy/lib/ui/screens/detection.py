@@ -21,6 +21,7 @@ from textual.widgets import (
 )
 
 from fsdeploy.lib.ui.bridge import SchedulerBridge
+from fsdeploy.lib.ui.events import LogMessage
 
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK = "[OK]" if IS_FB else "\u2705"
@@ -231,24 +232,13 @@ class DetectionScreen(Screen):
                 self._probes[result["dataset"]] = result
             elif isinstance(result, list):
                 for r in result:
-                    if isinstance(r, dict) and "dataset" in r: self._probes[r["dataset"]] = r
-        self._collect_probes_from_state()
+                    if isinstance(r, dict) and "dataset" in r: 
+                        self._probes[r["dataset"]] = r
+        # Note: _collect_probes_from_state() a été supprimé car il accédait directement à runtime.state
+        # Toutes les données doivent maintenant passer par le bridge
         self._safe_progress(90)
         self._safe_log(f"  {CHECK} {len(self._probes)} datasets inspectes")
         self._safe_call(self._finish_scan)
-
-    def _collect_probes_from_state(self) -> None:
-        runtime = getattr(self.app, "runtime", None)
-        if not runtime: return
-        try:
-            state = runtime.state
-            with state._lock:
-                for task_id, entry in state.completed.items():
-                    result = entry.get("result", {})
-                    if isinstance(result, dict) and "dataset" in result:
-                        ds_name = result["dataset"]
-                        if ds_name not in self._probes: self._probes[ds_name] = result
-        except Exception: pass
 
     # ===============================================================
     # FIN
@@ -318,6 +308,18 @@ class DetectionScreen(Screen):
             name = evt.get("name", "")
             if any(k in name for k in ("detect", "probe", "pool", "dataset")):
                 self._log(f"  [bus] {name}")
+
+    def on_log_message(self, event: LogMessage) -> None:
+        """Capture les messages de log du scheduler."""
+        prefix = ""
+        if event.level == "error":
+            prefix = f"[red]{CROSS}[/] "
+        elif event.level == "warning":
+            prefix = f"[yellow]{WARN}[/] "
+        elif event.level == "success":
+            prefix = f"[green]{CHECK}[/] "
+        
+        self._log(f"{prefix}{event.log}")
 
     def _save_to_config(self) -> None:
         cfg = getattr(self.app, "config", None)

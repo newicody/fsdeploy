@@ -116,23 +116,39 @@ class SchedulerBridge:
         # Définir l'instance singleton si pas déjà défini
         if self.__class__._instance is None:
             self.__class__._instance = self
+            
+    def emit_log(self, log: str, stream: str = "stdout", 
+                 ticket_id: str = None, level: str = "info") -> None:
+        """
+        Émet un log vers l'UI.
+        À appeler par le scheduler lorsqu'une tâche produit une sortie.
+        """
+        if self._app and hasattr(self._app, 'post_message'):
+            from .events import LogMessage
+            self._app.post_message(
+                LogMessage(log=log, stream=stream, ticket_id=ticket_id, level=level)
+            )
 
     def set_app(self, app) -> None:
         """Définit l'application Textual pour les interactions UI (modal sudo)."""
         self._app = app
 
     def _log_ticket(self, action: str, ticket: Ticket, **extra):
-        """Émet un événement de log sans erreur de signature."""
-        if self._event_bus is None:
-            return
-        # Correction : On passe un dictionnaire unique pour éviter le TypeError
-        data = {
-            "ticket_id": ticket.id,
-            "event_name": ticket.event_name,
-            "status": ticket.status
-        }
-        data.update(extra)
-        self._event_bus.emit("bridge.ticket." + action, data)
+        """Émet un événement de log via emit_log."""
+        log_msg = f"Ticket {ticket.id} ({ticket.event_name}): {action}"
+        if extra:
+            log_msg += f" - {extra}"
+        self.emit_log(log_msg, level="info", ticket_id=ticket.id)
+        
+        # Également émettre vers l'event_bus si disponible
+        if self._event_bus is not None:
+            data = {
+                "ticket_id": ticket.id,
+                "event_name": ticket.event_name,
+                "status": ticket.status
+            }
+            data.update(extra)
+            self._event_bus.emit("bridge.ticket." + action, data)
 
     def _fire(self, ticket: Ticket) -> None:
         """Déclenche les callbacks d'un ticket."""

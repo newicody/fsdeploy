@@ -16,6 +16,7 @@ import os
 from typing import Any
 
 from textual.app import ComposeResult
+from fsdeploy.lib.ui.events import LogMessage
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
@@ -419,6 +420,18 @@ class MountsScreen(Screen):
 
     def update_from_snapshot(self, s):
         pass
+
+    def on_log_message(self, event: LogMessage) -> None:
+        """Capture les messages de log du scheduler."""
+        prefix = ""
+        if event.level == "error":
+            prefix = f"[red]{CROSS}[/] "
+        elif event.level == "warning":
+            prefix = f"[yellow]{WARN}[/] "
+        elif event.level == "success":
+            prefix = f"[green]{CHECK}[/] "
+        
+        self._log(f"{prefix}{event.log}")
 
     # ------------------------------------------------------------------
     # Logging thread-safe
