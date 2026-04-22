@@ -1,27 +1,21 @@
-# add.md — 38.2 : Logique d'Exécution du Scheduler
+# add.md — 38.2 : Implémentation du Runner Multi-Mode
 
-## 🛠 1. Initialisation du Scheduler (lib/scheduler.py)
-- Charger l'instance globale de la configuration via **ConfigObj**.
-- Créer une méthode `resolve_context(section_id)` qui identifie si une tâche doit s'exécuter sur l'hôte ou dans la cage, et si elle nécessite `sudo`.
+## 🛠 1. Logique de décision (lib/scheduler.py)
+- Créer une fonction `execute_from_config(section_name)` :
+    - Récupérer les clés `mode`, `root`, `command` dans ConfigObj.
+    - Déterminer le tunnel d'exécution.
 
-## 🛠 2. Implémentation du Runner Sécurisé
-Développer la fonction `run_intent(intent_id, password=None)` :
-- **Si Sudo requis** : 
-    - Utiliser `subprocess.Popen` avec les arguments `['sudo', '-S', '-k', '--', 'command']`.
-    - Envoyer le `password` dans `stdin`.
-- **Si Chroot requis** :
-    - Exécuter (via sudo) les montages bind : `/dev`, `/proc`, `/sys` vers `/opt/fsdeploy/bootstrap/`.
-    - Encapsuler la commande : `chroot /opt/fsdeploy/bootstrap /bin/bash -c "la_commande"`.
-    - **Sécurité** : Utiliser un bloc `finally` pour garantir le `umount` des API kernel après l'action.
+## 🛠 2. Le tunnel Chroot (L'Isolation)
+- Créer une méthode privée `_prepare_cage()` :
+    - `sudo mount --bind /dev /opt/fsdeploy/bootstrap/dev` (et ainsi de suite pour proc et sys).
+- Créer une méthode privée `_cleanup_cage()` :
+    - `sudo umount -l /opt/fsdeploy/bootstrap/dev` (le `-l` est important pour éviter les blocages).
 
-## 🛠 3. Bridge : Gestion du challenge d'authentification
-- Le Bridge intercepte l'appel du Scheduler.
-- Si le Scheduler renvoie un code `AUTH_REQUIRED` :
-    - Le Bridge appelle `app.push_screen(SudoModal)`.
-    - Une fois le pass reçu, il relance la tâche dans le Scheduler.
+## 🛠 3. Injection Sudo (La Sécurité)
+- Utiliser `subprocess.Popen` avec `stdin=PIPE`.
+- Récupérer le mot de passe depuis le Bridge (via le SudoModal).
+- Envoyer : `process.communicate(input=f"{password}\n".encode())`.
 
-## 🛠 4. Nettoyage de l'UI (Exemple : ZFS ou Partitions)
-- Prendre un écran de montage comme modèle.
-- Supprimer `import os` et `import subprocess`.
-- Remplacer le clic du bouton par : 
-  `self.bridge.emit("EXECUTE", {"config_id": "ma_section_zfs"})`.
+## 🛠 4. Test sur une section ZFS
+- Prendre une section ZFS de ta config comme cobaye.
+- Vérifier que la commande s'exécute bien dans le chroot sans laisser de traces sur l'hôte.
