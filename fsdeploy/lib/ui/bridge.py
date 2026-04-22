@@ -105,6 +105,9 @@ class SchedulerBridge:
         # Obtenir l'instance globale du bridge du scheduler
         if GlobalSchedulerBridge is not None:
             self._global_bridge = GlobalSchedulerBridge.default()
+            # Passer la configuration au bridge global si disponible
+            if runtime and hasattr(runtime, 'config'):
+                self._global_bridge.set_config(runtime.config)
         else:
             # Fallback: créer un bridge local (ne devrait pas arriver)
             self._global_bridge = None

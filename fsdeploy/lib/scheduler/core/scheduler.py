@@ -116,6 +116,15 @@ class Scheduler:
         self._stop_event = threading.Event()
         self._tick_interval = 0.1  # secondes entre chaque cycle
 
+        # Ajouter le ConfigRunner
+        self._config_runner = None
+        if config:
+            try:
+                from .config_runner import ConfigRunner
+                self._config_runner = ConfigRunner(config)
+            except ImportError:
+                pass
+        
         # Hooks extensibles
         self._on_cycle_start: list = []
         self._on_cycle_end: list = []
@@ -352,12 +361,32 @@ class Scheduler:
     # GESTION AUTHENTIFICATION SUDO
     # ═════════════════════════════════════════════════════════════════
 
+    def execute_config_section(self, section_id: str, params=None):
+        """
+        Exécute une section de configuration.
+        
+        Args:
+            section_id: ID de la section de configuration
+            params: Paramètres supplémentaires
+            
+        Returns:
+            Résultat de l'exécution
+        """
+        if not self._config_runner:
+            return {"success": False, "error": "ConfigRunner non initialisé"}
+        
+        return self._config_runner.execute(section_id, params or {})
+
     def _handle_sudo_response(self, event) -> None:
         """Traite la réponse d'authentification sudo."""
         password = event.params.get("password")
         if password:
             # Passer le mot de passe à l'executor
-            self.executor.set_sudo_password(password)
+            if hasattr(self.executor, 'set_sudo_password'):
+                self.executor.set_sudo_password(password)
+            # Passer aussi au ConfigRunner
+            if self._config_runner:
+                self._config_runner.set_sudo_password(password)
             # Notifier que l'authentification a réussi
             self._notify_sudo_auth_success()
     

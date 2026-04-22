@@ -69,6 +69,10 @@ class SchedulerBridge:
         self._tickets: dict[str, Ticket] = {}
         self._history: deque[Ticket] = deque(maxlen=500)
         self._lock = threading.Lock()
+        
+        # Configuration et runner
+        self._config = None
+        self._config_runner = None
 
     def _get_scheduler(self):
         if self._scheduler is None:
@@ -224,6 +228,88 @@ class SchedulerBridge:
     # ═══════════════════════════════════════════════════════════════
     # Interrogation de l'état
     # ═══════════════════════════════════════════════════════════════
+
+    def set_config(self, config):
+        """Définit la configuration du scheduler."""
+        self._config = config
+        # Initialiser le ConfigRunner si nécessaire
+        if config and self._config_runner is None:
+            from .config_runner import ConfigRunner
+            self._config_runner = ConfigRunner(config)
+
+    def get_config_sections(self) -> list[dict]:
+        """Récupère toutes les sections de configuration disponibles."""
+        if not self._config:
+            return []
+        
+        sections = []
+        try:
+            # Supposons que la config a une méthode sections() ou est un dict
+            if hasattr(self._config, 'sections'):
+                section_names = self._config.sections()
+            elif isinstance(self._config, dict):
+                section_names = self._config.keys()
+            else:
+                return []
+            
+            for section_name in section_names:
+                if hasattr(self._config, 'get'):
+                    section_data = self._config.get(section_name, {})
+                elif isinstance(self._config, dict):
+                    section_data = self._config.get(section_name, {})
+                else:
+                    section_data = {}
+                
+                sections.append({
+                    "id": section_name,
+                    "name": section_data.get("name", section_name),
+                    "description": section_data.get("description", ""),
+                    "requires_sudo": section_data.get("requires_sudo", False),
+                    "requires_chroot": section_data.get("requires_chroot", False),
+                    "mode": section_data.get("mode", "standard")
+                })
+        except Exception:
+            # Fallback si la config n'a pas la structure attendue
+            pass
+        
+        return sections
+
+    def get_config_section(self, section_id: str) -> Optional[dict]:
+        """Récupère une section de configuration spécifique."""
+        if not self._config:
+            return None
+        
+        try:
+            if hasattr(self._config, 'get'):
+                section_data = self._config.get(section_id, {})
+            elif isinstance(self._config, dict):
+                section_data = self._config.get(section_id, {})
+            else:
+                return None
+            
+            return {
+                "id": section_id,
+                "name": section_data.get("name", section_id),
+                "description": section_data.get("description", ""),
+                "requires_sudo": section_data.get("requires_sudo", False),
+                "requires_chroot": section_data.get("requires_chroot", False),
+                "mode": section_data.get("mode", "standard"),
+                "command": section_data.get("command", ""),
+                "args": section_data.get("args", []),
+                "env": section_data.get("env", {}),
+                "cwd": section_data.get("cwd", ""),
+                "timeout": section_data.get("timeout", 300),
+                "bind_mounts": section_data.get("bind_mounts", ["/dev", "/proc", "/sys"])
+            }
+        except Exception:
+            return None
+
+    def execute_config_section(self, section_id: str, params: dict = None) -> dict:
+        """Exécute une section de configuration via le ConfigRunner."""
+        if not self._config_runner:
+            return {"success": False, "error": "ConfigRunner non initialisé"}
+        
+        return self._config_runner.execute(section_id, params or {})
 
     def get_scheduler_state(self) -> dict:
         """Retourne l'état actuel du scheduler (events, intents, tasks, etc.)."""
