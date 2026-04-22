@@ -107,10 +107,11 @@ class Scheduler:
         """Alias pour global_instance."""
         return cls.global_instance()
       
-    def __init__(self, resolver, executor, runtime):
+    def __init__(self, resolver, executor, runtime, config=None):
         self.resolver = resolver
         self.executor = executor
         self.runtime = runtime
+        self.config = config
         self._running = False
         self._stop_event = threading.Event()
         self._tick_interval = 0.1  # secondes entre chaque cycle
@@ -180,6 +181,15 @@ class Scheduler:
             if event is None:
                 continue
 
+            # Gérer les événements d'authentification
+            if event.name == "auth.sudo_response":
+                self._handle_sudo_response(event)
+                continue
+            elif event.name == "auth.sudo_request":
+                # Transmettre au bridge UI
+                self._forward_sudo_request(event)
+                continue
+
             # Les événements task.completed/task.failed servent uniquement
             # à réveiller _process_waiting au prochain cycle — pas besoin
             # de les convertir en intents.
@@ -192,6 +202,9 @@ class Scheduler:
                 # Propager le contexte de l'événement
                 if not intent.context.get("event"):
                     intent.context["event"] = event
+                # Injecter la configuration dans le contexte de l'intent
+                if self.config and "config" not in intent.context:
+                    intent.context["config"] = self.config
                 self.runtime.intent_queue.put(intent)
 
     def _event_to_intents(self, event) -> list:
@@ -334,6 +347,36 @@ class Scheduler:
                 self.runtime.remove_waiting(task)
                 if hasattr(self.runtime, 'fail'):
                     self.runtime.fail(task, e)
+
+    # ═════════════════════════════════════════════════════════════════
+    # GESTION AUTHENTIFICATION SUDO
+    # ═════════════════════════════════════════════════════════════════
+
+    def _handle_sudo_response(self, event) -> None:
+        """Traite la réponse d'authentification sudo."""
+        password = event.params.get("password")
+        if password:
+            # Passer le mot de passe à l'executor
+            self.executor.set_sudo_password(password)
+            # Notifier que l'authentification a réussi
+            self._notify_sudo_auth_success()
+    
+    def _forward_sudo_request(self, event) -> None:
+        """Transmet la demande sudo au bridge UI."""
+        # Cette méthode sera implémentée quand nous aurons le bridge UI
+        # Pour l'instant, log seulement
+        import logging
+        logging.info(f"Demande sudo reçue: {event.params}")
+    
+    def _notify_sudo_auth_success(self) -> None:
+        """Notifie que l'authentification sudo a réussi."""
+        from scheduler.model.event import Event
+        self.runtime.event_queue.put(Event(
+            name="auth.sudo_success",
+            params={"message": "Authentification sudo réussie"},
+            source="scheduler",
+            priority=-100,
+        ))
 
     # ═════════════════════════════════════════════════════════════════
     # SIGNAUX

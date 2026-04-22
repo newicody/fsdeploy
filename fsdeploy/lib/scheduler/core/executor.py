@@ -31,21 +31,28 @@ class Executor:
         # Pour "threaded" : retourne immédiatement, callback gère le reste
     """
 
-    def __init__(self, runtime, max_workers: int = 4):
+    def __init__(self, runtime, max_workers: int = 4, config=None):
         self.runtime = runtime
         self._pool = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="fsdeploy-task",
         )
+        self.config = config
         self.resolver = None
         try:
             from fsdeploy.lib.scheduler.security.resolver import SecurityResolver
-            self.resolver = SecurityResolver(config=getattr(runtime, 'config', None))
+            self.resolver = SecurityResolver(config=config)
         except ImportError:
             pass
         self._futures: dict[str, Future] = {}  # task.id → Future
         self._lock = threading.Lock()           # protège _futures
         self._on_complete: list[Callable] = []  # hooks post-exécution
+        
+        # Gestion sudo
+        self._sudo_password = None
+        self._sudo_password_lock = threading.Lock()
+        self._sudo_password_expiry = 0
+        self._sudo_request_callbacks = {}
 
     # ═════════════════════════════════════════════════════════════════
     # ENTRY POINT
@@ -166,7 +173,7 @@ class Executor:
 
     def _run_lifecycle(self, task) -> Any:
         """
-        Exécute le cycle de vie complet d'une task.
+        Exécute le cycle de vie complet d'une task avec le mode approprié.
 
         NE TOUCHE PAS au state (start/success/fail) — c'est le caller
         (_execute_default ou _on_task_done) qui s'en charge.
@@ -174,6 +181,21 @@ class Executor:
         Raises:
             Toute exception levée par before_run/run/after_run.
         """
+        # Déterminer le mode d'exécution
+        exec_mode = self._determine_execution_mode(task)
+        
+        # Stocker le mode dans la tâche pour référence
+        task._execution_mode = exec_mode
+        
+        # Pour les modes sudo, vérifier si nous avons le mot de passe
+        if exec_mode in ("sudo_host", "sudo_chroot"):
+            if not self._has_valid_sudo_password():
+                # Demander le mot de passe via événement
+                self._request_sudo_password(task)
+                # Attendre le mot de passe (sera géré par callback)
+                # Pour l'instant, on lève une exception
+                raise PermissionError("Authentification sudo requise. Le mot de passe doit être fourni via auth.sudo_response")
+
         cgroup = None
 
         # Setup cgroup si demande par le decorator
@@ -198,7 +220,17 @@ class Executor:
             if hasattr(task, "before_run"):
                 task.before_run()
 
-            result = task.run()
+            # Exécuter avec le mode approprié
+            if exec_mode == "default":
+                result = task.run()
+            elif exec_mode == "sudo_host":
+                result = self._run_with_sudo_host(task)
+            elif exec_mode == "sudo_chroot":
+                result = self._run_with_sudo_chroot(task)
+            elif exec_mode == "threaded":
+                result = task.run()  # Pour threaded, on utilise run() normal
+            else:
+                result = task.run()  # fallback
 
             if hasattr(task, "after_run"):
                 task.after_run()
@@ -290,6 +322,216 @@ class Executor:
         monitor = getattr(self.runtime, "monitor", None)
         if monitor and hasattr(monitor, "log_error"):
             monitor.log_error(task, error)
+
+    # ═════════════════════════════════════════════════════════════════
+    # DÉTERMINATION DU MODE D'EXÉCUTION
+    # ═════════════════════════════════════════════════════════════════
+
+    def _determine_execution_mode(self, task) -> str:
+        """
+        Détermine le mode d'exécution basé sur:
+        1. L'attribut task.executor (si présent)
+        2. La configuration (sudo=true, environment=chroot)
+        3. Le contexte de la tâche
+        """
+        # Priorité 1: attribut de la tâche
+        if hasattr(task, "executor"):
+            return task.executor
+        
+        # Priorité 2: configuration
+        if self.config:
+            # Vérifier la section [execution] ou les clés globales
+            sudo_enabled = self.config.get("sudo", False)
+            environment = self.config.get("environment", "host")
+            
+            if environment == "chroot" and sudo_enabled:
+                return "sudo_chroot"
+            elif sudo_enabled:
+                return "sudo_host"
+        
+        # Priorité 3: contexte de la tâche
+        if hasattr(task, "context"):
+            ctx = task.context
+            if ctx.get("requires_sudo"):
+                return "sudo_host"
+            if ctx.get("requires_chroot"):
+                return "sudo_chroot"
+        
+        # Par défaut
+        return "default"
+
+    # ═════════════════════════════════════════════════════════════════
+    # MODES D'EXÉCUTION SUDO
+    # ═════════════════════════════════════════════════════════════════
+
+    def _run_with_sudo_host(self, task) -> Any:
+        """
+        Exécute une commande avec sudo sur l'hôte.
+        """
+        # Récupérer la commande de la tâche
+        if not hasattr(task, "get_command"):
+            raise ValueError("Task doit avoir une méthode get_command pour sudo_host")
+        
+        command = task.get_command()
+        if not command:
+            raise ValueError("Commande vide")
+        
+        # Préparer l'exécution avec sudo
+        full_cmd = ["sudo", "-S", "-k"] + command
+        
+        # Exécuter avec le mot de passe
+        with self._sudo_password_lock:
+            password = self._sudo_password
+            
+        try:
+            import subprocess
+            
+            proc = subprocess.Popen(
+                full_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8'
+            )
+            
+            stdout, stderr = proc.communicate(input=password + "\n", timeout=task.timeout if hasattr(task, "timeout") else 300)
+            
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(proc.returncode, full_cmd, stdout, stderr)
+            
+            return stdout.strip()
+            
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise TimeoutError(f"Commande timeout: {' '.join(full_cmd)}")
+        except Exception as e:
+            raise RuntimeError(f"Échec sudo_host: {str(e)}")
+
+    def _run_with_sudo_chroot(self, task) -> Any:
+        """
+        Exécute une commande avec sudo dans un chroot.
+        """
+        if not hasattr(task, "get_command"):
+            raise ValueError("Task doit avoir une méthode get_command pour sudo_chroot")
+        
+        command = task.get_command()
+        if not command:
+            raise ValueError("Commande vide")
+        
+        # Chemin du chroot (configurable)
+        chroot_path = "/opt/fsdeploy/bootstrap"
+        if self.config:
+            chroot_path = self.config.get("chroot_path", chroot_path)
+        
+        # Préparer les montages bind nécessaires
+        self._prepare_chroot_mounts(chroot_path)
+        
+        # Construire la commande chroot
+        chroot_cmd = ["sudo", "-S", "-k", "chroot", chroot_path] + command
+        
+        with self._sudo_password_lock:
+            password = self._sudo_password
+            
+        try:
+            import subprocess
+            
+            proc = subprocess.Popen(
+                chroot_cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8'
+            )
+            
+            stdout, stderr = proc.communicate(input=password + "\n", timeout=task.timeout if hasattr(task, "timeout") else 300)
+            
+            # Nettoyer les montages
+            self._cleanup_chroot_mounts(chroot_path)
+            
+            if proc.returncode != 0:
+                raise subprocess.CalledProcessError(proc.returncode, chroot_cmd, stdout, stderr)
+            
+            return stdout.strip()
+            
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            self._cleanup_chroot_mounts(chroot_path)
+            raise TimeoutError(f"Commande chroot timeout: {' '.join(chroot_cmd)}")
+        except Exception as e:
+            self._cleanup_chroot_mounts(chroot_path)
+            raise RuntimeError(f"Échec sudo_chroot: {str(e)}")
+
+    def _prepare_chroot_mounts(self, chroot_path: str) -> None:
+        """Monte /dev, /proc, /sys dans le chroot."""
+        try:
+            import subprocess
+            import os
+            
+            mounts = ["/dev", "/proc", "/sys"]
+            for mount in mounts:
+                target = os.path.join(chroot_path, mount.lstrip("/"))
+                os.makedirs(target, exist_ok=True)
+                subprocess.run(["mount", "--bind", mount, target], check=True)
+                
+        except Exception as e:
+            raise RuntimeError(f"Échec préparation chroot: {str(e)}")
+
+    def _cleanup_chroot_mounts(self, chroot_path: str) -> None:
+        """Démonte /dev, /proc, /sys du chroot."""
+        try:
+            import subprocess
+            import os
+            
+            mounts = ["/sys", "/proc", "/dev"]  # Ordre inverse
+            for mount in mounts:
+                target = os.path.join(chroot_path, mount.lstrip("/"))
+                if os.path.ismount(target):
+                    subprocess.run(["umount", target], check=False)
+                    
+        except Exception:
+            pass  # Ignorer les erreurs de nettoyage
+
+    # ═════════════════════════════════════════════════════════════════
+    # GESTION DU MOT DE PASSE SUDO
+    # ═════════════════════════════════════════════════════════════════
+
+    def set_sudo_password(self, password: str, ttl: int = 300) -> None:
+        """Définit le mot de passe sudo avec une durée de vie."""
+        import time
+        with self._sudo_password_lock:
+            self._sudo_password = password
+            self._sudo_password_expiry = time.time() + ttl
+    
+    def _has_valid_sudo_password(self) -> bool:
+        """Vérifie si un mot de passe sudo valide est disponible."""
+        import time
+        with self._sudo_password_lock:
+            if not self._sudo_password:
+                return False
+            if time.time() > self._sudo_password_expiry:
+                self._sudo_password = None  # Expiré
+                return False
+            return True
+    
+    def _request_sudo_password(self, task) -> None:
+        """Émet un événement pour demander le mot de passe sudo."""
+        if not hasattr(self.runtime, "event_queue"):
+            return
+        
+        from scheduler.model.event import Event
+        
+        self.runtime.event_queue.put(Event(
+            name="auth.sudo_request",
+            params={
+                "task_id": task.id,
+                "task_class": task.__class__.__name__,
+                "description": f"La tâche {task.__class__.__name__} nécessite des privilèges sudo",
+            },
+            source="executor",
+            priority=-1000,  # Très haute priorité
+        ))
 
     # ═════════════════════════════════════════════════════════════════
     # SHUTDOWN

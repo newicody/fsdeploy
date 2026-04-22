@@ -202,9 +202,82 @@ class SchedulerBridge:
         Returns:
             Identifiant du ticket (chaîne).
         """
+        # Intercepter les demandes d'authentification
+        if event_name == "auth.sudo_request":
+            return self._handle_sudo_request(params, callback)
+        
         ticket_id = self.submit_event(event_name, priority=priority, **params)
         if callback:
             self.on_result(ticket_id, callback)
+        return ticket_id
+    
+    def _handle_sudo_request(self, params: dict, callback: Optional[Callable] = None) -> str:
+        """Gère une demande d'authentification sudo."""
+        import time
+        import uuid
+        
+        # Créer un ticket immédiatement
+        ticket_id = f"sudo-{uuid.uuid4().hex[:8]}"
+        ticket = Ticket(
+            id=ticket_id,
+            event_name="auth.sudo_request",
+            params=params,
+            submitted_at=time.time(),
+            status="pending",
+        )
+        
+        with self._lock:
+            self._tickets[ticket_id] = ticket
+        
+        # Afficher le modal de saisie de mot de passe
+        # Note: Dans une implémentation réelle, nous devrions appeler
+        # l'application Textual pour afficher un modal
+        # Pour l'instant, nous allons simuler une réponse automatique
+        # avec un mot de passe vide (ce qui échouera)
+        
+        # Simuler un délai pour l'interface utilisateur
+        def simulate_ui_response():
+            import time
+            time.sleep(0.5)
+            
+            # Pour l'instant, nous n'avons pas de modal réel
+            # Donc nous échouons l'authentification
+            password = None  # Simuler une annulation
+            
+            if password:
+                # Envoyer la réponse au scheduler
+                response_ticket_id = self.submit_event(
+                    "auth.sudo_response",
+                    password=password,
+                    original_ticket=ticket_id,
+                )
+                
+                # Mettre à jour le ticket original
+                with self._lock:
+                    if ticket_id in self._tickets:
+                        self._tickets[ticket_id].status = "completed"
+                        self._tickets[ticket_id].result = {"authenticated": True}
+                        self._history.append(self._tickets[ticket_id])
+                
+                # Appeler le callback si fourni
+                if callback:
+                    callback(self._tickets[ticket_id])
+            else:
+                # Authentification annulée
+                with self._lock:
+                    if ticket_id in self._tickets:
+                        self._tickets[ticket_id].status = "failed"
+                        self._tickets[ticket_id].error = "Authentification annulée ou non implémentée"
+                        self._history.append(self._tickets[ticket_id])
+                
+                if callback:
+                    callback(self._tickets[ticket_id])
+        
+        # Démarrer la simulation dans un thread séparé
+        import threading
+        thread = threading.Thread(target=simulate_ui_response, daemon=True)
+        thread.start()
+        
         return ticket_id
 
     # ═══════════════════════════════════════════════════════════════
