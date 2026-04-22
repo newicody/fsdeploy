@@ -14,12 +14,16 @@ Conforme à add.md 38.3.
 import subprocess
 import threading
 import time
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, field
 import os
 import shlex
+import select
+from typing import Optional, Dict, Any, List, Callable
+from dataclasses import dataclass, field
+from enum import Enum
 
 from fsdeploy.lib.log import get_logger
+from .injector import VariableInjector, MissingVariableError, get_injector
+from .cage import ChrootCage, temporary_cage
 
 logger = get_logger(__name__)
 
@@ -48,6 +52,398 @@ class ExecutionResult:
     error_message: Optional[str] = None
 
 
+class ExecutionMode(Enum):
+    """Modes d'exécution supportés."""
+    STANDARD = "standard"      # Exécution normale
+    SUDO = "sudo"             # Exécution avec élévation de privilèges
+    CHROOT = "chroot"         # Exécution en environnement isolé
+    SUDO_CHROOT = "sudo_chroot"  # Sudo + chroot
+
+
+class TaskRunner:
+    """
+    Runner pour l'exécution des tâches avec injection, isolation et sudo.
+    
+    Gère trois tunnels d'exécution :
+      - Standard : commande normale
+      - Sudo : avec élévation via bridge
+      - Chroot : isolation dans une cage
+    """
+    
+    def __init__(
+        self,
+        injector: Optional[VariableInjector] = None,
+        bridge=None,
+        config: Optional[Dict[str, Any]] = None
+    ):
+        """
+        Initialise le runner.
+        
+        Args:
+            injector: Injecteur de variables
+            bridge: Bridge pour les requêtes sudo
+            config: Configuration pour initialiser l'injecteur
+        """
+        self.injector = injector or get_injector(config or {})
+        self.bridge = bridge
+        self._active_processes = {}
+        self._lock = threading.Lock()
+        
+    def run_task(
+        self,
+        command: str,
+        context: Optional[Dict[str, Any]] = None,
+        mode: ExecutionMode = ExecutionMode.STANDARD,
+        chroot_path: Optional[str] = None,
+        timeout: Optional[float] = None,
+        log_callback: Optional[Callable[[str, str], None]] = None,
+        sudo_password: Optional[str] = None,
+        cwd: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Exécute une tâche avec les paramètres donnés.
+        
+        Args:
+            command: Commande brute avec variables
+            context: Contexte pour l'injection
+            mode: Mode d'exécution
+            chroot_path: Chemin pour chroot (si mode CHROOT)
+            timeout: Timeout en secondes
+            log_callback: Callback pour les logs (type, message)
+            sudo_password: Mot de passe sudo (si mode SUDO)
+            cwd: Répertoire de travail
+            env: Variables d'environnement
+            
+        Returns:
+            Dictionnaire avec résultats
+        """
+        if context is None:
+            context = {}
+        
+        # 1. Validation et injection
+        try:
+            if not self.injector.validate_command(command):
+                missing = self.injector.get_missing_variables(command)
+                return {
+                    "success": False,
+                    "error": f"Variables manquantes: {missing}",
+                    "exit_code": -1,
+                    "command": command,
+                    "injected_command": None
+                }
+            
+            injected_cmd = self.injector.inject(command, context)
+        except MissingVariableError as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "exit_code": -1,
+                "command": command,
+                "injected_command": None
+            }
+        
+        # 2. Préparation de la commande selon le mode
+        if mode == ExecutionMode.CHROOT and chroot_path:
+            return self._run_chroot(
+                injected_cmd, chroot_path, timeout, log_callback, cwd, env
+            )
+        elif mode == ExecutionMode.SUDO:
+            return self._run_sudo(
+                injected_cmd, sudo_password, timeout, log_callback, cwd, env
+            )
+        elif mode == ExecutionMode.SUDO_CHROOT and chroot_path:
+            return self._run_sudo_chroot(
+                injected_cmd, chroot_path, sudo_password, timeout, log_callback, cwd, env
+            )
+        else:
+            return self._run_standard(
+                injected_cmd, timeout, log_callback, cwd, env
+            )
+    
+    def _run_standard(
+        self,
+        command: str,
+        timeout: Optional[float],
+        log_callback: Optional[Callable],
+        cwd: Optional[str],
+        env: Optional[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """Exécution standard."""
+        return self._execute_command(
+            command, timeout, log_callback, cwd, env
+        )
+    
+    def _run_sudo(
+        self,
+        command: str,
+        password: Optional[str],
+        timeout: Optional[float],
+        log_callback: Optional[Callable],
+        cwd: Optional[str],
+        env: Optional[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """Exécution avec sudo."""
+        sudo_cmd = f"sudo -S {command}"
+        
+        if password:
+            # Exécution avec mot de passe fourni
+            return self._execute_command(
+                sudo_cmd, timeout, log_callback, cwd, env, stdin_input=password + "\n"
+            )
+        elif self.bridge:
+            # Demande interactive via bridge
+            return self._execute_with_sudo_request(
+                command, timeout, log_callback, cwd, env
+            )
+        else:
+            return {
+                "success": False,
+                "error": "Sudo requis mais aucun bridge disponible",
+                "exit_code": -1,
+                "command": command
+            }
+    
+    def _run_chroot(
+        self,
+        command: str,
+        chroot_path: str,
+        timeout: Optional[float],
+        log_callback: Optional[Callable],
+        cwd: Optional[str],
+        env: Optional[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """Exécution en chroot."""
+        try:
+            with temporary_cage() as cage:
+                # Préparer la commande chroot
+                chroot_cmd = f"chroot {chroot_path} {command}"
+                return self._execute_command(
+                    chroot_cmd, timeout, log_callback, cwd, env
+                )
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Échec chroot: {str(e)}",
+                "exit_code": -1,
+                "command": command
+            }
+    
+    def _run_sudo_chroot(
+        self,
+        command: str,
+        chroot_path: str,
+        password: Optional[str],
+        timeout: Optional[float],
+        log_callback: Optional[Callable],
+        cwd: Optional[str],
+        env: Optional[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """Exécution sudo + chroot."""
+        sudo_chroot_cmd = f"sudo -S chroot {chroot_path} {command}"
+        
+        if password:
+            return self._execute_command(
+                sudo_chroot_cmd, timeout, log_callback, cwd, env, stdin_input=password + "\n"
+            )
+        else:
+            return {
+                "success": False,
+                "error": "Sudo requis pour chroot mais mot de passe non fourni",
+                "exit_code": -1,
+                "command": command
+            }
+    
+    def _execute_command(
+        self,
+        command: str,
+        timeout: Optional[float],
+        log_callback: Optional[Callable],
+        cwd: Optional[str],
+        env: Optional[Dict[str, str]],
+        stdin_input: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Exécute une commande avec subprocess.
+        
+        Gère les flux stdout/stderr en temps réel.
+        """
+        process_id = str(time.time())
+        
+        try:
+            # Préparer l'environnement
+            process_env = os.environ.copy()
+            if env:
+                process_env.update(env)
+            
+            # Démarrer le processus
+            proc = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE if stdin_input else None,
+                cwd=cwd,
+                env=process_env,
+                text=True,
+                bufsize=1,  # Ligne tamponnée
+                universal_newlines=True
+            )
+            
+            # Enregistrer le processus
+            with self._lock:
+                self._active_processes[process_id] = proc
+            
+            # Gérer l'entrée stdin si nécessaire
+            if stdin_input and proc.stdin:
+                proc.stdin.write(stdin_input)
+                proc.stdin.flush()
+                proc.stdin.close()
+            
+            # Lire les sorties en temps réel
+            stdout_lines = []
+            stderr_lines = []
+            
+            # Utiliser select pour lire sans bloquer
+            while proc.poll() is None:
+                # Lire stdout
+                while True:
+                    chunk = proc.stdout.readline()
+                    if not chunk:
+                        break
+                    stdout_lines.append(chunk)
+                    if log_callback:
+                        log_callback("stdout", chunk.rstrip())
+                
+                # Lire stderr
+                while True:
+                    chunk = proc.stderr.readline()
+                    if not chunk:
+                        break
+                    stderr_lines.append(chunk)
+                    if log_callback:
+                        log_callback("stderr", chunk.rstrip())
+                
+                # Petit sleep pour éviter la boucle infinie
+                time.sleep(0.01)
+            
+            # Lire les derniers bytes
+            remaining_stdout, remaining_stderr = proc.communicate()
+            if remaining_stdout:
+                stdout_lines.append(remaining_stdout)
+                if log_callback:
+                    log_callback("stdout", remaining_stdout.rstrip())
+            if remaining_stderr:
+                stderr_lines.append(remaining_stderr)
+                if log_callback:
+                    log_callback("stderr", remaining_stderr.rstrip())
+            
+            exit_code = proc.returncode
+            
+            return {
+                "success": exit_code == 0,
+                "exit_code": exit_code,
+                "stdout": "".join(stdout_lines),
+                "stderr": "".join(stderr_lines),
+                "command": command,
+                "process_id": process_id
+            }
+            
+        except subprocess.TimeoutExpired:
+            # Timeout - tuer le processus
+            if process_id in self._active_processes:
+                self._active_processes[process_id].kill()
+            
+            return {
+                "success": False,
+                "error": f"Timeout après {timeout} secondes",
+                "exit_code": -1,
+                "command": command,
+                "process_id": process_id
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e),
+                "exit_code": -1,
+                "command": command,
+                "process_id": process_id
+            }
+            
+        finally:
+            # Nettoyer
+            with self._lock:
+                self._active_processes.pop(process_id, None)
+    
+    def _execute_with_sudo_request(
+        self,
+        command: str,
+        timeout: Optional[float],
+        log_callback: Optional[Callable],
+        cwd: Optional[str],
+        env: Optional[Dict[str, str]]
+    ) -> Dict[str, Any]:
+        """
+        Exécute une commande avec demande sudo interactive via bridge.
+        """
+        # Émettre un événement de demande sudo
+        ticket_id = self.bridge.emit(
+            "auth.sudo_request",
+            command=command,
+            timeout=timeout
+        )
+        
+        # Attendre la réponse (simplifié - en réalité via callback)
+        # Pour l'instant, retourner un résultat d'attente
+        return {
+            "success": False,
+            "error": "Sudo requis - en attente d'authentification",
+            "exit_code": -2,  # Code spécial pour attente sudo
+            "command": command,
+            "ticket_id": ticket_id,
+            "pending_auth": True
+        }
+    
+    def kill_process(self, process_id: str) -> bool:
+        """
+        Tue un processus en cours d'exécution.
+        
+        Args:
+            process_id: ID du processus
+            
+        Returns:
+            True si tué, False sinon
+        """
+        with self._lock:
+            proc = self._active_processes.get(process_id)
+            if proc:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                return True
+        return False
+    
+    def get_active_processes(self) -> List[Dict[str, Any]]:
+        """
+        Retourne la liste des processus actifs.
+        
+        Returns:
+            Liste des informations sur les processus
+        """
+        with self._lock:
+            return [
+                {
+                    "process_id": pid,
+                    "command": "N/A",  # À améliorer
+                    "alive": proc.poll() is None
+                }
+                for pid, proc in self._active_processes.items()
+            ]
+
+
 class MultiModeRunner:
     """
     Exécuteur multi-mode pour les tâches du scheduler.
@@ -56,6 +452,8 @@ class MultiModeRunner:
     1. Standard : exécution normale
     2. Sudo : exécution avec élévation de privilèges
     3. Chroot : exécution dans la cage bootstrap
+    
+    Compatible avec l'ancienne interface.
     """
     
     def __init__(self, bridge=None, config=None):
@@ -63,6 +461,10 @@ class MultiModeRunner:
         self.config = config
         self.chroot_base = "/opt/fsdeploy/bootstrap"
         self._mount_points = []
+        # Initialiser l'injecteur si config est fourni
+        self.injector = None
+        if config:
+            self.injector = get_injector(config)
         
     def execute(self, task_node: TaskNode) -> ExecutionResult:
         """
@@ -87,13 +489,38 @@ class MultiModeRunner:
                 error_message="Tâche bloquée par les politiques de sécurité"
             )
         
+        # Injection de variables si injecteur disponible
+        command_to_execute = task_node.command
+        if self.injector:
+            try:
+                if not self.injector.validate_command(task_node.command):
+                    missing = self.injector.get_missing_variables(task_node.command)
+                    return ExecutionResult(
+                        success=False,
+                        return_code=-1,
+                        stdout="",
+                        stderr=f"Variables manquantes: {missing}",
+                        execution_time=0,
+                        error_message="Variables manquantes dans la configuration"
+                    )
+                command_to_execute = self.injector.inject(task_node.command, {})
+            except MissingVariableError as e:
+                return ExecutionResult(
+                    success=False,
+                    return_code=-1,
+                    stdout="",
+                    stderr=str(e),
+                    execution_time=0,
+                    error_message=str(e)
+                )
+        
         try:
             if task_node.chroot:
-                return self._execute_chroot(task_node, start_time)
+                return self._execute_chroot(task_node, command_to_execute, start_time)
             elif task_node.root:
-                return self._execute_sudo(task_node, start_time)
+                return self._execute_sudo(task_node, command_to_execute, start_time)
             else:
-                return self._execute_standard(task_node, start_time)
+                return self._execute_standard(task_node, command_to_execute, start_time)
         except Exception as e:
             return ExecutionResult(
                 success=False,
@@ -104,9 +531,9 @@ class MultiModeRunner:
                 error_message=f"Erreur d'exécution: {e}"
             )
     
-    def _execute_standard(self, task_node: TaskNode, start_time: float) -> ExecutionResult:
+    def _execute_standard(self, task_node: TaskNode, command: str, start_time: float) -> ExecutionResult:
         """Exécution standard sans privilèges."""
-        cmd = self._build_command(task_node)
+        cmd = self._build_command(task_node, command)
         
         try:
             result = subprocess.run(
@@ -135,7 +562,7 @@ class MultiModeRunner:
                 error_message="Timeout expiré"
             )
     
-    def _execute_sudo(self, task_node: TaskNode, start_time: float) -> ExecutionResult:
+    def _execute_sudo(self, task_node: TaskNode, command: str, start_time: float) -> ExecutionResult:
         """
         Exécution avec privilèges root via tunnel sudo.
         
@@ -153,7 +580,7 @@ class MultiModeRunner:
             )
         
         # Construire la commande avec sudo
-        base_cmd = self._build_command(task_node)
+        base_cmd = self._build_command(task_node, command)
         cmd = ["sudo", "-S", "-k", "--"] + base_cmd
         
         # Demander le mot de passe
@@ -201,7 +628,7 @@ class MultiModeRunner:
                 error_message="Timeout expiré"
             )
     
-    def _execute_chroot(self, task_node: TaskNode, start_time: float) -> ExecutionResult:
+    def _execute_chroot(self, task_node: TaskNode, command: str, start_time: float) -> ExecutionResult:
         """
         Exécution dans la cage chroot.
         
@@ -212,7 +639,7 @@ class MultiModeRunner:
         
         try:
             # Construire la commande chroot
-            base_cmd = self._build_command(task_node)
+            base_cmd = self._build_command(task_node, command)
             cmd = ["chroot", self.chroot_base] + base_cmd
             
             # Exécuter dans chroot
@@ -274,13 +701,16 @@ class MultiModeRunner:
         # qui a accès au bridge global
         return None
     
-    def _build_command(self, task_node: TaskNode) -> List[str]:
+    def _build_command(self, task_node: TaskNode, command: str = None) -> List[str]:
         """Construit la liste de commande à partir du TaskNode."""
-        if isinstance(task_node.command, list):
-            return task_node.command
+        if command is None:
+            command = task_node.command
+            
+        if isinstance(command, list):
+            return command
         else:
             # Split la commande string en arguments
-            return shlex.split(task_node.command)
+            return shlex.split(command)
     
     def _validate_security(self, task_node: TaskNode) -> bool:
         """
@@ -312,3 +742,28 @@ class MultiModeRunner:
                 return False
         
         return True
+
+
+# Singleton global pour le TaskRunner
+_runner_instance = None
+
+def get_runner(
+    injector: Optional[VariableInjector] = None,
+    bridge=None,
+    config: Optional[Dict[str, Any]] = None
+) -> TaskRunner:
+    """
+    Retourne l'instance singleton du runner.
+    
+    Args:
+        injector: Injecteur de variables
+        bridge: Bridge pour sudo
+        config: Configuration pour l'injecteur
+        
+    Returns:
+        Instance TaskRunner
+    """
+    global _runner_instance
+    if _runner_instance is None:
+        _runner_instance = TaskRunner(injector, bridge, config)
+    return _runner_instance
