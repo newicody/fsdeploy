@@ -1,23 +1,17 @@
-# add.md — 38.5 : Migration de l'UI et Feedback Temps Réel
+# add.md — 38.5 : Migration de l'Écran ZFS vers les Intentions
 
-## 🛠️ 1. Finalisation du Feedback (lib/bridge.py)
-- S'assurer que le Bridge relaie les messages suivants du Scheduler vers l'UI :
-    - `TASK_START(node_id)` : Pour surligner la tâche en cours.
-    - `TASK_LOG(text)` : Pour remplir le widget de console.
-    - `TASK_DONE(node_id, success)` : Pour mettre à jour les barres de progression.
+## 🛠️ 1. Nettoyage de l'écran (ZfsPoolScreen.py)
+- **Suppression radicale** : Enlever tous les imports `subprocess` et la logique de manipulation de chaînes de caractères pour les commandes ZFS.
+- **Simplification** : L'écran ne doit plus que collecter les données du formulaire (nom du pool, disques sélectionnés, options).
 
-## 🛠️ 2. Intégration de la Capture Sudo
-- Le Scheduler doit être capable de mettre l'exécution en "Pause" si le signal `NEED_AUTH` est émis.
-- Une fois que le Bridge reçoit le pass via le `SudoModal`, il le transmet au Scheduler qui "Reprend" l'exécution en injectant le pass dans le pipe.
+## 🛠️ 2. Émission de l'Intention
+- Remplacer l'ancien code d'exécution par :
+  `self.bridge.emit("EXECUTE_INTENT", {"id": "ZFS_POOL_CREATE", "params": data})`
 
-## 🛠️ 3. Modèle de Refactoring d'un Écran (ex: Partitionnement)
-- **AVANT** : 150 lignes de code gérant `fdisk`, `parted`, les erreurs et les droits root.
-- **APRÈS** : 
-    1. Récupérer les inputs utilisateur.
-    2. Envoyer une intention unique : `self.bridge.emit("EXECUTE", {"id": "PARTITION_DISK", "data": {...}})`
-    3. Attendre le signal `TASK_DONE` pour passer à l'écran suivant.
+## 🛠️ 3. Gestion du Feedback (Real-time Logs)
+- Connecter le widget de log de l'écran au signal `TASK_LOG` émis par le Bridge.
+- L'utilisateur doit voir le texte défiler pendant que le Scheduler travaille dans la cage.
 
-## 🛠️ 4. Nettoyage de Printemps
-- Parcourir les 23 écrans.
-- **Action Radicale** : Supprimer tout `import subprocess`, `import os`, `import shutil`.
-- Si un écran a besoin de faire une action sur le système, il **doit** passer par une intention définie dans `intents.ini`.
+## 🛠️ 4. Test de Sécurité
+- Tenter de créer un pool sur un disque déjà utilisé ou protégé.
+- Vérifier que le **Security Hook** du Resolver renvoie une erreur propre sans même que le Scheduler ne tente l'action.

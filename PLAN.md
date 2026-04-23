@@ -1,21 +1,19 @@
 # PLAN.md — fsdeploy
 
-> **Concept** : Orchestration Contextuelle & Sécurisée.
-> **État** : Moteurs de calcul et d'exécution OK. Passage à l'unification de l'UI.
+> **Focus** : Migration de l'UI vers le système d'Intentions.
+> **État** : Moteurs de calcul/exécution OK. Découplage de l'UI en cours.
 
 ---
 
-## 🏗️ Phase 1 & 2 : Fondations & Moteurs (TERMINÉ ✅)
+## 🏗️ Phase 1 & 2 : Fondations (TERMINÉ ✅)
 - [x] **Infrastructure** : Cage, Venv, Resolver, Scheduler.
-- [x] **Runtime Engine** : Injector, Multi-Runner, Cage Lifecycle.
+- [x] **Runner** : Multi-tunnel (Standard/Sudo/Chroot) avec injection.
 
-## ⚙️ Phase 3 : Le Grand Nettoyage de l'UI (EN COURS 🚀)
-- [ ] **Bridge Finalization** : Router les événements de statut (logs, progression) vers les widgets.
-- [ ] **SudoModal Integration** : Branchement final du secret vers le pipe stdin du Runner.
-- [ ] **UI Purge (The 23 Screens)** : 
-    - Remplacer les 23 occurrences de logique système par des `emit("INTENT")`.
-    - Supprimer définitivement les imports `os` et `subprocess` des fichiers de vue.
+## ⚙️ Phase 3 : Migration des 23 Écrans (EN COURS 🚀)
+- [ ] **Bridge Finalization** : Assurer le streaming des logs du Scheduler vers les écrans.
+- [ ] **Sudo Agent** : Branchement de la modale de capture sur le flux d'exécution.
+- [ ] **UI Refactor** : Purge systématique des `import subprocess` et `import os`.
 
-## 🔒 Phase 4 : Audit & Livraison (À VENIR)
-- [ ] **Stress Test** : Vérifier la robustesse du `umount` lors d'un crash forcé dans la cage.
-- [ ] **Documentation** : Générer le catalogue des `intents.ini`.
+## 🔒 Phase 4 : Stress Test & Livraison
+- [ ] **Crash Test** : Vérifier que le `umount` lazy se déclenche bien sur interruption brutale.
+- [ ] **Intent Documentation** : Finaliser le catalogue exhaustif dans `intents.ini`.
