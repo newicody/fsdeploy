@@ -408,8 +408,13 @@ class FsDeployApp(App):
         )
 
     def action_quit(self) -> None:
-        """Quitter proprement."""
-        self.exit(return_code=0)
+        """Quitter proprement : demande l'arrêt au scheduler puis quitte."""
+        self.notify("Arrêt demandé. Fermeture des processus...", severity="warning", timeout=3)
+        if self.bridge:
+            # Émettre un événement d'arrêt (priorité haute)
+            self.bridge.emit("scheduler.shutdown", priority=-100)
+        # Laisser un court délai pour que le scheduler nettoie
+        self.set_timer(1.5, lambda: self.exit(return_code=0))
 
     # ── Utilitaires pour les ecrans ───────────────────────────────────────────
 
