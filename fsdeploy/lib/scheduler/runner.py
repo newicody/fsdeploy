@@ -240,6 +240,9 @@ class TaskRunner:
                 "exit_code": -1,
                 "command": command
             }
+        finally:
+            # Nettoyage supplémentaire : démonter les API kernel si montées
+            self._unmount_chroot_apis()
     
     def _run_sudo_chroot(
         self,
@@ -268,6 +271,22 @@ class TaskRunner:
                 "command": command
             }
     
+    def _unmount_chroot_apis(self):
+        """Démonte les API kernel de la cage."""
+        # Cette méthode est une copie de celle de MultiModeRunner
+        # pour garantir le nettoyage dans TaskRunner.
+        for mount_point in reversed(self._mount_points):
+            try:
+                subprocess.run(
+                    ["umount", "-l", mount_point],
+                    check=False,
+                    capture_output=True
+                )
+                logger.debug(f"Démonté {mount_point}")
+            except Exception as e:
+                logger.warning(f"Échec du démontage de {mount_point}: {e}")
+        self._mount_points.clear()
+
     def _stream_output(
         self,
         process: subprocess.Popen,

@@ -103,6 +103,7 @@ class SchedulerBridge:
             self._event_bus.subscribe("task.start", self._on_task_start)
             self._event_bus.subscribe("task.log", self._on_task_log)
             self._event_bus.subscribe("task.done", self._on_task_done)
+            self._event_bus.subscribe("task.progress", self._on_task_progress)
             self._event_bus.subscribe("auth.sudo_request", self._on_sudo_request)
             
         self._tickets: dict[str, Ticket] = {}
@@ -186,6 +187,23 @@ class SchedulerBridge:
             self.emit_log(f"Tâche échouée: {node_id}", level="error", ticket_id=data.get('ticket_id'))
             self.emit_task_status(node_id=node_id, status="failed", progress=1.0, message="Échec")
 
+    def _on_task_progress(self, data):
+        node_id = data.get('node_id')
+        progress = data.get('progress', 0.0)
+        message = data.get('message', '')
+        self.emit_task_status(
+            node_id=node_id,
+            status="running",
+            progress=progress,
+            message=message
+        )
+        self.emit_log(
+            f"Progression {node_id}: {int(progress*100)}%",
+            stream="stdout",
+            ticket_id=data.get('ticket_id'),
+            level="info"
+        )
+
     def _on_sudo_request(self, data):
         # Le scheduler demande un mot de passe
         section_id = data.get('section_id', 'unknown')
@@ -193,24 +211,30 @@ class SchedulerBridge:
         ticket_id = data.get('ticket_id')  # Le ticket du scheduler qui attend le mot de passe
 
         def handle_password(password: str | None) -> None:
-            if password:
-                # Émettre la réponse vers le scheduler
-                self.submit_event(
-                    "auth.sudo_response",
-                    password=password,
-                    original_ticket=ticket_id,
-                    section_id=section_id,
-                    success=True,
-                )
-            else:
-                # Annulation
-                self.submit_event(
-                    "auth.sudo_response",
-                    password=None,
-                    original_ticket=ticket_id,
-                    section_id=section_id,
-                    success=False,
-                )
+            try:
+                if password:
+                    # Émettre la réponse vers le scheduler
+                    self.submit_event(
+                        "auth.sudo_response",
+                        password=password,
+                        original_ticket=ticket_id,
+                        section_id=section_id,
+                        success=True,
+                    )
+                else:
+                    # Annulation
+                    self.submit_event(
+                        "auth.sudo_response",
+                        password=None,
+                        original_ticket=ticket_id,
+                        section_id=section_id,
+                        success=False,
+                    )
+            finally:
+                # Brûler le mot de passe immédiatement après envoi
+                password = None
+                if 'password' in locals():
+                    del password
 
         if self._app is not None:
             self._app.request_sudo_password(
