@@ -1,19 +1,19 @@
 # PLAN.md — fsdeploy
 
-> **Focus** : Migration de l'UI vers le système d'Intentions.
-> **État** : Moteurs de calcul/exécution OK. Découplage de l'UI en cours.
+> **Concept** : Framework de Déploiement Data-Driven.
+> **État** : Core (Graph/Scheduler/Cage) OK. Phase de raccordement UI.
 
 ---
 
-## 🏗️ Phase 1 & 2 : Fondations (TERMINÉ ✅)
-- [x] **Infrastructure** : Cage, Venv, Resolver, Scheduler.
-- [x] **Runner** : Multi-tunnel (Standard/Sudo/Chroot) avec injection.
+## 🏗️ Phase 1 & 2 : L'Infrastructure (TERMINÉ ✅)
+- [x] **Système** : Cage chroot, Venv isolé.
+- [x] **Moteur** : Resolver (DAG), Multi-Tunnel Scheduler, Runtime Injector.
 
-## ⚙️ Phase 3 : Migration des 23 Écrans (EN COURS 🚀)
-- [ ] **Bridge Finalization** : Assurer le streaming des logs du Scheduler vers les écrans.
-- [ ] **Sudo Agent** : Branchement de la modale de capture sur le flux d'exécution.
-- [ ] **UI Refactor** : Purge systématique des `import subprocess` et `import os`.
+## ⚙️ Phase 3 : Raccordement & Nettoyage (EN COURS 🚀)
+- [ ] **Real-time Bridge** : Connecter le flux `stdout` du Scheduler vers les widgets `RichLog` de Textual.
+- [ ] **Sudo Agent Flow** : Finaliser la boucle `Scheduler -> Need Pass -> Bridge -> UI -> Scheduler`.
+- [ ] **UI Migration** : Transformer les écrans système en simples émetteurs d'Intentions.
 
-## 🔒 Phase 4 : Stress Test & Livraison
-- [ ] **Crash Test** : Vérifier que le `umount` lazy se déclenche bien sur interruption brutale.
-- [ ] **Intent Documentation** : Finaliser le catalogue exhaustif dans `intents.ini`.
+## 🔒 Phase 4 : Validation Industrielle
+- [ ] **Atomic Audit** : Prouver qu'un crash UI pendant un `chroot` ne laisse aucun montage `/dev` actif.
+- [ ] **Security Matrix** : Tester les limites du Hook face à des entrées malveillantes.
