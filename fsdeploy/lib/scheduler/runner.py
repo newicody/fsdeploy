@@ -86,7 +86,7 @@ class TaskRunner:
         
         Args:
             config: Configuration pour l'injection
-            bridge: Bridge pour les requêtes sudo
+            bridge: Bridge pour les requêtes sudo et le streaming des logs
             cage_path: Chemin vers la cage chroot
             sudo_password: Mot de passe sudo (optionnel)
             on_output: Callback pour le streaming des logs
@@ -109,7 +109,8 @@ class TaskRunner:
         log_callback: Optional[Callable[[str, str], None]] = None,
         sudo_password: Optional[str] = None,
         cwd: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None
+        env: Optional[Dict[str, str]] = None,
+        ticket_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Exécute une tâche avec les paramètres donnés.
@@ -124,6 +125,7 @@ class TaskRunner:
             sudo_password: Mot de passe sudo (si mode SUDO)
             cwd: Répertoire de travail
             env: Variables d'environnement
+            ticket_id: ID du ticket associé pour le streaming des logs
             
         Returns:
             Dictionnaire avec résultats
@@ -151,20 +153,20 @@ class TaskRunner:
         if mode == ExecutionMode.CHROOT:
             target_path = chroot_path or self.cage_path
             return self._run_chroot(
-                injected_cmd, target_path, timeout, log_callback, cwd, env
+                injected_cmd, target_path, timeout, log_callback, cwd, env, ticket_id
             )
         elif mode == ExecutionMode.SUDO:
             return self._run_sudo(
-                injected_cmd, sudo_password, timeout, log_callback, cwd, env
+                injected_cmd, sudo_password, timeout, log_callback, cwd, env, ticket_id
             )
         elif mode == ExecutionMode.SUDO_CHROOT:
             target_path = chroot_path or self.cage_path
             return self._run_sudo_chroot(
-                injected_cmd, target_path, sudo_password, timeout, log_callback, cwd, env
+                injected_cmd, target_path, sudo_password, timeout, log_callback, cwd, env, ticket_id
             )
         else:
             return self._run_standard(
-                injected_cmd, timeout, log_callback, cwd, env
+                injected_cmd, timeout, log_callback, cwd, env, ticket_id
             )
     
     def _run_standard(
@@ -173,11 +175,12 @@ class TaskRunner:
         timeout: Optional[float],
         log_callback: Optional[Callable],
         cwd: Optional[str],
-        env: Optional[Dict[str, str]]
+        env: Optional[Dict[str, str]],
+        ticket_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Exécution standard."""
         return self._execute_command(
-            command, timeout, log_callback, cwd, env
+            command, timeout, log_callback, cwd, env, ticket_id=ticket_id
         )
     
     def _run_sudo(
@@ -187,7 +190,8 @@ class TaskRunner:
         timeout: Optional[float],
         log_callback: Optional[Callable],
         cwd: Optional[str],
-        env: Optional[Dict[str, str]]
+        env: Optional[Dict[str, str]],
+        ticket_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Exécution avec sudo."""
         sudo_cmd = f"sudo -S {command}"
@@ -195,12 +199,13 @@ class TaskRunner:
         if password:
             # Exécution avec mot de passe fourni
             return self._execute_command(
-                sudo_cmd, timeout, log_callback, cwd, env, stdin_input=password + "\n"
+                sudo_cmd, timeout, log_callback, cwd, env, 
+                stdin_input=password + "\n", ticket_id=ticket_id
             )
         elif self.bridge:
             # Demande interactive via bridge
             return self._execute_with_sudo_request(
-                command, timeout, log_callback, cwd, env
+                command, timeout, log_callback, cwd, env, ticket_id
             )
         else:
             return {
@@ -217,7 +222,8 @@ class TaskRunner:
         timeout: Optional[float],
         log_callback: Optional[Callable],
         cwd: Optional[str],
-        env: Optional[Dict[str, str]]
+        env: Optional[Dict[str, str]],
+        ticket_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Exécution en chroot."""
         try:
@@ -225,7 +231,7 @@ class TaskRunner:
                 # Préparer la commande chroot
                 chroot_cmd = f"chroot {chroot_path} {command}"
                 return self._execute_command(
-                    chroot_cmd, timeout, log_callback, cwd, env
+                    chroot_cmd, timeout, log_callback, cwd, env, ticket_id=ticket_id
                 )
         except Exception as e:
             return {
@@ -243,14 +249,16 @@ class TaskRunner:
         timeout: Optional[float],
         log_callback: Optional[Callable],
         cwd: Optional[str],
-        env: Optional[Dict[str, str]]
+        env: Optional[Dict[str, str]],
+        ticket_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Exécution sudo + chroot."""
         sudo_chroot_cmd = f"sudo -S chroot {chroot_path} {command}"
         
         if password:
             return self._execute_command(
-                sudo_chroot_cmd, timeout, log_callback, cwd, env, stdin_input=password + "\n"
+                sudo_chroot_cmd, timeout, log_callback, cwd, env, 
+                stdin_input=password + "\n", ticket_id=ticket_id
             )
         else:
             return {
@@ -264,7 +272,8 @@ class TaskRunner:
         self,
         process: subprocess.Popen,
         stdout_callback: Optional[Callable[[str], None]] = None,
-        stderr_callback: Optional[Callable[[str], None]] = None
+        stderr_callback: Optional[Callable[[str], None]] = None,
+        ticket_id: Optional[str] = None
     ) -> None:
         """
         Stream la sortie d'un processus en temps réel.
@@ -291,9 +300,11 @@ class TaskRunner:
                 if pipe == process.stdout:
                     callback = stdout_callback
                     buffer_key = process.stdout
+                    stream_type = "stdout"
                 else:
                     callback = stderr_callback
                     buffer_key = process.stderr
+                    stream_type = "stderr"
                 
                 try:
                     chunk = pipe.read(4096)
@@ -306,12 +317,21 @@ class TaskRunner:
                         while '\n' in buffers[buffer_key]:
                             line, buffers[buffer_key] = buffers[buffer_key].split('\n', 1)
                             
+                            # Émettre le log via le bridge si disponible
+                            if self.bridge and hasattr(self.bridge, 'emit_log'):
+                                level = "error" if stream_type == "stderr" else "info"
+                                self.bridge.emit_log(
+                                    log=line,
+                                    stream=stream_type,
+                                    ticket_id=ticket_id,
+                                    level=level
+                                )
+                            
                             if callback:
                                 callback(line)
                             
                             if self.on_output:
-                                source = "stdout" if pipe == process.stdout else "stderr"
-                                self.on_output(source, line)
+                                self.on_output(stream_type, line)
                 except (IOError, OSError):
                     pass
         
@@ -320,14 +340,25 @@ class TaskRunner:
             if pipe and buffer:
                 for line in buffer.split('\n'):
                     if line:
+                        stream_type = "stdout" if pipe == process.stdout else "stderr"
+                        
+                        # Émettre le log via le bridge si disponible
+                        if self.bridge and hasattr(self.bridge, 'emit_log'):
+                            level = "error" if stream_type == "stderr" else "info"
+                            self.bridge.emit_log(
+                                log=line,
+                                stream=stream_type,
+                                ticket_id=ticket_id,
+                                level=level
+                            )
+                        
                         if pipe == process.stdout and stdout_callback:
                             stdout_callback(line)
                         elif pipe == process.stderr and stderr_callback:
                             stderr_callback(line)
                         
                         if self.on_output:
-                            source = "stdout" if pipe == process.stdout else "stderr"
-                            self.on_output(source, line)
+                            self.on_output(stream_type, line)
     
     def _execute_command(
         self,
@@ -336,7 +367,8 @@ class TaskRunner:
         log_callback: Optional[Callable],
         cwd: Optional[str],
         env: Optional[Dict[str, str]],
-        stdin_input: Optional[str] = None
+        stdin_input: Optional[str] = None,
+        ticket_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Exécute une commande avec subprocess.
@@ -385,7 +417,7 @@ class TaskRunner:
             def collect_stderr(line: str) -> None:
                 stderr_lines.append(line)
             
-            self._stream_output(proc, collect_stdout, collect_stderr)
+            self._stream_output(proc, collect_stdout, collect_stderr, ticket_id)
             
             # Attendre la fin du processus
             returncode = proc.wait(timeout=timeout)
@@ -432,17 +464,22 @@ class TaskRunner:
         timeout: Optional[float],
         log_callback: Optional[Callable],
         cwd: Optional[str],
-        env: Optional[Dict[str, str]]
+        env: Optional[Dict[str, str]],
+        ticket_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Exécute une commande avec demande sudo interactive via bridge.
         """
         # Émettre un événement de demande sudo
-        ticket_id = self.bridge.emit(
-            "auth.sudo_request",
-            command=command,
-            timeout=timeout
-        )
+        if self.bridge and hasattr(self.bridge, 'emit'):
+            sudo_ticket_id = self.bridge.emit(
+                "auth.sudo_request",
+                command=command,
+                timeout=timeout,
+                original_ticket=ticket_id
+            )
+        else:
+            sudo_ticket_id = None
         
         # Pour l'instant, retourner un résultat d'attente
         return {
@@ -450,7 +487,7 @@ class TaskRunner:
             "error": "Sudo requis - en attente d'authentification",
             "exit_code": -2,
             "command": command,
-            "ticket_id": ticket_id,
+            "ticket_id": sudo_ticket_id,
             "pending_auth": True
         }
     
@@ -797,7 +834,7 @@ def get_runner(
     
     Args:
         config: Configuration pour l'injecteur
-        bridge: Bridge pour sudo
+        bridge: Bridge pour le streaming des logs et sudo
         cage_path: Chemin vers la cage
         sudo_password: Mot de passe sudo
         

@@ -95,6 +95,19 @@ class SchedulerBridge:
         except ImportError:
             return None
 
+    def emit_log(self, log: str, stream: str = "stdout", 
+                 ticket_id: str = None, level: str = "info") -> None:
+        """
+        Émet un log vers l'UI via le bus d'événements.
+        """
+        if self._event_bus is not None:
+            self._event_bus.emit("task.log", {
+                "text": log,
+                "stream": stream,
+                "ticket_id": ticket_id,
+                "level": level
+            })
+    
     def _log_ticket(self, action: str, ticket: Ticket, **extra):
         """Émet un événement de log pour un ticket."""
         if self._event_bus is None:
@@ -565,6 +578,33 @@ class SchedulerBridge:
             self._history.clear()
             return count
 
+    def cancel_task(self, process_id: str, ticket_id: str = None) -> bool:
+        """
+        Annule une tâche en cours d'exécution.
+        
+        Args:
+            process_id: ID du processus à annuler
+            ticket_id: Ticket associé (optionnel)
+            
+        Returns:
+            True si la tâche a été annulée
+        """
+        # Obtenir le runner
+        runner = self._get_runner()
+        if runner is None:
+            return False
+        
+        # Appeler la méthode kill_process du runner
+        return runner.kill_process(process_id)
+    
+    def _get_runner(self):
+        """Retourne l'instance du TaskRunner."""
+        try:
+            from .runner import get_runner
+            return get_runner()
+        except ImportError:
+            return None
+    
     def get_all_tickets(self) -> List[Ticket]:
         """
         Retourne tous les tickets, quel que soit leur statut.

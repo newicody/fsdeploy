@@ -652,6 +652,25 @@ class SchedulerBridge:
             self._history.clear()
             return count
 
+    def cancel_task(self, process_id: str, ticket_id: str = None) -> bool:
+        """
+        Annule une tâche en cours d'exécution.
+        
+        Args:
+            process_id: ID du processus à annuler
+            ticket_id: Ticket associé (optionnel)
+            
+        Returns:
+            True si la demande d'annulation a été envoyée
+        """
+        if self._global_bridge is not None:
+            # Délégation au bridge global
+            return self._global_bridge.cancel_task(process_id, ticket_id)
+        
+        # Émettre un événement d'annulation
+        self.emit("task.cancel", process_id=process_id, ticket_id=ticket_id)
+        return True
+    
     def get_all_tickets(self) -> list[Ticket]:
         """
         Retourne tous les tickets, quel que soit leur statut.
