@@ -1,21 +1,22 @@
-# add.md — 39.5 : Finalisation du Sudo Agent et Feedback
+# add.md — 39.6 : Feedback Temps Réel et Sudo Agent
 
 ## 🛠️ 1. L'Agent Sudo (lib/bridge.py)
-- Mettre en place le protocole de suspension :
-    - Le Scheduler détecte un besoin de privilèges -> Émet `SIGNAL_NEED_AUTH`.
-    - Le Bridge intercepte, affiche la modale, et met le Worker en pause.
-    - Une fois le pass saisi, injection dans le pipe `stdin` du processus de la Cage.
-- **Sécurité** : Purge immédiate de la variable `password` après injection.
+- **Protocole de Secret** : 
+    - Le Scheduler émet `SIGNAL_NEED_PASSWORD` quand il bloque sur un tunnel Sudo.
+    - Le Bridge met le Worker en pause et déclenche la `SudoModal` sur l'UI.
+    - Une fois validé, le secret est injecté dans le pipe `stdin` du processus de la Cage.
+- **Sécurité** : La variable `password` doit être écrasée/supprimée (`del`) immédiatement après injection.
 
-## 🛠️ 2. Streamer de Logs Interactif
-- Connecter les sorties du Scheduler au signal `TASK_LOG` du Bridge.
-- Chaque écran doit posséder un widget `RichLog` abonné au canal.
-- **Styling** : Utiliser le formatage Rich pour distinguer les étapes (ex: "Partitioning..." en gras, "OK" en vert).
+## 🛠️ 2. Streamer de Logs (UI Feedback)
+- Mapper les sorties `stdout` et `stderr` de la cage vers le signal `TASK_LOG` du Bridge.
+- Chaque écran d'action doit intégrer un widget `RichLog`.
+- **Règle d'Or** : Les logs doivent être asynchrones. L'UI doit rester réactive pendant que les commandes lourdes (formatage, extraction) tournent.
 
-## 🛠️ 3. Gestionnaire de Signaux Global
-- Dans `main.py`, implémenter une capture de sortie (SIGINT/SIGTERM).
-- **Action** : Forcer le déclenchement de `Scheduler.cleanup_cage()` pour éviter de laisser des montages bind actifs sur le système Live après la fermeture.
+## 🛠️ 3. Gestionnaire de Sortie (Failsafe)
+- Dans `main.py`, implémenter une capture globale des signaux de sortie.
+- **Action** : Si l'utilisateur quitte brusquement l'app, le Bridge doit forcer `Scheduler.cleanup_cage()` pour démonter les points de montage bind sur l'hôte.
 
-## 🛠️ 4. Audit Final "Zéro-OS"
-- Vérifier les derniers écrans : aucune trace de `os.mkdir`, `shutil` ou `pathlib.write`. 
-- Tout passage à l'acte doit être une intention `WRITE_FILE` ou `EXEC_CMD` transitant par la Cage.
+## 🛠️ 4. Audit de Validation "Zero-OS"
+- Vérifier les derniers fichiers dans `lib/ui/screens/`.
+- S'assurer qu'aucun import `os` ou `subprocess` n'a survécu.
+- Tout ce qui touche au disque ou au réseau doit être une intention transmise au Bridge.

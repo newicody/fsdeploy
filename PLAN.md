@@ -1,17 +1,17 @@
 # PLAN.md — fsdeploy
 
-> **Philosophie** : Architecture Headless & Orchestration Déclarative.
-> **État** : Core & Migration UI terminés. Phase de synchronisation finale.
+> **Philosophie** : Architecture Découplée & Exécution en Cage.
+> **État** : Migration UI Terminée. Core Stable.
 
 ---
 
-## 🏗️ Phase 1, 2 & 3 : Infrastructure & Découplage (TERMINÉ ✅)
+## 🏗️ Phase 1, 2 & 3 : Infrastructure & Migration (TERMINÉ ✅)
 
-## ⚙️ Phase 4 : Synchronisation & Flux (EN COURS 🚀)
-- [ ] **Sudo Agent Asynchrone** : Finaliser l'injection du secret via `SudoModal` vers le `stdin` du Runner.
-- [ ] **Real-time Log Streamer** : Mapper les flux `stdout/stderr` de la cage vers les widgets RichLog.
-- [ ] **State Reporting** : Afficher l'état d'avancement global du graphe (DAG) sur l'UI.
+## ⚙️ Phase 4 : Raccordement Final (EN COURS 🚀)
+- [ ] **Sudo Agent Loop** : Finaliser l'injection du secret asynchrone via le Bridge.
+- [ ] **RichLog Mapping** : Streamer le flux `stdout` du Scheduler vers les widgets UI.
+- [ ] **Signal Management** : Garantir le `cleanup_cage` sur tous les signaux d'arrêt (SIGINT/SIGTERM).
 
-## 🔒 Phase 5 : Livraison "Bare Metal"
-- [ ] **Audit de Résilience** : Vérifier que le `cleanup_cage` se déclenche sur un `SIGTERM` système.
-- [ ] **Final Mapping** : S'assurer que chaque intention ZFS et EOS est 100% fonctionnelle dans le graphe.
+## 🔒 Phase 5 : Livraison & Audit
+- [ ] **Validation ZFS/EOS** : Test de bout en bout du graphe d'intentions.
+- [ ] **Zero-Scorie Check** : Vérifier l'absence totale de montages résiduels après sortie.
