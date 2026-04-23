@@ -54,6 +54,7 @@ class KernelScreen(Screen):
             yield Button("Installer", variant="primary", id="btn-install")
             yield Button("Compiler", variant="warning", id="btn-compile")
         yield RichLog(id="command-log", highlight=True, auto_scroll=True, markup=True)
+        yield RichLog(id="log-stream", highlight=True, markup=True, max_lines=1000, auto_scroll=True)
         with Horizontal(id="action-buttons"):
             yield Button("Rafraichir", id="btn-refresh")
             yield Button(f"Activer {ARROW}", variant="primary", id="btn-switch")

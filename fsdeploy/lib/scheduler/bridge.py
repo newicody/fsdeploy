@@ -621,12 +621,9 @@ class SchedulerBridge:
         if not request_id:
             return
         
-        try:
-            runner = self._get_runner()
-            if runner and hasattr(runner, 'handle_sudo_response'):
-                runner.handle_sudo_response(request_id, password if success else None)
-        except Exception:
-            pass
+        runner = self._get_runner()
+        if runner and hasattr(runner, 'handle_sudo_response'):
+            runner.handle_sudo_response(request_id, password if success else None)
     
     def get_all_tickets(self) -> List[Ticket]:
         """

@@ -513,7 +513,12 @@ class FsDeployApp(App):
             log_widget = screen.query_one("#log-stream", RichLog)
             self.bridge.register_log_widget(screen_name, "stdout", log_widget)
         except Exception:
-            pass  # L'écran n'a pas de #log-stream
+            # Fallback : essayer #command-log
+            try:
+                log_widget = screen.query_one("#command-log", RichLog)
+                self.bridge.register_log_widget(screen_name, "stdout", log_widget)
+            except Exception:
+                pass
     
     def _emergency_shutdown(self) -> None:
         """Arrêt d'urgence : ordonne au scheduler de fermer proprement."""

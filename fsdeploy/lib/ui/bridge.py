@@ -288,7 +288,6 @@ class SchedulerBridge:
         def handle_password(password: str | None) -> None:
             try:
                 if password:
-                    # Émettre la réponse vers le scheduler
                     self.submit_event(
                         "auth.sudo_response",
                         password=password,
@@ -297,7 +296,6 @@ class SchedulerBridge:
                         success=True,
                     )
                 else:
-                    # Annulation
                     self.submit_event(
                         "auth.sudo_response",
                         password=None,
@@ -306,16 +304,17 @@ class SchedulerBridge:
                         success=False,
                     )
             finally:
-                # Nettoyage immédiat et forcé du mot de passe dans la mémoire
                 _clear_password(password)
                 password = None
-                # Forcer le garbage collector pour libérer la mémoire
                 import gc
                 gc.collect()
-                # Supprimer la variable locale si elle existe encore
                 if 'password' in locals():
                     del password
 
+        self.emit_log(
+            f"Demande sudo pour {section_id} ({action})",
+            level="warning",
+        )
         if self._app is not None:
             self._app.request_sudo_password(
                 section_id=section_id,

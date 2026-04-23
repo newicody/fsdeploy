@@ -101,7 +101,7 @@ class TaskRunner:
         self.event_bus = event_bus
         self._active_processes = {}
         self._lock = threading.RLock()
-        self._sudo_futures: Dict[str, tuple[threading.Event, Optional[str]]] = {}
+        self._sudo_requests: dict[str, tuple[threading.Event, Optional[str]]] = {}
         self._sudo_lock = threading.Lock()
         
     def run_task(
@@ -513,28 +513,65 @@ class TaskRunner:
     ) -> Dict[str, Any]:
         """
         Exécute une commande avec demande sudo interactive via bridge.
+        Attend la réponse de l'utilisateur (mot de passe) de manière synchrone.
         """
-        # Émettre un événement de demande sudo
+        import uuid
+        request_id = f"sudoreq-{uuid.uuid4().hex[:8]}"
+        event = threading.Event()
+        with self._sudo_lock:
+            self._sudo_requests[request_id] = (event, [None])
+
+        # Émettre la demande sudo vers l'UI
         if self.bridge and hasattr(self.bridge, 'emit'):
-            sudo_ticket_id = self.bridge.emit(
+            self.bridge.emit(
                 "auth.sudo_request",
-                command=command,
-                timeout=timeout,
-                original_ticket=ticket_id
+                section_id="unknown",
+                action=command[:50],
+                ticket_id=request_id
             )
-        else:
-            sudo_ticket_id = None
-        
-        # Pour l'instant, retourner un résultat d'attente
-        return {
-            "success": False,
-            "error": "Sudo requis - en attente d'authentification",
-            "exit_code": -2,
-            "command": command,
-            "ticket_id": sudo_ticket_id,
-            "pending_auth": True
-        }
+
+        # Attendre la réponse (60 secondes max)
+        if not event.wait(timeout=60):
+            with self._sudo_lock:
+                self._sudo_requests.pop(request_id, None)
+            return {
+                "success": False,
+                "error": "Demande sudo timeout ou annulée",
+                "exit_code": -1,
+                "command": command
+            }
+
+        # Récupérer le mot de passe
+        with self._sudo_lock:
+            _, container = self._sudo_requests.pop(request_id)
+            password = container[0]
+
+        if not password:
+            return {
+                "success": False,
+                "error": "Sudo annulé par l'utilisateur",
+                "exit_code": -1,
+                "command": command
+            }
+
+        # Exécuter la commande avec le mot de passe
+        sudo_cmd = f"sudo -S {command}"
+        return self._execute_command(
+            sudo_cmd, timeout, log_callback, cwd, env,
+            stdin_input=password + "\n", ticket_id=ticket_id
+        )
     
+    def handle_sudo_response(self, request_id: str, password: Optional[str]) -> None:
+        """
+        Appelée par le bridge lorsque l'utilisateur a fourni (ou annulé) le mot de passe.
+        """
+        with self._sudo_lock:
+            future = self._sudo_requests.pop(request_id, None)
+        if future:
+            event, container = future
+            container[0] = password
+            event.set()
+
     def kill_process(self, process_id: str) -> bool:
         """
         Tue un processus en cours d'exécution.
