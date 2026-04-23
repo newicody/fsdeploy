@@ -98,6 +98,8 @@ class TaskRunner:
         self.on_output = on_output
         self._active_processes = {}
         self._lock = threading.RLock()
+        self._sudo_futures: Dict[str, tuple[threading.Event, Optional[str]]] = {}
+        self._sudo_lock = threading.Lock()
         
     def run_task(
         self,
@@ -528,6 +530,7 @@ class TaskRunner:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
+                self._unmount_chroot_apis()
                 return True
         return False
     
@@ -625,6 +628,8 @@ class MultiModeRunner:
                 command=task_node.command,
                 mode="chroot" if task_node.chroot else "sudo" if task_node.root else "standard"
             )
+        finally:
+            self._unmount_chroot_apis()
     
     def _execute_standard(self, task_node: TaskNode, command: str, start_time: float) -> ExecutionResult:
         """Exécution standard sans privilèges."""
@@ -800,8 +805,35 @@ class MultiModeRunner:
         self._mount_points.clear()
     
     def _request_sudo_password(self, task_node: TaskNode) -> Optional[str]:
-        """Demande un mot de passe sudo via le bridge."""
-        return None
+        """
+        Émet une demande de mot de passe sudo via le bridge et attend la réponse.
+        Retourne le mot de passe ou None si annulation/timeout.
+        """
+        if not self.bridge:
+            return None
+        
+        import uuid
+        request_id = f"sudoreq-{uuid.uuid4().hex[:8]}"
+        
+        event = threading.Event()
+        password_container = [None]
+        
+        with self._sudo_lock:
+            self._sudo_futures[request_id] = (event, password_container)
+        
+        self.bridge.emit("auth.sudo_request",
+                         section_id=task_node.security_context.get("section_id", "unknown"),
+                         action=task_node.command[:50] if task_node.command else "Action protégée",
+                         ticket_id=request_id)
+        
+        if not event.wait(timeout=60):
+            with self._sudo_lock:
+                self._sudo_futures.pop(request_id, None)
+            return None
+        
+        password = password_container[0]
+        password_container[0] = None
+        return password
     
     def _build_command(self, task_node: TaskNode, command: str = None) -> List[str]:
         """Construit la liste de commande à partir du TaskNode."""

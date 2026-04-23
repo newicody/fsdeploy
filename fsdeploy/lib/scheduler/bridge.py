@@ -73,6 +73,10 @@ class SchedulerBridge:
         # Configuration et runner
         self._config = None
         self._config_runner = None
+        
+        # S'abonner à la réponse sudo
+        if self._event_bus is not None:
+            self._event_bus.subscribe("auth.sudo_response", self._on_sudo_response)
 
     def _get_scheduler(self):
         if self._scheduler is None:
@@ -604,6 +608,25 @@ class SchedulerBridge:
             return get_runner()
         except ImportError:
             return None
+    
+    def _on_sudo_response(self, data: dict):
+        """
+        Reçoit la réponse de l'UI après une demande sudo.
+        Transfère le mot de passe au runner concerné.
+        """
+        request_id = data.get("original_ticket")
+        password = data.get("password")
+        success = data.get("success", False)
+        
+        if not request_id:
+            return
+        
+        try:
+            runner = self._get_runner()
+            if runner and hasattr(runner, 'handle_sudo_response'):
+                runner.handle_sudo_response(request_id, password if success else None)
+        except Exception:
+            pass
     
     def get_all_tickets(self) -> List[Ticket]:
         """
