@@ -835,6 +835,17 @@ class MultiModeRunner:
         password_container[0] = None
         return password
     
+    def handle_sudo_response(self, request_id: str, password: Optional[str]) -> None:
+        """
+        Appelée par le bridge quand l'utilisateur a fourni (ou annulé) le mot de passe.
+        """
+        with self._sudo_lock:
+            future = self._sudo_futures.pop(request_id, None)
+        if future:
+            event, container = future
+            container[0] = password
+            event.set()
+    
     def _build_command(self, task_node: TaskNode, command: str = None) -> List[str]:
         """Construit la liste de commande à partir du TaskNode."""
         if command is None:
