@@ -1,21 +1,20 @@
-# add.md — 39.2 : Finalisation du Sudo Agent et Log Sync
+# add.md — 39.3 : Finalisation du Sudo Agent et Log Sync
 
 ## 🛠️ 1. L'Agent Sudo (lib/bridge.py)
-- Finaliser le mécanisme `NEED_AUTH` :
-    - Le Scheduler bloque sur le pipe `stdin`.
-    - Le Bridge affiche la modale `SudoModal`.
-    - Le secret est injecté et **immédiatement détruit de la mémoire** (`del secret`).
+- Mettre en place la "File d'attente bloquante" :
+    - Si le Scheduler émet `NEED_AUTH`, il suspend le nœud courant du graphe.
+    - Le Bridge affiche le `SudoModal` par-dessus l'écran actif.
+    - Une fois le pass reçu, le Bridge l'injecte dans le `stdin` du Scheduler et détruit la variable en RAM.
 
-## 🛠️ 2. Routage sémantique des Logs
-- Chaque intention dans `intents.ini` peut désormais avoir un tag de priorité.
-- Le Bridge doit filtrer les logs :
-    - `DEBUG` -> Uniquement dans le fichier log global.
-    - `INFO/ERROR` -> Streamé en direct vers le widget `RichLog` de l'écran actif.
+## 🛠️ 2. Streamer de Logs Interactif
+- Connecter les pipes `stdout` et `stderr` de la Cage au signal `TASK_LOG`.
+- **UI** : Chaque écran doit avoir un widget `RichLog` qui défile en temps réel pendant l'action.
+- **Sémantique** : Coloriser les sorties (Rouge pour les erreurs système, Vert pour le succès des tâches).
 
-## 🛠️ 3. Gestion des Signaux (Failsafe)
-- Implémenter un gestionnaire de sortie propre dans `main.py`.
-- Si l'utilisateur quitte brusquement (Alt+F4 ou Ctrl+C), le Bridge doit envoyer un `SIGTERM` au Scheduler pour qu'il exécute sa routine de démontage (`cleanup_cage`).
+## 🛠️ 3. Gestion de l'Interruption (Failsafe)
+- S'assurer que si l'utilisateur appuie sur "Quitter", le Bridge envoie un signal `SIGTERM` au processus de la Cage.
+- Vérifier que la routine `cleanup_cage` s'exécute bien dans ce scénario pour libérer les ressources système.
 
-## 🛠️ 4. Validation des 23 Screens (Audit Final)
-- Vérification qu'aucun écran ne contient de logique "cachée".
-- Chaque bouton "Action" doit obligatoirement passer par `self.bridge.emit("EXECUTE_INTENT", ...)`.
+## 🛠️ 4. Audit final des 23 Screens
+- Vérification "Zéro-OS" : aucun écran ne doit importer `subprocess`.
+- Remplacer les dernières manipulations de fichiers (`os.mkdir`, etc.) par des Intentions dédiées.

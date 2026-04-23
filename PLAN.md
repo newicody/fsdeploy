@@ -1,17 +1,17 @@
 # PLAN.md — fsdeploy
 
-> **Statut** : Migration de l'UI complétée à 90%. Moteur d'exécution validé.
-> **Objectif** : Fiabilisation du flux de données et gestion des imprévus.
+> **Statut** : Architecture découplée et validée.
+> **Objectif** : Zéro "freeze" de l'UI et résilience aux erreurs critiques.
 
 ---
 
-## 🏗️ Phase 1, 2 & 3 : Infrastructure & Découplage (TERMINÉ ✅)
+## 🏗️ Phase 1, 2 & 3 : Infrastructure & Migration (TERMINÉ ✅)
 
-## ⚙️ Phase 4 : Synchronisation & Flux (EN COURS 🚀)
-- [ ] **Sudo Agent Loop** : Finaliser le raccordement de l'injection du secret `stdin` via le Bridge.
-- [ ] **RichLog Routing** : S'assurer que chaque écran d'action affiche son flux de logs spécifique sans mélange.
-- [ ] **State Persistence** : Sauvegarder l'état du graphe pour pouvoir reprendre après une erreur mineure.
+## ⚙️ Phase 4 : Résilience & Flux (EN COURS 🚀)
+- [ ] **Sudo Agent Loop** : Finaliser l'injection asynchrone du secret (UI -> Bridge -> Scheduler).
+- [ ] **RichLog Routing** : Mapper proprement chaque sortie de commande (`stdout/stderr`) vers les widgets de logs.
+- [ ] **Exception Handling** : Capturer les erreurs de la Cage pour les transformer en modales explicatives dans l'UI.
 
-## 🔒 Phase 5 : Finalisation "Bare Metal"
-- [ ] **Audit de Nettoyage** : Vérification finale des points de montage après sortie de Cage.
-- [ ] **Final Intent Catalog** : Compléter les commandes pour EOS et les configurations réseau.
+## 🔒 Phase 5 : Pré-Livraison
+- [ ] **Cleanup Audit** : Vérifier la robustesse des démontages lors d'un `SIGKILL`.
+- [ ] **Intent Catalog** : Finaliser les définitions ZFS et EOS dans `intents.ini`.
