@@ -1,17 +1,17 @@
 # PLAN.md — fsdeploy
 
-> **Statut** : Architecture découplée Validée.
-> **Objectif** : Synchronisation finale des flux et résilience Bare-Metal.
+> **Philosophie** : Architecture Headless & Orchestration Déclarative.
+> **État** : Core & Migration UI terminés. Phase de synchronisation finale.
 
 ---
 
-## 🏗️ Phase 1 à 3 : Architecture & Migration (TERMINÉ ✅)
+## 🏗️ Phase 1, 2 & 3 : Infrastructure & Découplage (TERMINÉ ✅)
 
-## ⚙️ Phase 4 : Flux de Données et Sudo Agent (PRIORITÉ 🚀)
-- [ ] **Sudo Agent Asynchrone** : Finaliser le raccordement `SudoModal` -> Bridge -> Scheduler.
-- [ ] **RichLog Mapping** : Streamer les sorties `stdout` par intention pour un affichage granulaire.
-- [ ] **Error Propagation** : Transformer les codes de sortie Shell en messages d'erreur UI lisibles.
+## ⚙️ Phase 4 : Synchronisation & Flux (EN COURS 🚀)
+- [ ] **Sudo Agent Asynchrone** : Finaliser l'injection du secret via `SudoModal` vers le `stdin` du Runner.
+- [ ] **Real-time Log Streamer** : Mapper les flux `stdout/stderr` de la cage vers les widgets RichLog.
+- [ ] **State Reporting** : Afficher l'état d'avancement global du graphe (DAG) sur l'UI.
 
-## 🔒 Phase 5 : Livraison et "Zero-Scories"
-- [ ] **Final Cleanup Check** : Audit des montages résiduels après fermeture brutale.
-- [ ] **EOS/ZFS Final Intent Mapping** : Valider les commandes complexes dans `intents.ini`.
+## 🔒 Phase 5 : Livraison "Bare Metal"
+- [ ] **Audit de Résilience** : Vérifier que le `cleanup_cage` se déclenche sur un `SIGTERM` système.
+- [ ] **Final Mapping** : S'assurer que chaque intention ZFS et EOS est 100% fonctionnelle dans le graphe.
