@@ -79,7 +79,8 @@ class TaskRunner:
         bridge=None,
         cage_path: str = "/opt/fsdeploy/bootstrap",
         sudo_password: Optional[str] = None,
-        on_output: Optional[Callable[[str, str], None]] = None
+        on_output: Optional[Callable[[str, str], None]] = None,
+        event_bus=None,         # <-- ajout
     ):
         """
         Initialise le runner.
@@ -90,12 +91,14 @@ class TaskRunner:
             cage_path: Chemin vers la cage chroot
             sudo_password: Mot de passe sudo (optionnel)
             on_output: Callback pour le streaming des logs
+            event_bus: Bus d'événements global pour émettre les logs
         """
         self.config = config or {}
         self.bridge = bridge
         self.cage_path = cage_path
         self.sudo_password = sudo_password
         self.on_output = on_output
+        self.event_bus = event_bus
         self._active_processes = {}
         self._lock = threading.RLock()
         self._sudo_futures: Dict[str, tuple[threading.Event, Optional[str]]] = {}
@@ -348,6 +351,16 @@ class TaskRunner:
                                     level=level
                                 )
                             
+                            # Émettre également sur le bus d'événements global
+                            if self.event_bus and hasattr(self.event_bus, 'emit'):
+                                self.event_bus.emit("task.log", {
+                                    "text": line,
+                                    "stream": stream_type,
+                                    "ticket_id": ticket_id,
+                                    "level": level,
+                                    "target_screen": None
+                                })
+                            
                             if callback:
                                 callback(line)
                             
@@ -372,6 +385,16 @@ class TaskRunner:
                                 ticket_id=ticket_id,
                                 level=level
                             )
+                        
+                        # Émettre également sur le bus d'événements global
+                        if self.event_bus and hasattr(self.event_bus, 'emit'):
+                            self.event_bus.emit("task.log", {
+                                "text": line,
+                                "stream": stream_type,
+                                "ticket_id": ticket_id,
+                                "level": level,
+                                "target_screen": None
+                            })
                         
                         if pipe == process.stdout and stdout_callback:
                             stdout_callback(line)
@@ -905,10 +928,14 @@ def get_runner(
     """
     global _runner_instance
     if _runner_instance is None:
+        # Récupérer l'event_bus global
+        from fsdeploy.lib.bus.event_bus import MessageBus
+        event_bus = MessageBus.global_instance()
         _runner_instance = TaskRunner(
             config=config,
             bridge=bridge,
             cage_path=cage_path,
-            sudo_password=sudo_password
+            sudo_password=sudo_password,
+            event_bus=event_bus
         )
     return _runner_instance

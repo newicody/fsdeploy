@@ -27,6 +27,7 @@ from typing import Any, Optional, Callable
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.screen import Screen
 from textual.widgets import Header, Footer, RichLog
 from .events import LogMessage, TaskStatusMessage
 
@@ -249,8 +250,8 @@ class FsDeployApp(App):
                 sched = Scheduler.global_instance()
                 if hasattr(sched, 'cleanup_cage'):
                     sched.cleanup_cage()
-            except Exception:
-                pass
+            except Exception as e:
+                self.log(f"Erreur lors du cleanup_cage: {e}")
 
         signal.signal(signal.SIGINT, _handle_termination)
         signal.signal(signal.SIGTERM, _handle_termination)
@@ -502,6 +503,19 @@ class FsDeployApp(App):
             self.log(f"Impossible d'importer les modules nécessaires: {e}")
         except Exception as e:
             self.log(f"Erreur lors de la connexion du scheduler: {e}")
+    
+    def on_screen_mounted(self, event: Screen.Mounted) -> None:
+        """
+        Enregistre automatiquement le widget RichLog des écrans d'action
+        dans le bridge pour le routage sémantique des logs.
+        """
+        screen = event.screen
+        screen_name = screen.name or "unknown"
+        try:
+            log_widget = screen.query_one("#log-stream", RichLog)
+            self.bridge.register_log_widget(screen_name, "stdout", log_widget)
+        except Exception:
+            pass  # L'écran n'a pas de #log-stream
     
     def _emergency_shutdown(self) -> None:
         """Arrêt d'urgence : ordonne au scheduler de fermer proprement."""

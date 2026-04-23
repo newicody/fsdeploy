@@ -500,11 +500,25 @@ class SchedulerBridge:
     def get_scheduler_state(self) -> dict:
         """
         Retourne l'état actuel du scheduler (events, intents, tasks, etc.).
-        Délègue au bridge global.
+        Utilise d'abord le runtime réel si disponible, sinon fallback demo.
         """
         if self._global_bridge is not None:
             return self._global_bridge.get_scheduler_state()
-        # Données de démo
+        if self._runtime and hasattr(self._runtime, 'state'):
+            state = self._runtime.state
+            return {
+                "event_count": len(state.get('events', [])),
+                "intent_count": len(state.get('intents', [])),
+                "task_count": len(state.get('tasks', [])),
+                "completed_count": sum(
+                    1 for t in state.get('tasks', []) if t.get('status') == 'completed'
+                ),
+                "active_task": next(
+                    (t for t in state.get('tasks', []) if t.get('status') == 'running'), None
+                ),
+                "recent_tasks": list(state.get('tasks', []))[-10:]
+            }
+        # Fallback demo (comme avant)
         import random
         return {
             "event_count": random.randint(0, 5),
