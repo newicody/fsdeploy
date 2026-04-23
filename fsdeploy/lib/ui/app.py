@@ -278,6 +278,10 @@ class FsDeployApp(App):
             "history": ("fsdeploy.lib.ui.screens.history", "HistoryScreen"),
             "monitoring": ("fsdeploy.lib.ui.screens.monitoring", "MonitoringScreen"),
             "zfs_pool": ("fsdeploy.lib.ui.screens.zfs_pool", "ZfsPoolScreen"),
+            "disk": ("fsdeploy.lib.ui.screens.disk", "DiskScreen"),
+            "partition": ("fsdeploy.lib.ui.screens.partition", "PartitionScreen"),
+            "format": ("fsdeploy.lib.ui.screens.format", "FormatScreen"),
+            "zfs": ("fsdeploy.lib.ui.screens.zfs", "ZfsScreen"),
         }
 
         for name, (module_path, class_name) in screen_map.items():
@@ -491,6 +495,34 @@ class FsDeployApp(App):
             self.bridge.emit("scheduler.shutdown", priority=-100)
         # Quitte après un court délai pour laisser le temps au scheduler
         self.set_timer(2.0, lambda: self.exit(return_code=130))
+
+    def on_log_message(self, event: LogMessage) -> None:
+        """Reçoit les logs du bridge et les affiche dans le RichLog."""
+        try:
+            log_widget = self.query_one("#log-term", RichLog)
+            style = {
+                "error": "red",
+                "warning": "yellow",
+                "success": "green",
+                "info": "white",
+            }.get(event.level, "white")
+            log_widget.write(f"[{style}]{event.log}[/]")
+        except Exception:
+            pass
+
+    def on_task_status_message(self, event: TaskStatusMessage) -> None:
+        """Reçoit les mises à jour de statut des tâches."""
+        try:
+            log_widget = self.query_one("#log-term", RichLog)
+            icon = {
+                "started": "▶️",
+                "running": "🔄",
+                "completed": "✅",
+                "failed": "❌",
+            }.get(event.status, "❓")
+            log_widget.write(f"{icon} {event.node_id}: {event.message}")
+        except Exception:
+            pass
 
     def log(self, message: str) -> None:
         """Méthode utilitaire pour journaliser."""
