@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 import uuid
 from uuid import uuid4
+from textual.widgets import RichLog
 from fsdeploy.lib.log import get_logger
 
 try:
@@ -112,7 +113,7 @@ class SchedulerBridge:
         self._app = None   # <-- AJOUTER CETTE LIGNE
         
         # Dictionnaire pour le routage sémantique des logs
-        self._log_widgets: dict[str, 'RichLog'] = {}  # clé = "screen_name:stream"
+        self._log_widgets: dict[str, RichLog] = {}  # clé = "screen_name:stream"
         
         # Obtenir l'instance globale du bridge du scheduler
         if GlobalSchedulerBridge is not None:
@@ -128,7 +129,7 @@ class SchedulerBridge:
         if self.__class__._instance is None:
             self.__class__._instance = self
             
-    def register_log_widget(self, screen_name: str, stream: str, widget: 'RichLog') -> None:
+    def register_log_widget(self, screen_name: str, stream: str, widget: RichLog) -> None:
         """
         Enregistre un widget RichLog pour un écran et un flux donné.
         Appelé par chaque écran d'action lors de on_mount().
