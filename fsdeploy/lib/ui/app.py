@@ -237,6 +237,14 @@ class FsDeployApp(App):
         if self.store:
             self.set_interval(self._refresh_interval, self._refresh_from_store)
 
+        # Gestion du signal SIGINT (Ctrl+C)
+        import signal
+
+        def _handle_sigint(signum, frame):
+            self.call_from_thread(self._emergency_shutdown)
+
+        signal.signal(signal.SIGINT, _handle_sigint)
+
     def _register_screens(self) -> None:
         """
         Enregistre les ecrans disponibles.
@@ -476,6 +484,14 @@ class FsDeployApp(App):
         except Exception as e:
             self.log(f"Erreur lors de la connexion du scheduler: {e}")
     
+    def _emergency_shutdown(self) -> None:
+        """Arrêt d'urgence : ordonne au scheduler de fermer proprement."""
+        self.notify("Arrêt demandé (Ctrl+C). Fermeture en cours...", severity="warning", timeout=3)
+        if self.bridge:
+            self.bridge.emit("scheduler.shutdown", priority=-100)
+        # Quitte après un court délai pour laisser le temps au scheduler
+        self.set_timer(2.0, lambda: self.exit(return_code=130))
+
     def log(self, message: str) -> None:
         """Méthode utilitaire pour journaliser."""
         import logging
