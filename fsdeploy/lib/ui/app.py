@@ -238,13 +238,22 @@ class FsDeployApp(App):
         if self.store:
             self.set_interval(self._refresh_interval, self._refresh_from_store)
 
-        # Gestion du signal SIGINT (Ctrl+C)
+        # Gestion du signal SIGINT et SIGTERM
         import signal
 
-        def _handle_sigint(signum, frame):
+        def _handle_termination(signum, frame):
             self.call_from_thread(self._emergency_shutdown)
+            # Forcer le nettoyage des montages de la cage
+            try:
+                from fsdeploy.lib.scheduler.core.scheduler import Scheduler
+                sched = Scheduler.global_instance()
+                if hasattr(sched, 'cleanup_cage'):
+                    sched.cleanup_cage()
+            except Exception:
+                pass
 
-        signal.signal(signal.SIGINT, _handle_sigint)
+        signal.signal(signal.SIGINT, _handle_termination)
+        signal.signal(signal.SIGTERM, _handle_termination)
 
     def _register_screens(self) -> None:
         """

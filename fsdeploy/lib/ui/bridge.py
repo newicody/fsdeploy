@@ -213,22 +213,25 @@ class SchedulerBridge:
 
     def _on_task_log(self, data):
         text = data.get('text', '')
-        self.emit_log(text, stream="stdout", ticket_id=data.get('ticket_id'))
+        target = data.get('target_screen')  # écran cible (optionnel)
+        self.emit_log(text, stream="stdout", ticket_id=data.get('ticket_id'), target_screen=target)
 
     def _on_task_done(self, data):
         node_id = data.get('node_id')
         success = data.get('success', False)
+        target = data.get('target_screen')
         if success:
-            self.emit_log(f"Tâche terminée avec succès: {node_id}", level="success", ticket_id=data.get('ticket_id'))
+            self.emit_log(f"Tâche terminée avec succès: {node_id}", level="success", ticket_id=data.get('ticket_id'), target_screen=target)
             self.emit_task_status(node_id=node_id, status="completed", progress=1.0, message="Terminé avec succès")
         else:
-            self.emit_log(f"Tâche échouée: {node_id}", level="error", ticket_id=data.get('ticket_id'))
+            self.emit_log(f"Tâche échouée: {node_id}", level="error", ticket_id=data.get('ticket_id'), target_screen=target)
             self.emit_task_status(node_id=node_id, status="failed", progress=1.0, message="Échec")
 
     def _on_task_progress(self, data):
         node_id = data.get('node_id')
         progress = data.get('progress', 0.0)
         message = data.get('message', '')
+        target = data.get('target_screen')
         self.emit_task_status(
             node_id=node_id,
             status="running",
@@ -239,7 +242,8 @@ class SchedulerBridge:
             f"Progression {node_id}: {int(progress*100)}%",
             stream="stdout",
             ticket_id=data.get('ticket_id'),
-            level="info"
+            level="info",
+            target_screen=target
         )
 
     def _on_sudo_request(self, data):
@@ -737,6 +741,18 @@ class SchedulerBridge:
         self.emit("task.cancel", process_id=process_id, ticket_id=ticket_id)
         return True
     
+    def request_sudo(self, section_id: str, action: str = "", ticket_id: str = None) -> None:
+        """Émet une demande de mot de passe sudo vers l'UI."""
+        payload = {
+            "section_id": section_id,
+            "action": action,
+            "ticket_id": ticket_id
+        }
+        if self._event_bus is not None:
+            self._event_bus.emit("auth.sudo_request", payload)
+        else:
+            self.emit_log(f"Demande sudo pour {section_id}", level="warning")
+
     def get_all_tickets(self) -> list[Ticket]:
         """
         Retourne tous les tickets, quel que soit leur statut.
