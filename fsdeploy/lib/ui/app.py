@@ -27,7 +27,8 @@ from typing import Any, Optional, Callable
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.widgets import Header, Footer
+from textual.widgets import Header, Footer, RichLog
+from .events import LogMessage, TaskStatusMessage
 
 # ── Detection framebuffer ─────────────────────────────────────────────────────
 IS_FRAMEBUFFER = os.environ.get("TERM") == "linux"
