@@ -71,6 +71,12 @@ class KernelScreen(Screen):
         # Enregistrer le widget de log
         log_widget = self.query_one("#command-log", RichLog)
         self.bridge.register_log_widget("kernel", "stdout", log_widget)
+        # Enregistrer également le widget #log-stream s'il existe
+        try:
+            log_stream = self.query_one("#log-stream", RichLog)
+            self.bridge.register_log_widget("kernel", "stdout", log_stream)
+        except Exception:
+            pass
         self._refresh_list()
 
     def _refresh_list(self):

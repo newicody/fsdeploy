@@ -105,6 +105,12 @@ class DetectionScreen(Screen):
         # Enregistrer le widget de log
         log_widget = self.query_one("#command-log", RichLog)
         self.bridge.register_log_widget("detection", "stdout", log_widget)
+        # Enregistrer également le widget #log-stream s'il existe
+        try:
+            log_stream = self.query_one("#log-stream", RichLog)
+            self.bridge.register_log_widget("detection", "stdout", log_stream)
+        except Exception:
+            pass
         self.action_run_detection()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

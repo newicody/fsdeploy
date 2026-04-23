@@ -212,6 +212,16 @@ class InitramfsScreen(Screen):
             except Exception:
                 pass
 
+        # Enregistrer le widget de log
+        log_widget = self.query_one("#command-log", Log)
+        self.bridge.register_log_widget("initramfs", "stdout", log_widget)
+        # Enregistrer également le widget #log-stream s'il existe
+        try:
+            log_stream = self.query_one("#log-stream", RichLog)
+            self.bridge.register_log_widget("initramfs", "stdout", log_stream)
+        except Exception:
+            pass
+
         self._refresh_list()
 
     # ── Rafraichir ──────────────────────────────────────────────────

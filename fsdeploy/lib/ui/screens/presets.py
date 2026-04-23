@@ -70,6 +70,15 @@ class PresetsScreen(Screen):
     def on_mount(self):
         from fsdeploy.lib.ui.bridge import SchedulerBridge
         self.bridge = SchedulerBridge.default()
+        # Enregistrer le widget de log
+        log_widget = self.query_one("#command-log", Log)
+        self.bridge.register_log_widget("presets", "stdout", log_widget)
+        # Enregistrer également le widget #log-stream s'il existe
+        try:
+            log_stream = self.query_one("#log-stream", RichLog)
+            self.bridge.register_log_widget("presets", "stdout", log_stream)
+        except Exception:
+            pass
         self._load_presets()
 
     # Textual 8.x: RowHighlighted au lieu de RowSelected

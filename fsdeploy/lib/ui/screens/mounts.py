@@ -116,6 +116,12 @@ class MountsScreen(Screen):
         # Enregistrer le widget de log
         log_widget = self.query_one("#command-log", RichLog)
         self.bridge.register_log_widget("mounts", "stdout", log_widget)
+        # Enregistrer également le widget #log-stream s'il existe
+        try:
+            log_stream = self.query_one("#log-stream", RichLog)
+            self.bridge.register_log_widget("mounts", "stdout", log_stream)
+        except Exception:
+            pass
         self._load_from_config()
         self._refresh_table()
 
