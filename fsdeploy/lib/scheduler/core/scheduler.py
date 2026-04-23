@@ -459,11 +459,18 @@ class Scheduler:
             self._notify_sudo_auth_success()
     
     def _forward_sudo_request(self, event) -> None:
-        """Transmet la demande sudo au bridge UI."""
-        # Cette méthode sera implémentée quand nous aurons le bridge UI
-        # Pour l'instant, log seulement
-        import logging
-        logging.info(f"Demande sudo reçue: {event.params}")
+        """Transmet la demande sudo au bridge UI via le event_bus."""
+        try:
+            from fsdeploy.lib.bus.event_bus import MessageBus
+            bus = MessageBus.global_instance()
+            bus.emit("auth.sudo_request", {
+                "section_id": event.params.get("section_id", "unknown"),
+                "action": event.params.get("action", "Action protégée"),
+                "ticket_id": event.params.get("ticket_id"),
+            })
+        except Exception as e:
+            import logging
+            logging.error(f"Impossible de transmettre la demande sudo: {e}")
     
     def _notify_sudo_auth_success(self) -> None:
         """Notifie que l'authentification sudo a réussi."""

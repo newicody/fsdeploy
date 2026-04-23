@@ -246,10 +246,8 @@ class FsDeployApp(App):
             self.call_from_thread(self._emergency_shutdown)
             # Forcer le nettoyage des montages de la cage
             try:
-                from fsdeploy.lib.scheduler.core.scheduler import Scheduler
-                sched = Scheduler.global_instance()
-                if hasattr(sched, 'cleanup_cage'):
-                    sched.cleanup_cage()
+                from fsdeploy.lib.scheduler.cage import cleanup_cage as cage_cleanup
+                cage_cleanup()
             except Exception as e:
                 self.log(f"Erreur lors du cleanup_cage: {e}")
 
@@ -522,6 +520,12 @@ class FsDeployApp(App):
         self.notify("Arrêt demandé (Ctrl+C). Fermeture en cours...", severity="warning", timeout=3)
         if self.bridge:
             self.bridge.emit("scheduler.shutdown", priority=-100)
+        # Nettoyage supplémentaire
+        try:
+            from fsdeploy.lib.scheduler.cage import cleanup_cage as cage_cleanup
+            cage_cleanup()
+        except Exception:
+            pass
         # Quitte après un court délai pour laisser le temps au scheduler
         self.set_timer(2.0, lambda: self.exit(return_code=130))
 

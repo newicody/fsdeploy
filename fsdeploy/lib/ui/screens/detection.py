@@ -17,7 +17,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, Container
 from textual.screen import Screen
 from textual.widgets import (
-    Button, DataTable, Label, Log, ProgressBar, Rule, Static,
+    Button, DataTable, Label, ProgressBar, Rule, Static, RichLog,
 )
 
 from fsdeploy.lib.ui.bridge import SchedulerBridge
@@ -84,7 +84,7 @@ class DetectionScreen(Screen):
             with Vertical(id="partitions-section"):
                 yield Label("Partitions", classes="table-title")
                 yield DataTable(id="partitions-table")
-        yield Log(id="command-log", highlight=True, auto_scroll=True)
+        yield RichLog(id="command-log", highlight=True, auto_scroll=True, markup=True)
         with Horizontal(id="action-buttons"):
             yield Button("Scanner", variant="primary", id="btn-scan")
             yield Button(f"Valider {ARROW}", variant="success",
@@ -102,6 +102,9 @@ class DetectionScreen(Screen):
         pp = self.query_one("#partitions-table", DataTable)
         pp.add_columns("Device", "Type", "Label", "UUID", "Taille", "Role")
         pp.cursor_type = "row"
+        # Enregistrer le widget de log
+        log_widget = self.query_one("#command-log", RichLog)
+        self.bridge.register_log_widget("detection", "stdout", log_widget)
         self.action_run_detection()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -345,7 +348,7 @@ class DetectionScreen(Screen):
         except Exception: pass
 
     def _log(self, msg):
-        try: self.query_one("#command-log", Log).write_line(msg)
+        try: self.query_one("#command-log", RichLog).write(msg)
         except Exception: pass
     def _safe_log(self, msg):
         try: self.app.call_from_thread(self._log, msg)

@@ -129,9 +129,10 @@ class SchedulerBridge:
         if self.__class__._instance is None:
             self.__class__._instance = self
             
-    def register_log_widget(self, screen_name: str, stream: str, widget: RichLog) -> None:
+    def register_log_widget(self, screen_name: str, stream: str, widget) -> None:
         """
-        Enregistre un widget RichLog pour un écran et un flux donné.
+        Enregistre un widget pour un écran et un flux donné.
+        Accepte RichLog ou Log (tout objet avec une méthode write()).
         Appelé par chaque écran d'action lors de on_mount().
         """
         key = f"{screen_name}:{stream}"

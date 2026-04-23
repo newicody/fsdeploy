@@ -8,7 +8,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, DataTable, Input, Label, Log, Rule, Static
+from textual.widgets import Button, DataTable, Input, Label, Rule, Static, RichLog
 
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK, CROSS, WARN, ARROW, STAR = (("[OK]","[!!]","[??]","->","*") if IS_FB else ("✅","❌","⚠️","→","★"))
@@ -53,7 +53,7 @@ class KernelScreen(Screen):
             yield Input(placeholder="/chemin/vers/linux-image.deb ou /usr/src/linux", id="source-input")
             yield Button("Installer", variant="primary", id="btn-install")
             yield Button("Compiler", variant="warning", id="btn-compile")
-        yield Log(id="command-log", highlight=True, auto_scroll=True)
+        yield RichLog(id="command-log", highlight=True, auto_scroll=True, markup=True)
         with Horizontal(id="action-buttons"):
             yield Button("Rafraichir", id="btn-refresh")
             yield Button(f"Activer {ARROW}", variant="primary", id="btn-switch")
@@ -68,6 +68,9 @@ class KernelScreen(Screen):
         if cfg:
             bp = cfg.get("pool.boot_mount","")
             if bp: self._boot_path = bp
+        # Enregistrer le widget de log
+        log_widget = self.query_one("#command-log", RichLog)
+        self.bridge.register_log_widget("kernel", "stdout", log_widget)
         self._refresh_list()
 
     def _refresh_list(self):
@@ -150,7 +153,7 @@ class KernelScreen(Screen):
         if hasattr(self.app,"navigate_next"): self.app.navigate_next()
     def update_from_snapshot(self, s): pass
     def _log(self,m):
-        try: self.query_one("#command-log",Log).write_line(m)
+        try: self.query_one("#command-log",RichLog).write(m)
         except: pass
     def _slog(self,m):
         try: self.app.call_from_thread(self._log,m)

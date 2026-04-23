@@ -20,7 +20,7 @@ from fsdeploy.lib.ui.events import LogMessage
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, DataTable, Input, Label, Log, Rule, Static
+from textual.widgets import Button, DataTable, Input, Label, Rule, Static, RichLog
 
 IS_FB = os.environ.get("TERM") == "linux"
 CHECK = "[OK]" if IS_FB else "\u2705"
@@ -93,7 +93,7 @@ class MountsScreen(Screen):
             yield Label("Mountpoint :")
             yield Input(placeholder="/mnt/...", id="edit-input")
             yield Button("Appliquer", variant="primary", id="btn-apply-edit")
-        yield Log(id="command-log", highlight=True, auto_scroll=True)
+        yield RichLog(id="command-log", highlight=True, auto_scroll=True, markup=True)
         with Horizontal(id="action-buttons"):
             yield Button("Tout monter", variant="primary", id="btn-mount-all")
             yield Button("Verifier", variant="default", id="btn-verify")
@@ -113,6 +113,9 @@ class MountsScreen(Screen):
         dt.add_columns("", "Dataset", "Role", "Montage actuel",
                         "Montage propose", "Monte", "Verifie")
         dt.cursor_type = "row"
+        # Enregistrer le widget de log
+        log_widget = self.query_one("#command-log", RichLog)
+        self.bridge.register_log_widget("mounts", "stdout", log_widget)
         self._load_from_config()
         self._refresh_table()
 
@@ -439,7 +442,7 @@ class MountsScreen(Screen):
 
     def _log(self, m):
         try:
-            self.query_one("#command-log", Log).write_line(m)
+            self.query_one("#command-log", RichLog).write(m)
         except Exception:
             pass
 
