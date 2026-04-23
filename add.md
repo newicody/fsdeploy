@@ -1,19 +1,27 @@
-# add.md — 38.6 : Feedback Temps Réel et Nettoyage de l'UI
+# add.md — 39.1 : Audit et Standardisation "Zéro-OS"
 
-## 🛠️ 1. Streamer de Logs (lib/bridge.py)
-- Connecter le Bridge aux sorties du Scheduler.
-- **Signal `TASK_LOG`** : Chaque ligne générée dans la cage doit être émise vers l'écran actif.
-- **Signal `TASK_PROGRESS`** : Mettre à jour les barres de progression en fonction du nombre de nœuds terminés dans le graphe.
+## 🛠️ 1. Audit des Screens (Scan de Pollution)
+- Parcourir `lib/ui/screens/*.py` et lister les occurrences de :
+    - `subprocess.run/Popen`, `os.system`, `shutil.copy/move`, `pathlib.Path.write_text`.
+- **Action** : Créer un tableau de correspondance pour le `intents.ini`.
 
-## 🛠️ 2. Agent de Sécurité (lib/ui/modals/sudo.py)
-- Finaliser le `SudoModal` pour qu'il soit appelé par le Bridge uniquement quand le Scheduler rencontre une tâche `privileged=true`.
-- S'assurer que le secret est "brûlé" (effacé de la mémoire) dès que le pipe `stdin` du processus est fermé.
+## 🛠️ 2. Standardisation du Data Flow (Consommation)
+- Remplacer les scans de hardware dans les écrans par :
+  `data = self.bridge.get_detected("disks")` ou `networks`.
+- **Objectif** : Les écrans ne doivent plus "chercher", ils doivent "demander" au Bridge.
 
-## 🛠️ 3. Application de la Politique "Zero-OS"
-- Prendre l'un des 23 écrans (ex: `ZfsPoolScreen`) et supprimer :
-    - `import subprocess`, `import os`, `import shutil`.
-- Remplacer toute la logique par un appel d'intention :
-  `self.bridge.emit("EXECUTE_INTENT", {"id": "ZFS_CREATE", "params": {...}})`
+## 🛠️ 3. Refactoring Lot #1 : Écrans de Préparation (Action)
+- **Cible** : `DiskScreen`, `PartitionScreen`, `FormatScreen`, `ZfsScreen`.
+- **Structure** :
+    - Supprimer toute commande système.
+    - Émettre une intention : `self.bridge.execute(intent_id, params)`.
+    - S'abonner au canal de log du Bridge pour afficher la progression.
 
-## 🛠️ 4. Gestion du Nettoyage (Failsafe)
-- S'assurer que si l'utilisateur ferme l'application violemment, le signal `SIGTERM` est propagé à la cage et que le `cleanup_cage` (umount) est bien exécuté.
+## 🛠️ 4. Intégration du Status Widget
+- Injecter un composant `LogTerm` (basé sur RichLog) dans chaque écran d'exécution.
+- Le Bridge doit router le `stdout` du Scheduler directement vers ce composant.
+- **Résultat** : L'utilisateur voit ZFS ou MKFS travailler en direct sans gel de l'interface.
+
+## 🛠️ 5. Finalisation du Sudo Agent
+- Brancher le déclenchement du `SudoModal` lors du signal `NEED_AUTH` du Scheduler.
+- Garantir que le mot de passe est transmis au pipe `stdin` du processus de la Cage.
