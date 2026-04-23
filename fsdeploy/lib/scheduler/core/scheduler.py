@@ -132,6 +132,9 @@ class Scheduler:
         self._on_cycle_start: list = []
         self._on_cycle_end: list = []
         self._on_error: list = []
+        
+        # Carte ticket_id → process_id pour l'annulation
+        self._process_map: dict[str, str] = {}
 
     # ═════════════════════════════════════════════════════════════════
     # LIFECYCLE
@@ -225,6 +228,18 @@ class Scheduler:
             # à réveiller _process_waiting au prochain cycle — pas besoin
             # de les convertir en intents.
             if event.name in ("task.completed", "task.failed"):
+                continue
+            
+            # Gérer l'annulation de tâche
+            if event.name == "task.cancel":
+                process_id = event.params.get("process_id")
+                ticket_id = event.params.get("ticket_id")
+                if process_id:
+                    self.executor.cancel_process(process_id)
+                elif ticket_id:
+                    pid = self._process_map.get(ticket_id)
+                    if pid:
+                        self.executor.cancel_process(pid)
                 continue
 
             intents = self._event_to_intents(event)
@@ -342,7 +357,10 @@ class Scheduler:
             # Pour "default" : synchrone, retourne après fin
             # Pour "threaded" : retourne immédiatement
             try:
-                self.executor.execute(task, locks=locks)
+                executor_result = self.executor.execute(task, locks=locks)
+                # Enregistrer le process_id si présent
+                if isinstance(executor_result, dict) and "process_id" in executor_result:
+                    self._process_map[ticket_id] = executor_result["process_id"]
                 # Émettre un log de succès
                 self.emit_log(
                     f"Tâche exécutée avec succès: {task_name}",

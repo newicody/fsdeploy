@@ -465,6 +465,11 @@ class FsDeployApp(App):
                 self.log(f"Scheduler connecté au bridge global pour les logs")
             else:
                 self.log(f"Le scheduler n'a pas de méthode set_bridge")
+            
+            # Connecter le runner au bridge global pour le streaming des logs
+            from fsdeploy.lib.scheduler.runner import get_runner
+            runner = get_runner(bridge=global_bridge)
+            self.log(f"Runner connecté au bridge global")
                 
         except ImportError as e:
             self.log(f"Impossible d'importer les modules nécessaires: {e}")
