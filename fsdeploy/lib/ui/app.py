@@ -511,6 +511,12 @@ class FsDeployApp(App):
         except Exception:
             pass
 
+    # NOTE: Les écrans d'action (KernelScreen, MountsScreen, etc.) doivent
+    # enregistrer leur widget RichLog via bridge.register_log_widget() dans
+    # leur méthode on_mount(). Exemple :
+    #   self.app.bridge.register_log_widget("kernel", "stdout",
+    #       self.query_one("#log-stream"))
+
     def on_task_status_message(self, event: TaskStatusMessage) -> None:
         """Reçoit les mises à jour de statut des tâches."""
         try:

@@ -111,6 +111,9 @@ class SchedulerBridge:
         self._lock = threading.Lock()
         self._app = None   # <-- AJOUTER CETTE LIGNE
         
+        # Dictionnaire pour le routage sémantique des logs
+        self._log_widgets: dict[str, 'RichLog'] = {}  # clé = "screen_name:stream"
+        
         # Obtenir l'instance globale du bridge du scheduler
         if GlobalSchedulerBridge is not None:
             self._global_bridge = GlobalSchedulerBridge.default()
@@ -125,12 +128,46 @@ class SchedulerBridge:
         if self.__class__._instance is None:
             self.__class__._instance = self
             
+    def register_log_widget(self, screen_name: str, stream: str, widget: 'RichLog') -> None:
+        """
+        Enregistre un widget RichLog pour un écran et un flux donné.
+        Appelé par chaque écran d'action lors de on_mount().
+        """
+        key = f"{screen_name}:{stream}"
+        self._log_widgets[key] = widget
+
+    def _log_to_file(self, log: str, stream: str, level: str) -> None:
+        """Écrit un log DEBUG dans le fichier global (logging)."""
+        import logging
+        logging.debug(f"[{stream}] {log}")
+
     def emit_log(self, log: str, stream: str = "stdout", 
-                 ticket_id: str = None, level: str = "info") -> None:
+                 ticket_id: str = None, level: str = "info",
+                 target_screen: str = None) -> None:
         """
         Émet un log vers l'UI.
         À appeler par le scheduler lorsqu'une tâche produit une sortie.
+
+        Si target_screen est fourni, le log est écrit directement dans le
+        widget enregistré pour cet écran/stream (routage sémantique).
+        Les logs de niveau DEBUG sont redirigés vers le fichier log global
+        et ne sont pas affichés dans l'UI.
         """
+        # Les logs DEBUG ne sont pas affichés dans l'UI
+        if level == "debug":
+            self._log_to_file(log, stream, level)
+            return
+
+        # Routage sémantique vers un écran spécifique
+        if target_screen and self._app:
+            key = f"{target_screen}:{stream}"
+            widget = self._log_widgets.get(key)
+            if widget:
+                # Écrire directement dans le widget (thread-safe via call_from_thread)
+                self._app.call_from_thread(widget.write, f"[{level}]{log}[/]")
+                return
+
+        # Sinon, envoyer via event system (pour le widget global `#log-term`)
         if self._app and hasattr(self._app, 'post_message'):
             from .events import LogMessage
             self._app.post_message(
@@ -231,8 +268,12 @@ class SchedulerBridge:
                         success=False,
                     )
             finally:
-                # Brûler le mot de passe immédiatement après envoi
+                # Nettoyage immédiat et forcé du mot de passe dans la mémoire
                 password = None
+                # Forcer le garbage collector pour libérer la mémoire
+                import gc
+                gc.collect()
+                # Supprimer la variable locale si elle existe encore
                 if 'password' in locals():
                     del password
 
