@@ -169,6 +169,20 @@ class SchedulerBridge:
                 self._app.call_from_thread(widget.write, f"[{level}]{log}[/]")
                 return
 
+        # Si aucun target_screen n'est fourni, essayer de déduire l'écran actif
+        if not target_screen and self._app:
+            try:
+                current_screen = self._app.screen
+                if current_screen and hasattr(current_screen, 'name'):
+                    screen_name = current_screen.name
+                    key = f"{screen_name}:{stream}"
+                    widget = self._log_widgets.get(key)
+                    if widget:
+                        self._app.call_from_thread(widget.write, f"[{level}]{log}[/]")
+                        return
+            except Exception:
+                pass
+
         # Sinon, envoyer via event system (pour le widget global `#log-term`)
         if self._app and hasattr(self._app, 'post_message'):
             from .events import LogMessage
@@ -253,6 +267,24 @@ class SchedulerBridge:
         action = data.get('action', 'Action protégée')
         ticket_id = data.get('ticket_id')  # Le ticket du scheduler qui attend le mot de passe
 
+        def _clear_password(pwd: str | None) -> None:
+            """Écrase le mot de passe en mémoire et force la libération."""
+            if pwd is None:
+                return
+            try:
+                # Écraser la chaîne avec des zéros
+                import ctypes
+                length = len(pwd)
+                # Obtenir l'adresse mémoire de la chaîne (CPython interne)
+                buffer = ctypes.c_char_p(pwd)
+                ctypes.memset(buffer, 0, length)
+            except Exception:
+                pass
+            finally:
+                # Forcer le garbage collector
+                import gc
+                gc.collect()
+
         def handle_password(password: str | None) -> None:
             try:
                 if password:
@@ -275,6 +307,7 @@ class SchedulerBridge:
                     )
             finally:
                 # Nettoyage immédiat et forcé du mot de passe dans la mémoire
+                _clear_password(password)
                 password = None
                 # Forcer le garbage collector pour libérer la mémoire
                 import gc

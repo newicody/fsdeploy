@@ -520,10 +520,16 @@ class FsDeployApp(App):
         self.notify("Arrêt demandé (Ctrl+C). Fermeture en cours...", severity="warning", timeout=3)
         if self.bridge:
             self.bridge.emit("scheduler.shutdown", priority=-100)
-        # Nettoyage supplémentaire
+        # Nettoyage supplémentaire via le scheduler global
         try:
-            from fsdeploy.lib.scheduler.cage import cleanup_cage as cage_cleanup
-            cage_cleanup()
+            from fsdeploy.lib.scheduler.core.scheduler import Scheduler
+            scheduler = Scheduler.global_instance()
+            if hasattr(scheduler, 'cleanup_cage'):
+                scheduler.cleanup_cage()
+            else:
+                # Fallback direct
+                from fsdeploy.lib.scheduler.cage import cleanup_cage as cage_cleanup
+                cage_cleanup()
         except Exception:
             pass
         # Quitte après un court délai pour laisser le temps au scheduler
