@@ -269,6 +269,7 @@ class FsDeployApp(App):
             "error_log": ("fsdeploy.lib.ui.screens.error_log", "ErrorLogScreen"),
             "history": ("fsdeploy.lib.ui.screens.history", "HistoryScreen"),
             "monitoring": ("fsdeploy.lib.ui.screens.monitoring", "MonitoringScreen"),
+            "zfs_pool": ("fsdeploy.lib.ui.screens.zfs_pool", "ZfsPoolScreen"),
         }
 
         for name, (module_path, class_name) in screen_map.items():
@@ -424,12 +425,19 @@ class FsDeployApp(App):
         
         def handle_password(password: str) -> None:
             """Gère la réponse du modal."""
-            # S'assurer que le callback est appelé dans le thread UI
-            if callback:
-                if password:
-                    callback(password)
-                else:
-                    callback(None)
+            try:
+                # S'assurer que le callback est appelé dans le thread UI
+                if callback:
+                    if password:
+                        callback(password)
+                    else:
+                        callback(None)
+            finally:
+                # Brûler le mot de passe
+                password = None
+                # forcer la libération mémoire (hors garantie, mais utile)
+                import gc
+                gc.collect()
         
         # Afficher le modal de manière thread-safe
         self.call_from_thread(

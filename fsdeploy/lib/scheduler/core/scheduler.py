@@ -176,6 +176,25 @@ class Scheduler:
         """Arrête proprement la boucle."""
         self._running = False
         self._stop_event.set()
+        # Nettoyage de la cage et des processus
+        self._cleanup_all()
+
+    def _cleanup_all(self) -> None:
+        """Nettoie la cage chroot et termine les processus actifs."""
+        # Arrêter tous les processus du runner
+        try:
+            from fsdeploy.lib.scheduler.runner import get_runner
+            runner = get_runner()
+            for proc in runner.get_active_processes():
+                runner.kill_process(proc["process_id"])
+        except Exception:
+            pass
+        # Nettoyer les montages de la cage
+        try:
+            from fsdeploy.lib.scheduler.cage import cleanup_cage
+            cleanup_cage()
+        except Exception:
+            pass
 
     def run_once(self) -> None:
         """Exécute un seul cycle (utile pour les tests)."""
