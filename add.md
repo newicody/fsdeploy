@@ -1,27 +1,21 @@
-# add.md — 39.1 : Audit et Standardisation "Zéro-OS"
+# add.md — 39.2 : Finalisation du Sudo Agent et Log Sync
 
-## 🛠️ 1. Audit des Screens (Scan de Pollution)
-- Parcourir `lib/ui/screens/*.py` et lister les occurrences de :
-    - `subprocess.run/Popen`, `os.system`, `shutil.copy/move`, `pathlib.Path.write_text`.
-- **Action** : Créer un tableau de correspondance pour le `intents.ini`.
+## 🛠️ 1. L'Agent Sudo (lib/bridge.py)
+- Finaliser le mécanisme `NEED_AUTH` :
+    - Le Scheduler bloque sur le pipe `stdin`.
+    - Le Bridge affiche la modale `SudoModal`.
+    - Le secret est injecté et **immédiatement détruit de la mémoire** (`del secret`).
 
-## 🛠️ 2. Standardisation du Data Flow (Consommation)
-- Remplacer les scans de hardware dans les écrans par :
-  `data = self.bridge.get_detected("disks")` ou `networks`.
-- **Objectif** : Les écrans ne doivent plus "chercher", ils doivent "demander" au Bridge.
+## 🛠️ 2. Routage sémantique des Logs
+- Chaque intention dans `intents.ini` peut désormais avoir un tag de priorité.
+- Le Bridge doit filtrer les logs :
+    - `DEBUG` -> Uniquement dans le fichier log global.
+    - `INFO/ERROR` -> Streamé en direct vers le widget `RichLog` de l'écran actif.
 
-## 🛠️ 3. Refactoring Lot #1 : Écrans de Préparation (Action)
-- **Cible** : `DiskScreen`, `PartitionScreen`, `FormatScreen`, `ZfsScreen`.
-- **Structure** :
-    - Supprimer toute commande système.
-    - Émettre une intention : `self.bridge.execute(intent_id, params)`.
-    - S'abonner au canal de log du Bridge pour afficher la progression.
+## 🛠️ 3. Gestion des Signaux (Failsafe)
+- Implémenter un gestionnaire de sortie propre dans `main.py`.
+- Si l'utilisateur quitte brusquement (Alt+F4 ou Ctrl+C), le Bridge doit envoyer un `SIGTERM` au Scheduler pour qu'il exécute sa routine de démontage (`cleanup_cage`).
 
-## 🛠️ 4. Intégration du Status Widget
-- Injecter un composant `LogTerm` (basé sur RichLog) dans chaque écran d'exécution.
-- Le Bridge doit router le `stdout` du Scheduler directement vers ce composant.
-- **Résultat** : L'utilisateur voit ZFS ou MKFS travailler en direct sans gel de l'interface.
-
-## 🛠️ 5. Finalisation du Sudo Agent
-- Brancher le déclenchement du `SudoModal` lors du signal `NEED_AUTH` du Scheduler.
-- Garantir que le mot de passe est transmis au pipe `stdin` du processus de la Cage.
+## 🛠️ 4. Validation des 23 Screens (Audit Final)
+- Vérification qu'aucun écran ne contient de logique "cachée".
+- Chaque bouton "Action" doit obligatoirement passer par `self.bridge.emit("EXECUTE_INTENT", ...)`.
